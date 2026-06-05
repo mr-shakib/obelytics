@@ -200,7 +200,7 @@ async def submit_course_outcome(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = COService(db)
-    return await svc.submit(co_id, current_user.organization_id)
+    return await svc.submit(co_id, current_user.organization_id, current_user.id)
 
 
 @router.post("/course-outcomes/{co_id}/approve", response_model=CourseOutcomeResponse)
@@ -211,7 +211,7 @@ async def approve_course_outcome(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = COService(db)
-    return await svc.approve(co_id, current_user.organization_id)
+    return await svc.approve(co_id, current_user.organization_id, current_user.id)
 
 
 @router.post("/course-outcomes/{co_id}/reject", response_model=CourseOutcomeResponse)
@@ -222,7 +222,7 @@ async def reject_course_outcome(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = COService(db)
-    return await svc.reject(co_id, current_user.organization_id)
+    return await svc.reject(co_id, current_user.organization_id, current_user.id)
 
 
 @router.post("/course-outcomes/{co_id}/publish", response_model=CourseOutcomeResponse)
@@ -233,7 +233,7 @@ async def publish_course_outcome(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = COService(db)
-    return await svc.publish(co_id, current_user.organization_id)
+    return await svc.publish(co_id, current_user.organization_id, current_user.id)
 
 
 @router.post(

@@ -3,6 +3,8 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.audit.writer import write_audit_log
+from app.modules.notification.writer import write_notification
 from app.modules.obe.exceptions import (
     CONotEditableError,
     CONotFoundError,
@@ -211,7 +213,7 @@ class COService:
         await self._session.commit()
         return result
 
-    async def submit(self, co_id: UUID, org_id: UUID) -> CourseOutcome:
+    async def submit(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -219,32 +221,86 @@ class COService:
             raise COStateError(f"Cannot submit: CO is in status '{co.status}'")
         co.status = "SUBMITTED"
         result = await self._repo.update(co, {})
+        write_audit_log(
+            self._session,
+            entity_type="course_outcome",
+            entity_id=co_id,
+            action="CO_SUBMITTED",
+            org_id=org_id,
+            actor_user_id=actor_user_id,
+            before_status="DRAFT",
+            after_status="SUBMITTED",
+        )
         await self._session.commit()
         return result
 
-    async def approve(self, co_id: UUID, org_id: UUID) -> CourseOutcome:
+    async def approve(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
         if co.status not in ("SUBMITTED", "UNDER_REVIEW"):
             raise COStateError(f"Cannot approve: CO is in status '{co.status}'")
+        before = co.status
         co.status = "APPROVED"
         result = await self._repo.update(co, {})
+        write_audit_log(
+            self._session,
+            entity_type="course_outcome",
+            entity_id=co_id,
+            action="CO_APPROVED",
+            org_id=org_id,
+            actor_user_id=actor_user_id,
+            before_status=before,
+            after_status="APPROVED",
+        )
+        if co.created_by_user_id:
+            write_notification(
+                self._session,
+                org_id=org_id,
+                recipient_user_id=co.created_by_user_id,
+                notification_type="CO_APPROVED",
+                title=f"CO {co.code} has been approved",
+                body="Your course outcome has been approved and is ready for publishing.",
+                entity_type="course_outcome",
+                entity_id=co_id,
+            )
         await self._session.commit()
         return result
 
-    async def reject(self, co_id: UUID, org_id: UUID) -> CourseOutcome:
+    async def reject(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
         if co.status not in ("SUBMITTED", "UNDER_REVIEW"):
             raise COStateError(f"Cannot reject: CO is in status '{co.status}'")
+        before = co.status
         co.status = "DRAFT"
         result = await self._repo.update(co, {})
+        write_audit_log(
+            self._session,
+            entity_type="course_outcome",
+            entity_id=co_id,
+            action="CO_REJECTED",
+            org_id=org_id,
+            actor_user_id=actor_user_id,
+            before_status=before,
+            after_status="DRAFT",
+        )
+        if co.created_by_user_id:
+            write_notification(
+                self._session,
+                org_id=org_id,
+                recipient_user_id=co.created_by_user_id,
+                notification_type="CO_REJECTED",
+                title=f"CO {co.code} has been rejected",
+                body="Your course outcome was rejected and returned to DRAFT.",
+                entity_type="course_outcome",
+                entity_id=co_id,
+            )
         await self._session.commit()
         return result
 
-    async def publish(self, co_id: UUID, org_id: UUID) -> CourseOutcome:
+    async def publish(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -252,10 +308,20 @@ class COService:
             raise COStateError(f"Cannot publish: CO is in status '{co.status}'")
         co.status = "PUBLISHED"
         result = await self._repo.update(co, {})
+        write_audit_log(
+            self._session,
+            entity_type="course_outcome",
+            entity_id=co_id,
+            action="CO_PUBLISHED",
+            org_id=org_id,
+            actor_user_id=actor_user_id,
+            before_status="APPROVED",
+            after_status="PUBLISHED",
+        )
         await self._session.commit()
         return result
 
-    async def lock(self, co_id: UUID, org_id: UUID) -> CourseOutcome:
+    async def lock(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -264,6 +330,16 @@ class COService:
         co.status = "LOCKED"
         co.locked_at = datetime.now(timezone.utc)
         result = await self._repo.update(co, {})
+        write_audit_log(
+            self._session,
+            entity_type="course_outcome",
+            entity_id=co_id,
+            action="CO_LOCKED",
+            org_id=org_id,
+            actor_user_id=actor_user_id,
+            before_status="PUBLISHED",
+            after_status="LOCKED",
+        )
         await self._session.commit()
         return result
 

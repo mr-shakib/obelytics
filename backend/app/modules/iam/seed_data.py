@@ -89,6 +89,8 @@ ALL_PERMISSIONS: list[dict] = [
     {"code": "student.co.read.own",           "module": "obe",          "description": "View COs for own courses"},
     {"code": "student.marks.read.own",        "module": "assessment",   "description": "View own published marks"},
     {"code": "student.result.read.own",       "module": "assessment",   "description": "View own published results"},
+    # ── Notifications ─────────────────────────────────────────────────────────
+    {"code": "notification.read.own",         "module": "notification", "description": "View and manage own notifications"},
 ]
 
 _SA = "Super Admin"
@@ -126,6 +128,7 @@ ROLES: list[dict] = [
             "report.generate", "report.co.generate", "report.assessment.generate",
             "accreditation.cycle.create",
             "approval.inbox.read",
+            "notification.read.own",
         ],
     },
     {
@@ -142,6 +145,7 @@ ROLES: list[dict] = [
             "attainment.read",
             "report.co.generate", "report.assessment.generate",
             "approval.inbox.read",
+            "notification.read.own",
         ],
     },
     {
@@ -157,6 +161,7 @@ ROLES: list[dict] = [
             "result.submit", "result.read.section",
             "attainment.read",
             "approval.inbox.read",
+            "notification.read.own",
         ],
     },
     {
@@ -170,6 +175,7 @@ ROLES: list[dict] = [
             "student.co.read.own",
             "student.marks.read.own",
             "student.result.read.own",
+            "notification.read.own",
         ],
     },
 ]

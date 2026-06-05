@@ -5,6 +5,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.audit.writer import write_audit_log
+from app.modules.notification.writer import write_notification
 from app.modules.assessment.exceptions import (
     AssessmentLockedError,
     AssessmentNotFoundError,
@@ -402,6 +404,16 @@ class ResultPublicationService:
             "submitted_at": datetime.now(timezone.utc),
         }
         result = await self._repo.update(pub, data)
+        write_audit_log(
+            self._session,
+            entity_type="result_publication",
+            entity_id=pub.id,
+            action="RESULT_SUBMITTED",
+            org_id=org_id,
+            actor_user_id=user_id,
+            before_status="DRAFT",
+            after_status="SUBMITTED",
+        )
         await self._session.commit()
         return result
 
@@ -418,6 +430,27 @@ class ResultPublicationService:
             "ml_approved_at": datetime.now(timezone.utc),
         }
         result = await self._repo.update(pub, data)
+        write_audit_log(
+            self._session,
+            entity_type="result_publication",
+            entity_id=pub.id,
+            action="RESULT_ML_APPROVED",
+            org_id=org_id,
+            actor_user_id=user_id,
+            before_status="SUBMITTED",
+            after_status="ML_APPROVED",
+        )
+        if pub.submitted_by_user_id:
+            write_notification(
+                self._session,
+                org_id=org_id,
+                recipient_user_id=pub.submitted_by_user_id,
+                notification_type="RESULT_ML_APPROVED",
+                title="Results approved by Module Leader",
+                body="Your submitted results have been approved by the Module Leader.",
+                entity_type="result_publication",
+                entity_id=pub.id,
+            )
         await self._session.commit()
         return result
 
@@ -435,6 +468,27 @@ class ResultPublicationService:
             "ml_rejection_comment": comment,
         }
         result = await self._repo.update(pub, data)
+        write_audit_log(
+            self._session,
+            entity_type="result_publication",
+            entity_id=pub.id,
+            action="RESULT_ML_REJECTED",
+            org_id=org_id,
+            actor_user_id=user_id,
+            before_status="SUBMITTED",
+            after_status="DRAFT",
+        )
+        if pub.submitted_by_user_id:
+            write_notification(
+                self._session,
+                org_id=org_id,
+                recipient_user_id=pub.submitted_by_user_id,
+                notification_type="RESULT_ML_REJECTED",
+                title="Results rejected by Module Leader",
+                body=f"Rejection comment: {comment}",
+                entity_type="result_publication",
+                entity_id=pub.id,
+            )
         await self._session.commit()
         return result
 
@@ -451,6 +505,16 @@ class ResultPublicationService:
             "pc_approved_at": datetime.now(timezone.utc),
         }
         result = await self._repo.update(pub, data)
+        write_audit_log(
+            self._session,
+            entity_type="result_publication",
+            entity_id=pub.id,
+            action="RESULT_PC_APPROVED",
+            org_id=org_id,
+            actor_user_id=user_id,
+            before_status="ML_APPROVED",
+            after_status="PC_APPROVED",
+        )
         await self._session.commit()
         return result
 
@@ -473,6 +537,28 @@ class ResultPublicationService:
         for a in assessments:
             a.status = "LOCKED"
             await self._assessment_repo.update(a, {})
+
+        write_audit_log(
+            self._session,
+            entity_type="result_publication",
+            entity_id=pub.id,
+            action="RESULT_PUBLISHED",
+            org_id=org_id,
+            actor_user_id=user_id,
+            before_status="PC_APPROVED",
+            after_status="PUBLISHED",
+        )
+        if pub.submitted_by_user_id:
+            write_notification(
+                self._session,
+                org_id=org_id,
+                recipient_user_id=pub.submitted_by_user_id,
+                notification_type="RESULT_PUBLISHED",
+                title="Results have been officially published",
+                body="The results for your section have been published.",
+                entity_type="result_publication",
+                entity_id=pub.id,
+            )
 
         await self._session.commit()
 
