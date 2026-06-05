@@ -20,6 +20,8 @@ from app.modules.attainment.router import router as attainment_router
 from app.modules.approval.router import router as approval_router
 from app.modules.audit.router import router as audit_router
 from app.modules.notification.router import router as notification_router
+from app.modules.reporting.router import router as reporting_router
+from app.modules.accreditation.router import router as accreditation_router
 
 
 @asynccontextmanager
@@ -99,6 +101,10 @@ def create_app() -> FastAPI:
     # Phase 8 — Audit + Notifications
     app.include_router(audit_router, prefix=settings.API_V1_PREFIX)
     app.include_router(notification_router, prefix=settings.API_V1_PREFIX)
+
+    # Phase 9 — Reporting + Accreditation
+    app.include_router(reporting_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(accreditation_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

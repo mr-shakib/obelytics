@@ -38,8 +38,10 @@ from app.modules.attainment.models import AttainmentConfig, COAttainmentResult, 
 from app.modules.approval.models import ReviewComment  # noqa: F401
 from app.modules.audit.models import AuditLog  # noqa: F401
 from app.modules.notification.models import Notification  # noqa: F401
-# Phase 9: from app.modules.accreditation.models import *  # noqa: F401
-# Phase 9: from app.modules.reporting.models import *  # noqa: F401
+from app.modules.accreditation.models import (  # noqa: F401
+    AccreditationCycle, AccreditationCriterion, CriterionPOMapping,
+)
+# Reporting has no models (pure query module)
 
 alembic_config = context.config
 alembic_config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

@@ -79,6 +79,8 @@ ALL_PERMISSIONS: list[dict] = [
     {"code": "report.assessment.generate",    "module": "reporting",    "description": "Generate assessment reports"},
     # ── Accreditation ─────────────────────────────────────────────────────────
     {"code": "accreditation.cycle.create",    "module": "accreditation","description": "Create accreditation cycles"},
+    {"code": "accreditation.read",            "module": "accreditation","description": "View accreditation cycles and criteria"},
+    {"code": "accreditation.manage",          "module": "accreditation","description": "Manage accreditation cycles, criteria, and mappings"},
     # ── Approval ──────────────────────────────────────────────────────────────
     {"code": "approval.inbox.read",           "module": "approval",     "description": "View approval inbox and add review comments"},
     # ── Student self-service ──────────────────────────────────────────────────
@@ -126,7 +128,7 @@ ROLES: list[dict] = [
             "result.approve.pc", "result.publish",
             "attainment.configure", "attainment.initiate", "attainment.publish", "attainment.read",
             "report.generate", "report.co.generate", "report.assessment.generate",
-            "accreditation.cycle.create",
+            "accreditation.cycle.create", "accreditation.read", "accreditation.manage",
             "approval.inbox.read",
             "notification.read.own",
         ],
@@ -144,6 +146,7 @@ ROLES: list[dict] = [
             "result.approve.ml", "result.reject.ml",
             "attainment.read",
             "report.co.generate", "report.assessment.generate",
+            "accreditation.read",
             "approval.inbox.read",
             "notification.read.own",
         ],

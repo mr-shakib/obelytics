@@ -54,6 +54,9 @@ from app.modules.attainment.models import AttainmentConfig, COAttainmentResult, 
 from app.modules.approval.models import ReviewComment  # noqa: F401
 from app.modules.audit.models import AuditLog  # noqa: F401
 from app.modules.notification.models import Notification  # noqa: F401
+from app.modules.accreditation.models import (  # noqa: F401
+    AccreditationCycle, AccreditationCriterion, CriterionPOMapping,
+)
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
 
 # ─────────────────────────────────────────────────────────────────────────────
