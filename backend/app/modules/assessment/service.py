@@ -475,4 +475,11 @@ class ResultPublicationService:
             await self._assessment_repo.update(a, {})
 
         await self._session.commit()
+
+        # Trigger attainment computation
+        from app.modules.attainment.engine import AttainmentEngine
+        engine = AttainmentEngine(self._session)
+        await engine.compute_for_section_offering(offering_id, org_id)
+        await self._session.commit()
+
         return result
