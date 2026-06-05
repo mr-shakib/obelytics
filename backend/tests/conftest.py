@@ -51,6 +51,7 @@ from app.modules.assessment.models import (  # noqa: F401
     Student, StudentEnrollment, Assessment, AssessmentCOWeight, StudentMark, ResultPublication,
 )
 from app.modules.attainment.models import AttainmentConfig, COAttainmentResult, POAttainmentResult  # noqa: F401
+from app.modules.approval.models import ReviewComment  # noqa: F401
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
 
 # ─────────────────────────────────────────────────────────────────────────────

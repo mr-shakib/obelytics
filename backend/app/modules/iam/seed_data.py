@@ -79,6 +79,8 @@ ALL_PERMISSIONS: list[dict] = [
     {"code": "report.assessment.generate",    "module": "reporting",    "description": "Generate assessment reports"},
     # ── Accreditation ─────────────────────────────────────────────────────────
     {"code": "accreditation.cycle.create",    "module": "accreditation","description": "Create accreditation cycles"},
+    # ── Approval ──────────────────────────────────────────────────────────────
+    {"code": "approval.inbox.read",           "module": "approval",     "description": "View approval inbox and add review comments"},
     # ── Student self-service ──────────────────────────────────────────────────
     {"code": "student.profile.read.own",      "module": "iam",          "description": "View own student profile"},
     {"code": "student.curriculum.read.own",   "module": "curriculum",   "description": "View own enrolled curriculum"},
@@ -123,6 +125,7 @@ ROLES: list[dict] = [
             "attainment.configure", "attainment.initiate", "attainment.publish", "attainment.read",
             "report.generate", "report.co.generate", "report.assessment.generate",
             "accreditation.cycle.create",
+            "approval.inbox.read",
         ],
     },
     {
@@ -138,6 +141,7 @@ ROLES: list[dict] = [
             "result.approve.ml", "result.reject.ml",
             "attainment.read",
             "report.co.generate", "report.assessment.generate",
+            "approval.inbox.read",
         ],
     },
     {
@@ -152,6 +156,7 @@ ROLES: list[dict] = [
             "marks.enter", "marks.update",
             "result.submit", "result.read.section",
             "attainment.read",
+            "approval.inbox.read",
         ],
     },
     {
