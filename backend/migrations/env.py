@@ -18,8 +18,11 @@ from app.shared.events.outbox import OutboxEvent  # noqa: F401
 from app.modules.iam.models import (  # noqa: F401
     User, PasswordCredential, RefreshToken, Role, Permission, RolePermission, UserRoleAssignment
 )
-# Phase 2: from app.modules.org.models import *  # noqa: F401
-# Phase 2: from app.modules.ref_data.models import *  # noqa: F401
+from app.modules.org.models import Organization, Department, DepartmentHeadHistory, Program  # noqa: F401
+from app.modules.ref_data.models import (  # noqa: F401
+    BloomDomain, BloomLevel, DeliveryMethod, CourseType, AssessmentType,
+    ComplexProblem, ComplexActivity, KnowledgeProfile, MappingWeightLabel,
+)
 # Phase 3: from app.modules.curriculum.models import *  # noqa: F401
 # Phase 4: from app.modules.obe.models import *  # noqa: F401
 # Phase 5: from app.modules.assessment.models import *  # noqa: F401

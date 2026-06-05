@@ -34,6 +34,11 @@ from app.shared.events.outbox import OutboxEvent  # noqa: F401
 from app.modules.iam.models import (  # noqa: F401
     PasswordCredential, Permission, Role, RolePermission, User, UserRoleAssignment,
 )
+from app.modules.org.models import Organization, Department, DepartmentHeadHistory, Program  # noqa: F401
+from app.modules.ref_data.models import (  # noqa: F401
+    BloomDomain, BloomLevel, DeliveryMethod, CourseType, AssessmentType,
+    ComplexProblem, ComplexActivity, KnowledgeProfile, MappingWeightLabel,
+)
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +117,17 @@ async def setup_test_database():
 
 async def _seed_db(session: AsyncSession) -> None:
     # DB is always empty at this point (schemas dropped+recreated above)
+
+    # Organization record — id matches TEST_ORG_ID used by all seeded users
+    org = Organization(
+        id=TEST_ORG_ID,
+        name="Test University",
+        short_name="TU",
+        status="ACTIVE",
+    )
+    session.add(org)
+    await session.flush()
+
     perm_map: dict[str, Permission] = {}
     for pdef in ALL_PERMISSIONS:
         perm = Permission(
