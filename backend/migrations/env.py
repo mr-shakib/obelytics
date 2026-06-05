@@ -27,7 +27,10 @@ from app.modules.curriculum.models import (  # noqa: F401
     Curriculum, CurriculumTermDefinition, Course, CurriculumCourseSlot,
     CoursePrerequisite, Batch, AcademicTerm, Section, SectionOffering, FacultyAssignment,
 )
-# Phase 4: from app.modules.obe.models import *  # noqa: F401
+from app.modules.obe.models import (  # noqa: F401
+    ProgramOutcome, POKnowledgeProfile, CourseOutcome, CODeliveryMethod,
+    COPOMappingSet, COPOMappingEntry, COCPMapping, COCAMapping, COKPMapping,
+)
 # Phase 5: from app.modules.assessment.models import *  # noqa: F401
 # Phase 6: from app.modules.attainment.models import *  # noqa: F401
 # Phase 7: from app.modules.approval.models import *  # noqa: F401

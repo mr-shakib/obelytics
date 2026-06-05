@@ -43,6 +43,10 @@ from app.modules.curriculum.models import (  # noqa: F401
     Curriculum, CurriculumTermDefinition, Course, CurriculumCourseSlot,
     CoursePrerequisite, Batch, AcademicTerm, Section, SectionOffering, FacultyAssignment,
 )
+from app.modules.obe.models import (  # noqa: F401
+    ProgramOutcome, POKnowledgeProfile, CourseOutcome, CODeliveryMethod,
+    COPOMappingSet, COPOMappingEntry, COCPMapping, COCAMapping, COKPMapping,
+)
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
 
 # ─────────────────────────────────────────────────────────────────────────────
