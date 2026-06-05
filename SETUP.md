@@ -123,7 +123,26 @@ Create the first super-admin user (required to log in):
 python -m scripts.seed_superadmin
 ```
 
-The script will prompt for email, full name, and password. Write these down — they are your login credentials.
+Default credentials created by the script:
+
+| Field | Value |
+|---|---|
+| Email | `admin@obelytics.local` |
+| Password | `Admin@123` |
+
+**To create a second superadmin** (pass the same `--org-id` printed on first run):
+
+```powershell
+python -m scripts.seed_superadmin --email you@example.com --password "YourPassword123" --org-id <printed-org-id>
+```
+
+**To change the default password on first run:**
+
+```powershell
+python -m scripts.seed_superadmin --password "MyStrongPassword123"
+```
+
+Note: if the superadmin already exists the script skips creation — it will not update the password. To change an existing password use the API's change-password endpoint after logging in.
 
 ---
 
