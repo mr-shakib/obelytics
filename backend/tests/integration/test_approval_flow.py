@@ -14,8 +14,7 @@ async def _setup_submitted_result(client: AsyncClient, headers: dict) -> dict:
     """
     suffix = uuid.uuid4().hex
     full_int = int(suffix, 16)
-    # Use range 9000–9999 to avoid collisions with assessment tests (5000–9999)
-    year = 9000 + (full_int % 1000)
+    year = 7000 + (full_int % 1000)
     seasons = ["FALL", "SPRING", "SUMMER", "WINTER"]
     season = seasons[(full_int >> 32) % 4]
 

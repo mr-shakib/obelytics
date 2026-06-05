@@ -19,7 +19,7 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
     """
     suffix = uuid.uuid4().hex
     full_int = int(suffix, 16)
-    year = 9100 + (full_int % 500)
+    year = 8000 + (full_int % 500)
 
     # Department
     dept_resp = await client.post(
@@ -326,7 +326,7 @@ async def test_assessment_summary_no_assessments(client: AsyncClient, auth_heade
     """GET assessment summary for offering with no assessments → 200, empty list."""
     suffix = uuid.uuid4().hex[:8]
     full_int = int(suffix, 16)
-    year = 9600 + (full_int % 300)
+    year = 8500 + (full_int % 300)
 
     dept_resp = await client.post(
         "/api/v1/departments",
@@ -471,7 +471,7 @@ async def test_co_attainment_report_empty_before_publish(client: AsyncClient, au
     """GET CO attainment report before attainment is computed → 200 with empty lists."""
     suffix = uuid.uuid4().hex[:8]
     full_int = int(suffix, 16)
-    year = 9700 + (full_int % 200)
+    year = 8800 + (full_int % 200)
 
     dept_resp = await client.post(
         "/api/v1/departments",

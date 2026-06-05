@@ -22,7 +22,7 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
     """
     suffix = uuid.uuid4().hex
     full_int = int(suffix, 16)
-    year = 7000 + (full_int % 2000)
+    year = 4000 + (full_int % 500)
     seasons = ["FALL", "SPRING", "SUMMER", "WINTER"]
     season = seasons[(full_int >> 32) % 4]
 
@@ -543,9 +543,9 @@ async def test_attainment_summary_not_found_before_publish(client: AsyncClient, 
     )
     batch_id = batch_resp.json()["id"]
     full_int = int(uuid.uuid4().hex, 16)
-    year = 8000 + (full_int % 1000)
+    year = 4500 + (full_int % 500)
     seasons = ["FALL", "SPRING", "SUMMER", "WINTER"]
-    season = seasons[full_int % 4]
+    season = seasons[(full_int >> 32) % 4]
     term_resp = await client.post(
         "/api/v1/academic-terms",
         headers=auth_headers,

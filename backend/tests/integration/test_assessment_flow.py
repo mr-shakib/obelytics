@@ -16,10 +16,9 @@ async def _setup_assessment_chain(client: AsyncClient, headers: dict) -> dict:
     """
     suffix = uuid.uuid4().hex
     # Use full 128-bit UUID integer to avoid (org_id, year, season) unique constraint collisions.
-    # Year range 5000–9999 (5000 values) * 4 seasons = 20000 combos.
-    # Curriculum tests use 2100–2999 SPRING; staying above 5000 avoids cross-test collisions.
+    # Year range 3000–3999 * 4 seasons = 4000 combos (non-overlapping with other test files).
     full_int = int(suffix, 16)
-    year = 5000 + (full_int % 5000)
+    year = 3000 + (full_int % 1000)
     seasons = ["FALL", "SPRING", "SUMMER", "WINTER"]
     season = seasons[(full_int >> 32) % 4]
 

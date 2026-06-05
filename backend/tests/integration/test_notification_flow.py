@@ -14,7 +14,7 @@ async def _setup_co_for_notification(client: AsyncClient, headers: dict) -> str:
     """
     suffix = uuid.uuid4().hex
     full_int = int(suffix, 16)
-    year = 8000 + (full_int % 1000)
+    year = 6000 + (full_int % 1000)
     seasons = ["FALL", "SPRING", "SUMMER", "WINTER"]
     season = seasons[(full_int >> 32) % 4]
 

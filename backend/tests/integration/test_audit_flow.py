@@ -15,7 +15,7 @@ async def _setup_co_chain(client: AsyncClient, headers: dict) -> dict:
     """
     suffix = uuid.uuid4().hex
     full_int = int(suffix, 16)
-    year = 7000 + (full_int % 2000)
+    year = 5000 + (full_int % 1000)
     seasons = ["FALL", "SPRING", "SUMMER", "WINTER"]
     season = seasons[(full_int >> 32) % 4]
 
