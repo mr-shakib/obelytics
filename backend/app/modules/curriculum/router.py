@@ -1,0 +1,505 @@
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.dependencies import get_current_user, require_permission
+from app.modules.iam.models import User
+from app.modules.iam.schemas import PermissionManifestResponse
+from app.modules.curriculum.schemas import (
+    AcademicTermCreate,
+    AcademicTermResponse,
+    AcademicTermUpdate,
+    BatchCreate,
+    BatchResponse,
+    BatchUpdate,
+    CourseCreate,
+    CourseResponse,
+    CourseSlotCreate,
+    CourseSlotResponse,
+    CourseUpdate,
+    CurriculumCreate,
+    CurriculumResponse,
+    CurriculumTermDefinitionCreate,
+    CurriculumTermDefinitionResponse,
+    CurriculumUpdate,
+    FacultyAssignmentCreate,
+    FacultyAssignmentResponse,
+    PrerequisiteCreate,
+    PrerequisiteResponse,
+    SectionCreate,
+    SectionOfferingCreate,
+    SectionOfferingResponse,
+    SectionOfferingUpdate,
+    SectionResponse,
+)
+from app.modules.curriculum.service import (
+    AcademicTermService,
+    BatchService,
+    CourseService,
+    CourseSlotService,
+    CurriculumService,
+    CurriculumTermService,
+    FacultyAssignmentService,
+    PrerequisiteService,
+    SectionOfferingService,
+    SectionService,
+)
+
+router = APIRouter(tags=["Curriculum"])
+
+
+# ── Curricula ─────────────────────────────────────────────────────────────────
+
+@router.get("/curricula", response_model=list[CurriculumResponse])
+async def list_curricula(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    program_id: UUID | None = None,
+):
+    svc = CurriculumService(db)
+    return await svc.list_active(current_user.organization_id, program_id)
+
+
+@router.post("/curricula", response_model=CurriculumResponse, status_code=status.HTTP_201_CREATED)
+async def create_curriculum(
+    body: CurriculumCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+@router.get("/curricula/{curriculum_id}", response_model=CurriculumResponse)
+async def get_curriculum(
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumService(db)
+    return await svc.get(curriculum_id, current_user.organization_id)
+
+
+@router.patch("/curricula/{curriculum_id}", response_model=CurriculumResponse)
+async def update_curriculum(
+    curriculum_id: UUID,
+    body: CurriculumUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumService(db)
+    return await svc.update(curriculum_id, body, current_user.organization_id)
+
+
+@router.post("/curricula/{curriculum_id}/version", response_model=CurriculumResponse, status_code=status.HTTP_201_CREATED)
+async def version_curriculum(
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.version"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumService(db)
+    return await svc.version(curriculum_id, current_user.organization_id)
+
+
+@router.post("/curricula/{curriculum_id}/activate", response_model=CurriculumResponse)
+async def activate_curriculum(
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumService(db)
+    return await svc.activate(curriculum_id, current_user.organization_id)
+
+
+@router.post(
+    "/curricula/{curriculum_id}/terms",
+    response_model=list[CurriculumTermDefinitionResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_curriculum_terms(
+    curriculum_id: UUID,
+    body: list[CurriculumTermDefinitionCreate],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumTermService(db)
+    results = []
+    for term_body in body:
+        # Ensure curriculum_id from path is used
+        term_body_with_id = term_body.model_copy(update={"curriculum_id": curriculum_id})
+        results.append(await svc.create(term_body_with_id, current_user.organization_id))
+    return results
+
+
+@router.get("/curricula/{curriculum_id}/terms", response_model=list[CurriculumTermDefinitionResponse])
+async def list_curriculum_terms(
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumTermService(db)
+    return await svc.list_by_curriculum(curriculum_id)
+
+
+# ── Courses ───────────────────────────────────────────────────────────────────
+
+@router.get("/courses", response_model=list[CourseResponse])
+async def list_courses(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseService(db)
+    return await svc.list_active(current_user.organization_id)
+
+
+@router.post("/courses", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
+async def create_course(
+    body: CourseCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}", response_model=CourseResponse)
+async def get_course(
+    course_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseService(db)
+    return await svc.get(course_id, current_user.organization_id)
+
+
+@router.patch("/courses/{course_id}", response_model=CourseResponse)
+async def update_course(
+    course_id: UUID,
+    body: CourseUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseService(db)
+    return await svc.update(course_id, body, current_user.organization_id)
+
+
+@router.post("/courses/{course_id}/archive", response_model=CourseResponse)
+async def archive_course(
+    course_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseService(db)
+    return await svc.archive(course_id, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}/prerequisites", response_model=list[PrerequisiteResponse])
+async def list_prerequisites(
+    course_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PrerequisiteService(db)
+    return await svc.list_by_course(course_id, current_user.organization_id)
+
+
+@router.post(
+    "/courses/{course_id}/prerequisites",
+    response_model=PrerequisiteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_prerequisite(
+    course_id: UUID,
+    body: PrerequisiteCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PrerequisiteService(db)
+    # Override course_id from path
+    body_with_id = body.model_copy(update={"course_id": course_id})
+    return await svc.add(body_with_id, current_user.organization_id)
+
+
+@router.delete(
+    "/courses/{course_id}/prerequisites/{prereq_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_prerequisite(
+    course_id: UUID,
+    prereq_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PrerequisiteService(db)
+    await svc.remove(prereq_id, current_user.organization_id)
+
+
+# ── Course Slots ──────────────────────────────────────────────────────────────
+
+@router.get("/curricula/{curriculum_id}/course-slots", response_model=list[CourseSlotResponse])
+async def list_course_slots(
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseSlotService(db)
+    return await svc.list_by_curriculum(curriculum_id)
+
+
+@router.post(
+    "/curricula/{curriculum_id}/course-slots",
+    response_model=CourseSlotResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_course_slot(
+    curriculum_id: UUID,
+    body: CourseSlotCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseSlotService(db)
+    body_with_id = body.model_copy(update={"curriculum_id": curriculum_id})
+    return await svc.add_slot(body_with_id, current_user.organization_id)
+
+
+@router.delete(
+    "/curricula/{curriculum_id}/course-slots/{slot_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_course_slot(
+    curriculum_id: UUID,
+    slot_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseSlotService(db)
+    await svc.remove_slot(slot_id, current_user.organization_id)
+
+
+# ── Batches ───────────────────────────────────────────────────────────────────
+
+@router.get("/batches", response_model=list[BatchResponse])
+async def list_batches(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    curriculum_id: UUID | None = None,
+):
+    svc = BatchService(db)
+    return await svc.list_active(current_user.organization_id, curriculum_id)
+
+
+@router.post("/batches", response_model=BatchResponse, status_code=status.HTTP_201_CREATED)
+async def create_batch(
+    body: BatchCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("batch.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = BatchService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+@router.get("/batches/{batch_id}", response_model=BatchResponse)
+async def get_batch(
+    batch_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = BatchService(db)
+    return await svc.get(batch_id, current_user.organization_id)
+
+
+@router.patch("/batches/{batch_id}", response_model=BatchResponse)
+async def update_batch(
+    batch_id: UUID,
+    body: BatchUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("batch.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = BatchService(db)
+    return await svc.update(batch_id, body, current_user.organization_id)
+
+
+# ── Academic Terms ────────────────────────────────────────────────────────────
+
+@router.get("/academic-terms", response_model=list[AcademicTermResponse])
+async def list_academic_terms(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = AcademicTermService(db)
+    return await svc.list_all(current_user.organization_id)
+
+
+@router.post("/academic-terms", response_model=AcademicTermResponse, status_code=status.HTTP_201_CREATED)
+async def create_academic_term(
+    body: AcademicTermCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = AcademicTermService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+@router.get("/academic-terms/{term_id}", response_model=AcademicTermResponse)
+async def get_academic_term(
+    term_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = AcademicTermService(db)
+    return await svc.get(term_id, current_user.organization_id)
+
+
+@router.patch("/academic-terms/{term_id}", response_model=AcademicTermResponse)
+async def update_academic_term(
+    term_id: UUID,
+    body: AcademicTermUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = AcademicTermService(db)
+    return await svc.update(term_id, body, current_user.organization_id)
+
+
+# ── Sections ──────────────────────────────────────────────────────────────────
+
+@router.get("/sections", response_model=list[SectionResponse])
+async def list_sections(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = SectionService(db)
+    return await svc.list_all(current_user.organization_id)
+
+
+@router.post("/sections", response_model=SectionResponse, status_code=status.HTTP_201_CREATED)
+async def create_section(
+    body: SectionCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = SectionService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+# ── Section Offerings ─────────────────────────────────────────────────────────
+
+@router.get("/section-offerings", response_model=list[SectionOfferingResponse])
+async def list_section_offerings(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    academic_term_id: UUID | None = None,
+    batch_id: UUID | None = None,
+):
+    svc = SectionOfferingService(db)
+    return await svc.list_all(current_user.organization_id, academic_term_id, batch_id)
+
+
+@router.post(
+    "/section-offerings",
+    response_model=SectionOfferingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_section_offering(
+    body: SectionOfferingCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("section_offering.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = SectionOfferingService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+@router.get("/section-offerings/{offering_id}", response_model=SectionOfferingResponse)
+async def get_section_offering(
+    offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = SectionOfferingService(db)
+    return await svc.get(offering_id, current_user.organization_id)
+
+
+@router.patch("/section-offerings/{offering_id}", response_model=SectionOfferingResponse)
+async def update_section_offering(
+    offering_id: UUID,
+    body: SectionOfferingUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("section_offering.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = SectionOfferingService(db)
+    return await svc.update(offering_id, body, current_user.organization_id)
+
+
+# ── Faculty Assignments ───────────────────────────────────────────────────────
+
+@router.get("/faculty-assignments", response_model=list[FacultyAssignmentResponse])
+async def list_faculty_assignments(
+    offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = FacultyAssignmentService(db)
+    return await svc.list_active_by_offering(offering_id)
+
+
+@router.post(
+    "/faculty-assignments",
+    response_model=FacultyAssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def assign_faculty(
+    body: FacultyAssignmentCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("faculty_assignment.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = FacultyAssignmentService(db)
+    return await svc.assign(body, current_user.organization_id)
+
+
+@router.delete("/faculty-assignments/{assignment_id}", status_code=status.HTTP_200_OK, response_model=FacultyAssignmentResponse)
+async def remove_faculty_assignment(
+    assignment_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("faculty_assignment.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = FacultyAssignmentService(db)
+    return await svc.remove(assignment_id, current_user.organization_id)

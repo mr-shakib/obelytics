@@ -13,6 +13,7 @@ from app.modules.iam.router.role_router import router as role_router
 from app.modules.iam.router.user_router import router as user_router
 from app.modules.org.router import router as org_router
 from app.modules.ref_data.router import router as ref_data_router
+from app.modules.curriculum.router import router as curriculum_router
 
 
 @asynccontextmanager
@@ -73,6 +74,9 @@ def create_app() -> FastAPI:
     # Phase 2 — Organization + Reference Data
     app.include_router(org_router, prefix=settings.API_V1_PREFIX)
     app.include_router(ref_data_router, prefix=settings.API_V1_PREFIX)
+
+    # Phase 3 — Curriculum
+    app.include_router(curriculum_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

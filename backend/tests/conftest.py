@@ -39,6 +39,10 @@ from app.modules.ref_data.models import (  # noqa: F401
     BloomDomain, BloomLevel, DeliveryMethod, CourseType, AssessmentType,
     ComplexProblem, ComplexActivity, KnowledgeProfile, MappingWeightLabel,
 )
+from app.modules.curriculum.models import (  # noqa: F401
+    Curriculum, CurriculumTermDefinition, Course, CurriculumCourseSlot,
+    CoursePrerequisite, Batch, AcademicTerm, Section, SectionOffering, FacultyAssignment,
+)
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
 
 # ─────────────────────────────────────────────────────────────────────────────
