@@ -47,6 +47,9 @@ from app.modules.obe.models import (  # noqa: F401
     ProgramOutcome, POKnowledgeProfile, CourseOutcome, CODeliveryMethod,
     COPOMappingSet, COPOMappingEntry, COCPMapping, COCAMapping, COKPMapping,
 )
+from app.modules.assessment.models import (  # noqa: F401
+    Student, StudentEnrollment, Assessment, AssessmentCOWeight, StudentMark, ResultPublication,
+)
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
 
 # ─────────────────────────────────────────────────────────────────────────────

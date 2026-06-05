@@ -31,7 +31,9 @@ from app.modules.obe.models import (  # noqa: F401
     ProgramOutcome, POKnowledgeProfile, CourseOutcome, CODeliveryMethod,
     COPOMappingSet, COPOMappingEntry, COCPMapping, COCAMapping, COKPMapping,
 )
-# Phase 5: from app.modules.assessment.models import *  # noqa: F401
+from app.modules.assessment.models import (  # noqa: F401
+    Student, StudentEnrollment, Assessment, AssessmentCOWeight, StudentMark, ResultPublication,
+)
 # Phase 6: from app.modules.attainment.models import *  # noqa: F401
 # Phase 7: from app.modules.approval.models import *  # noqa: F401
 # Phase 8: from app.modules.notification.models import *  # noqa: F401

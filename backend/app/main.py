@@ -15,6 +15,7 @@ from app.modules.org.router import router as org_router
 from app.modules.ref_data.router import router as ref_data_router
 from app.modules.curriculum.router import router as curriculum_router
 from app.modules.obe.router import router as obe_router
+from app.modules.assessment.router import router as assessment_router
 
 
 @asynccontextmanager
@@ -81,6 +82,9 @@ def create_app() -> FastAPI:
 
     # Phase 4 — OBE
     app.include_router(obe_router, prefix=settings.API_V1_PREFIX)
+
+    # Phase 5 — Assessment
+    app.include_router(assessment_router, prefix=settings.API_V1_PREFIX)
 
     return app
 
