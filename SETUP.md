@@ -157,9 +157,10 @@ The API is now live at:
 | URL | Purpose |
 |---|---|
 | `http://localhost:8000` | API root |
-| `http://localhost:8000/docs` | Swagger UI (interactive) |
-| `http://localhost:8000/redoc` | ReDoc |
-| `http://localhost:8000/api/v1/health` | Health check |
+| `http://localhost:8000/api/docs` | Swagger UI (interactive) |
+| `http://localhost:8000/api/redoc` | ReDoc |
+| `http://localhost:8000/health/live` | Liveness check |
+| `http://localhost:8000/health/ready` | Readiness check (DB + Redis) |
 
 ---
 

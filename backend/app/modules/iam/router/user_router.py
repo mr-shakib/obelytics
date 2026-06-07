@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,6 +14,7 @@ from app.core.dependencies import (
 )
 from app.modules.iam.models import User
 from app.modules.iam.schemas import (
+    BulkCreateResult,
     PermissionManifestResponse,
     RoleAssignRequest,
     UserCreate,
@@ -21,6 +23,12 @@ from app.modules.iam.schemas import (
     UserUpdate,
 )
 from app.modules.iam.service.user_service import UserService
+
+
+class SendCredentialsRequest(BaseModel):
+    email: EmailStr
+    full_name: str
+    password: str
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -59,6 +67,40 @@ async def create_user(
     return await svc.create_user(body, current_user.organization_id, current_user.id)
 
 
+@router.post("/bulk", response_model=BulkCreateResult, status_code=status.HTTP_200_OK)
+async def bulk_create_users(
+    body: list[UserCreate],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("user.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = UserService(db)
+    created: list[UserResponse] = []
+    errors: list[dict] = []
+    for idx, user_data in enumerate(body):
+        try:
+            user = await svc.create_user(user_data, current_user.organization_id, current_user.id)
+            created.append(UserResponse.model_validate(user))
+        except Exception as exc:
+            errors.append({"row": idx + 1, "email": user_data.email, "error": str(exc)})
+    return BulkCreateResult(created=created, errors=errors)
+
+
+@router.post("/send-credentials", status_code=204)
+async def send_credentials(
+    body: SendCredentialsRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("user.create"))],
+):
+    from app.core.email import send_credentials_email
+    try:
+        await send_credentials_email(body.email, body.full_name, body.password)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to send email: {exc}",
+        )
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: UUID,
@@ -72,6 +114,27 @@ async def get_user(
     if not user:
         raise UserNotFoundError(user_id)
     return user
+
+
+@router.get("/{user_id}/roles", response_model=list[UserRoleAssignmentResponse])
+async def get_user_roles(
+    user_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("user.read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = UserService(db)
+    assignments = await svc.list_roles(user_id)
+    return [
+        UserRoleAssignmentResponse(
+            id=assignment.id,
+            role_id=assignment.role_id,
+            role_name=assignment.role.name,
+            scope_type=assignment.scope_type,
+            scope_id=assignment.scope_id,
+            assigned_at=assignment.assigned_at,
+        )
+        for assignment in assignments
+    ]
 
 
 @router.patch("/{user_id}", response_model=UserResponse)

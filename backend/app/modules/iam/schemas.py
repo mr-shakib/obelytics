@@ -1,5 +1,6 @@
 from datetime import datetime
 from uuid import UUID
+from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -33,7 +34,17 @@ class PasswordResetConfirmBody(BaseModel):
 
 class UserCreate(BaseModel):
     email: EmailStr
-    full_name: str = Field(min_length=1, max_length=255)
+    first_name: str = Field(min_length=1, max_length=100)
+    middle_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    title: str | None = Field(default=None, max_length=20)
+    faculty_type: str | None = Field(default=None, max_length=50)
+    nid: str | None = Field(default=None, max_length=50)
+    department_id: UUID | None = None
+    designation: str | None = Field(default=None, max_length=100)
+    contact_number: str | None = Field(default=None, max_length=50)
+    qualification: str | None = Field(default=None, max_length=255)
+    experience_years: int | None = Field(default=None, ge=0, le=99)
     password: str = Field(min_length=8)
     role_id: UUID
     scope_type: str = Field(pattern="^(GLOBAL|PROGRAM)$")
@@ -41,7 +52,17 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    middle_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    title: str | None = Field(default=None, max_length=20)
+    faculty_type: str | None = Field(default=None, max_length=50)
+    nid: str | None = Field(default=None, max_length=50)
+    department_id: UUID | None = None
+    designation: str | None = Field(default=None, max_length=100)
+    contact_number: str | None = Field(default=None, max_length=50)
+    qualification: str | None = Field(default=None, max_length=255)
+    experience_years: int | None = Field(default=None, ge=0, le=99)
 
 
 class RoleAssignRequest(BaseModel):
@@ -55,6 +76,17 @@ class UserResponse(BaseModel):
     organization_id: UUID
     email: str
     full_name: str
+    title: str | None
+    first_name: str | None
+    middle_name: str | None
+    last_name: str | None
+    faculty_type: str | None
+    nid: str | None
+    department_id: UUID | None
+    designation: str | None
+    contact_number: str | None
+    qualification: str | None
+    experience_years: int | None
     status: str
     linked_student_id: UUID | None
     created_at: datetime
@@ -72,6 +104,11 @@ class UserRoleAssignmentResponse(BaseModel):
     assigned_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BulkCreateResult(BaseModel):
+    created: list[UserResponse]
+    errors: list[dict]
 
 
 # ── Role ─────────────────────────────────────────────────────────────────────

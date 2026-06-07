@@ -1,5 +1,5 @@
 import sqlalchemy as sa
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, SmallInteger, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -25,6 +25,17 @@ class User(Base):
     organization_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
     email = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
+    title = Column(String(20), nullable=True)
+    first_name = Column(String(100), nullable=True)
+    middle_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    faculty_type = Column(String(50), nullable=True)
+    nid = Column(String(50), nullable=True)
+    department_id = Column(PGUUID(as_uuid=True), nullable=True)  # FK to org.departments — no ORM rel to avoid cross-schema coupling
+    designation = Column(String(100), nullable=True)
+    contact_number = Column(String(50), nullable=True)
+    qualification = Column(String(255), nullable=True)
+    experience_years = Column(SmallInteger, nullable=True)
     status = Column(String(20), nullable=False, server_default="ACTIVE")
     linked_student_id = Column(PGUUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))

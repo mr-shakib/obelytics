@@ -36,10 +36,24 @@ class UserService:
         if role is None:
             raise RoleNotFoundError()
 
+        name_parts = [p for p in [data.title, data.first_name, data.middle_name, data.last_name] if p]
+        full_name = " ".join(name_parts)
+
         user = User(
             organization_id=organization_id,
             email=data.email.lower(),
-            full_name=data.full_name,
+            full_name=full_name,
+            title=data.title,
+            first_name=data.first_name,
+            middle_name=data.middle_name,
+            last_name=data.last_name,
+            faculty_type=data.faculty_type,
+            nid=data.nid,
+            department_id=data.department_id,
+            designation=data.designation,
+            contact_number=data.contact_number,
+            qualification=data.qualification,
+            experience_years=data.experience_years,
             status="ACTIVE",
         )
         self._session.add(user)
@@ -70,8 +84,20 @@ class UserService:
         if user is None:
             raise UserNotFoundError(user_id)
 
-        if data.full_name is not None:
-            user.full_name = data.full_name
+        updatable = ["first_name", "middle_name", "last_name", "title", "faculty_type",
+                     "nid", "department_id", "designation", "contact_number", "qualification", "experience_years"]
+        changed = False
+        for field in updatable:
+            val = getattr(data, field, None)
+            if val is not None:
+                setattr(user, field, val)
+                changed = True
+
+        if changed:
+            name_parts = [p for p in [user.title, user.first_name, user.middle_name, user.last_name] if p]
+            if name_parts:
+                user.full_name = " ".join(name_parts)
+
         self._session.add(user)
         await self._session.commit()
         await self._session.refresh(user)
