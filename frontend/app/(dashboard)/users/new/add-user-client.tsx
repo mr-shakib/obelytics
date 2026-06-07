@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 import {
-  Loader2, Copy, Check, Mail, RefreshCw,
+  Loader2, RefreshCw,
   FileSpreadsheet, Upload, Download, AlertCircle, CheckCircle2, ArrowLeft,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -20,9 +20,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog"
+import { CredentialsDialog, genPassword, type Credentials } from "@/components/shared/credentials-dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 
@@ -31,7 +29,7 @@ import { queryKeys } from "@/lib/query-keys"
 type Role = { id: string; name: string }
 type Department = { id: string; name: string; short_name: string }
 type Program = { id: string; title?: string; name?: string; acronym?: string }
-type CreatedCreds = { email: string; full_name: string; password: string }
+type CreatedCreds = Credentials
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -78,12 +76,6 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>
 
-// ── Utilities ──────────────────────────────────────────────────────────────────
-
-function genPassword() {
-  return `Obe-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`
-}
-
 // ── Field wrapper ──────────────────────────────────────────────────────────────
 
 function Field({
@@ -97,69 +89,6 @@ function Field({
       {children}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
-  )
-}
-
-// ── Credentials dialog ─────────────────────────────────────────────────────────
-
-function CredentialsDialog({ creds, onClose }: { creds: CreatedCreds | null; onClose: () => void }) {
-  const [copied, setCopied] = useState(false)
-
-  const sendEmailMutation = useMutation({
-    mutationFn: async () => {
-      if (!creds) return
-      await apiClient.POST("/users/send-credentials" as never, {
-        body: { email: creds.email, full_name: creds.full_name, password: creds.password },
-      } as never)
-    },
-    onSuccess: () => toast.success(`Credentials sent to ${creds?.email}`),
-    onError: () => toast.error("Failed to send email — check SMTP settings"),
-  })
-
-  function copy() {
-    if (!creds) return
-    navigator.clipboard.writeText(`Email: ${creds.email}\nPassword: ${creds.password}`)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <Dialog open={!!creds} onOpenChange={(o) => { if (!o) { onClose(); setCopied(false) } }}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>User Created — Share Credentials</DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          The password cannot be retrieved later. Copy or send it to the user now.
-        </p>
-        <div className="rounded-lg border bg-muted/50 p-4 space-y-3 font-mono text-sm">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Email</p>
-            <p className="font-medium break-all">{creds?.email}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Password</p>
-            <p className="font-medium">{creds?.password}</p>
-          </div>
-        </div>
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button variant="outline" onClick={copy} className="flex-1 gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied!" : "Copy"}
-          </Button>
-          <Button
-            className="flex-1 gap-2"
-            onClick={() => sendEmailMutation.mutate()}
-            disabled={sendEmailMutation.isPending}
-          >
-            {sendEmailMutation.isPending
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <Mail className="h-4 w-4" />}
-            Send Email
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -614,6 +543,7 @@ export function AddUserClient() {
       <CredentialsDialog
         creds={creds}
         onClose={() => { setCreds(null); router.push("/users") }}
+        title="User Created — Share Credentials"
       />
     </div>
   )

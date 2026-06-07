@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { Bell, ChevronDown, LogOut, User } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
@@ -26,11 +26,54 @@ import {
 import { useAuthStore } from "@/lib/stores/auth-store"
 import { useAppStore } from "@/lib/stores/app-store"
 import { useNotificationStore } from "@/lib/stores/notification-store"
+import { usePermissions } from "@/hooks/use-permission"
 import { logoutApi } from "@/lib/api/auth"
 import { queryKeys } from "@/lib/query-keys"
 import { apiClient } from "@/lib/api/client"
+import { cn } from "@/lib/utils"
+import {
+  NAV_ITEMS,
+  NAV_GROUPS,
+  NAV_GROUP_META,
+  canViewNavItem,
+  getActiveNavGroup,
+} from "@/lib/navigation"
 
 const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+
+function GroupSwitcher() {
+  const pathname = usePathname()
+  const permissions = usePermissions()
+  const visibleItems = NAV_ITEMS.filter((item) => canViewNavItem(item, permissions))
+  const activeGroup = getActiveNavGroup(pathname, visibleItems)
+
+  return (
+    <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
+      {NAV_GROUPS.map((group) => {
+        const meta = NAV_GROUP_META[group]
+        const groupItems = visibleItems.filter((item) => item.group === group)
+        if (groupItems.length === 0) return null
+        const isActive = group === activeGroup
+        const Icon = meta.icon
+        return (
+          <Link
+            key={group}
+            href={groupItems[0].href}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors",
+              isActive
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <Icon className="size-[14px]" />
+            {meta.label}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
 
 export function Header() {
   const router = useRouter()
@@ -76,6 +119,8 @@ export function Header() {
 
   return (
     <header className="flex h-14 items-center border-b bg-background px-4 gap-3">
+      <GroupSwitcher />
+
       {!isGlobal && programs.length > 0 && (
         <Select
           value={activeProgramId ?? ""}

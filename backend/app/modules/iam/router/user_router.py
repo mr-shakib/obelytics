@@ -16,6 +16,7 @@ from app.modules.iam.models import User
 from app.modules.iam.schemas import (
     BulkCreateResult,
     PermissionManifestResponse,
+    ResetPasswordRequest,
     RoleAssignRequest,
     UserCreate,
     UserResponse,
@@ -146,6 +147,17 @@ async def update_user(
 ):
     svc = UserService(db)
     return await svc.update_user(user_id, body)
+
+
+@router.post("/{user_id}/reset-password", status_code=204)
+async def reset_password(
+    user_id: UUID,
+    body: ResetPasswordRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = UserService(db)
+    await svc.reset_password(user_id, body.password)
 
 
 @router.post("/{user_id}/deactivate", status_code=204)

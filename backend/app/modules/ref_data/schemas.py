@@ -132,11 +132,13 @@ class AssessmentTypeResponse(BaseModel):
 
 class ComplexProblemCreate(BaseModel):
     code: str = Field(min_length=1, max_length=20)
+    name: str | None = Field(default=None, max_length=150)
     description: str = Field(min_length=1)
 
 
 class ComplexProblemUpdate(BaseModel):
     code: str | None = Field(default=None, min_length=1, max_length=20)
+    name: str | None = Field(default=None, max_length=150)
     description: str | None = Field(default=None, min_length=1)
     is_active: bool | None = None
 
@@ -145,6 +147,7 @@ class ComplexProblemResponse(BaseModel):
     id: UUID
     organization_id: UUID
     code: str
+    name: str | None
     description: str
     is_active: bool
     created_at: datetime
@@ -156,11 +159,13 @@ class ComplexProblemResponse(BaseModel):
 
 class ComplexActivityCreate(BaseModel):
     code: str = Field(min_length=1, max_length=20)
+    name: str | None = Field(default=None, max_length=150)
     description: str = Field(min_length=1)
 
 
 class ComplexActivityUpdate(BaseModel):
     code: str | None = Field(default=None, min_length=1, max_length=20)
+    name: str | None = Field(default=None, max_length=150)
     description: str | None = Field(default=None, min_length=1)
     is_active: bool | None = None
 
@@ -169,6 +174,7 @@ class ComplexActivityResponse(BaseModel):
     id: UUID
     organization_id: UUID
     code: str
+    name: str | None
     description: str
     is_active: bool
     created_at: datetime
@@ -194,6 +200,30 @@ class KnowledgeProfileResponse(BaseModel):
     organization_id: UUID
     code: str
     description: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ── PO Type ───────────────────────────────────────────────────────────────────
+
+class POTypeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    description: str | None = Field(default=None)
+
+
+class POTypeUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    description: str | None = Field(default=None)
+    is_active: bool | None = None
+
+
+class POTypeResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    name: str
+    description: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime

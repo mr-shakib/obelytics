@@ -12,6 +12,7 @@ from app.modules.ref_data.models import (
     DeliveryMethod,
     KnowledgeProfile,
     MappingWeightLabel,
+    POType,
 )
 
 
@@ -159,6 +160,18 @@ class KnowledgeProfileRepository(_BaseRefRepo):
         result = await self._session.execute(
             select(KnowledgeProfile).where(
                 and_(KnowledgeProfile.code == code, KnowledgeProfile.organization_id == org_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+
+class POTypeRepository(_BaseRefRepo):
+    _model = POType
+
+    async def find_by_name(self, name: str, org_id: UUID) -> POType | None:
+        result = await self._session.execute(
+            select(POType).where(
+                and_(POType.name == name, POType.organization_id == org_id)
             )
         )
         return result.scalar_one_or_none()

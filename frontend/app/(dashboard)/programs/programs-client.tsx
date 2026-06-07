@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -16,6 +16,7 @@ import { PermissionGate } from "@/components/shared/permission-gate"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -36,10 +37,13 @@ import { queryKeys } from "@/lib/query-keys"
 
 type Program = {
   id: string
-  name: string
+  title: string
   acronym: string
-  department_name: string
-  duration_years: number
+  department_name?: string
+  program_type: string
+  minimum_duration_semesters: number
+  total_credits: number
+  study_mode: string
   status: string
 }
 
@@ -48,22 +52,56 @@ type Department = {
   name: string
 }
 
+const PROGRAM_TYPES = [
+  { value: "UNDERGRADUATE", label: "Undergraduate" },
+  { value: "POSTGRADUATE", label: "Postgraduate" },
+  { value: "PHD", label: "PhD" },
+]
+
+const STUDY_MODES = [
+  { value: "FULL_TIME", label: "Full time" },
+  { value: "PART_TIME", label: "Part time" },
+]
+
 const schema = z.object({
-  name: z.string().min(2, "Name required"),
-  acronym: z.string().min(1, "Acronym required").max(10),
+  title: z.string().min(2, "Title required"),
+  acronym: z.string().min(1, "Acronym required").max(20),
   department_id: z.string().min(1, "Department required"),
-  duration_years: z.number().int().min(1).max(10),
+  program_type: z.enum(["UNDERGRADUATE", "POSTGRADUATE", "PHD"], { message: "Type required" }),
+  minimum_duration_semesters: z.number().int().min(1).max(20),
+  total_credits: z.number().int().min(1).max(500),
+  study_mode: z.enum(["FULL_TIME", "PART_TIME"], { message: "Mode required" }),
+  description: z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
 
+function formatProgramType(type: string) {
+  return PROGRAM_TYPES.find((t) => t.value === type)?.label ?? type
+}
+
+function formatStudyMode(mode: string) {
+  return STUDY_MODES.find((m) => m.value === mode)?.label ?? mode
+}
+
 const columns: ColumnDef<Program>[] = [
-  { accessorKey: "name", header: "Name" },
+  { accessorKey: "title", header: "Title" },
   { accessorKey: "acronym", header: "Acronym" },
   { accessorKey: "department_name", header: "Department" },
   {
-    accessorKey: "duration_years",
-    header: "Duration",
-    cell: ({ row }) => `${row.original.duration_years} yr`,
+    accessorKey: "program_type",
+    header: "Type",
+    cell: ({ row }) => formatProgramType(row.original.program_type),
+  },
+  {
+    accessorKey: "minimum_duration_semesters",
+    header: "Min. Duration",
+    cell: ({ row }) => `${row.original.minimum_duration_semesters} semesters`,
+  },
+  { accessorKey: "total_credits", header: "Credits" },
+  {
+    accessorKey: "study_mode",
+    header: "Mode",
+    cell: ({ row }) => formatStudyMode(row.original.study_mode),
   },
   {
     accessorKey: "status",
@@ -74,7 +112,6 @@ const columns: ColumnDef<Program>[] = [
 
 export function ProgramsClient() {
   const [open, setOpen] = useState(false)
-  const [deptId, setDeptId] = useState("")
   const router = useRouter()
   const qc = useQueryClient()
 
@@ -97,7 +134,7 @@ export function ProgramsClient() {
   const {
     register,
     handleSubmit,
-    setValue,
+    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
@@ -110,7 +147,6 @@ export function ProgramsClient() {
       toast.success("Program created")
       qc.invalidateQueries({ queryKey: queryKeys.programs.all })
       reset()
-      setDeptId("")
       setOpen(false)
     },
     onError: () => toast.error("Failed to create program"),
@@ -132,19 +168,19 @@ export function ProgramsClient() {
                   </Button>
                 }
               />
-              <DialogContent>
+              <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle>Create Program</DialogTitle>
                 </DialogHeader>
                 <form
                   id="create-prog-form"
                   onSubmit={handleSubmit((v) => mutation.mutate(v))}
-                  className="space-y-4 py-2"
+                  className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-1"
                 >
                   <div className="space-y-2">
-                    <Label htmlFor="prog-name">Name</Label>
-                    <Input id="prog-name" {...register("name")} placeholder="Bachelor of Science in CS" />
-                    {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                    <Label htmlFor="prog-title">Title</Label>
+                    <Input id="prog-title" {...register("title")} placeholder="Bachelor of Science in CS" />
+                    {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="prog-acronym">Acronym</Label>
@@ -153,42 +189,109 @@ export function ProgramsClient() {
                   </div>
                   <div className="space-y-2">
                     <Label>Department</Label>
-                    <Select
-                      value={deptId}
-                      onValueChange={(v) => {
-                        if (v == null) return
-                        setDeptId(v as string)
-                        setValue("department_id", v as string, { shouldValidate: true })
-                      }}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(departments ?? []).map((d) => (
-                          <SelectItem key={d.id} value={d.id}>
-                            {d.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Controller
+                      name="department_id"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(departments ?? []).map((d) => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
                     {errors.department_id && (
                       <p className="text-sm text-destructive">{errors.department_id.message}</p>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="prog-years">Duration (years)</Label>
-                    <Input
-                      id="prog-years"
-                      type="number"
-                      min={1}
-                      max={10}
-                      {...register("duration_years", { valueAsNumber: true })}
-                      placeholder="4"
+                    <Label>Type</Label>
+                    <Controller
+                      name="program_type"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PROGRAM_TYPES.map((t) => (
+                              <SelectItem key={t.value} value={t.value}>
+                                {t.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     />
-                    {errors.duration_years && (
-                      <p className="text-sm text-destructive">{errors.duration_years.message}</p>
+                    {errors.program_type && (
+                      <p className="text-sm text-destructive">{errors.program_type.message}</p>
                     )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prog-semesters">No. of Semesters</Label>
+                      <Input
+                        id="prog-semesters"
+                        type="number"
+                        min={1}
+                        max={20}
+                        {...register("minimum_duration_semesters", { valueAsNumber: true })}
+                        placeholder="8"
+                      />
+                      {errors.minimum_duration_semesters && (
+                        <p className="text-sm text-destructive">{errors.minimum_duration_semesters.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prog-credits">Total Credits</Label>
+                      <Input
+                        id="prog-credits"
+                        type="number"
+                        min={1}
+                        max={500}
+                        {...register("total_credits", { valueAsNumber: true })}
+                        placeholder="160"
+                      />
+                      {errors.total_credits && (
+                        <p className="text-sm text-destructive">{errors.total_credits.message}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Mode</Label>
+                    <Controller
+                      name="study_mode"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select mode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STUDY_MODES.map((m) => (
+                              <SelectItem key={m.value} value={m.value}>
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.study_mode && (
+                      <p className="text-sm text-destructive">{errors.study_mode.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prog-description">Description</Label>
+                    <Textarea id="prog-description" rows={2} {...register("description")} placeholder="Optional" />
                   </div>
                 </form>
                 <DialogFooter showCloseButton>

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,6 +82,15 @@ class DepartmentService:
         dept.status = "ARCHIVED"
         dept.archived_at = datetime.now(timezone.utc)
         return await self._repo.update(dept, {})
+
+    async def assign_head(self, dept_id: UUID, user_id: UUID, organization_id: UUID) -> Department:
+        dept = await self._repo.get_by_id(dept_id, organization_id)
+        if dept is None:
+            raise DepartmentNotFoundError()
+        today = date.today()
+        await self._repo.close_current_head(dept_id, today)
+        await self._repo.add_head_history(dept_id, user_id, today)
+        return dept
 
 
 class ProgramService:

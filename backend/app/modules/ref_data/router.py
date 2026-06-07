@@ -36,6 +36,9 @@ from app.modules.ref_data.schemas import (
     MappingWeightLabelCreate,
     MappingWeightLabelResponse,
     MappingWeightLabelUpdate,
+    POTypeCreate,
+    POTypeResponse,
+    POTypeUpdate,
 )
 from app.modules.ref_data.service import (
     AssessmentTypeService,
@@ -47,6 +50,7 @@ from app.modules.ref_data.service import (
     DeliveryMethodService,
     KnowledgeProfileService,
     MappingWeightLabelService,
+    POTypeService,
 )
 
 router = APIRouter(prefix="/config", tags=["Reference Data"])
@@ -309,6 +313,38 @@ async def update_knowledge_profile(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     return await KnowledgeProfileService(db).update(record_id, body, current_user.organization_id)
+
+
+# ── PO Types ──────────────────────────────────────────────────────────────────
+
+@router.get("/po-types", response_model=list[POTypeResponse])
+async def list_po_types(
+    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await POTypeService(db).list_active(current_user.organization_id)
+
+
+@router.post("/po-types", response_model=POTypeResponse, status_code=status.HTTP_201_CREATED)
+async def create_po_type(
+    body: POTypeCreate,
+    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await POTypeService(db).create(body, current_user.organization_id)
+
+
+@router.patch("/po-types/{record_id}", response_model=POTypeResponse)
+async def update_po_type(
+    record_id: UUID,
+    body: POTypeUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await POTypeService(db).update(record_id, body, current_user.organization_id)
 
 
 # ── Mapping Weight Labels ─────────────────────────────────────────────────────

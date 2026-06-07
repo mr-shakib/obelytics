@@ -14,6 +14,7 @@ from app.modules.ref_data.models import (
     DeliveryMethod,
     KnowledgeProfile,
     MappingWeightLabel,
+    POType,
 )
 from app.modules.ref_data.repository import (
     AssessmentTypeRepository,
@@ -25,6 +26,7 @@ from app.modules.ref_data.repository import (
     DeliveryMethodRepository,
     KnowledgeProfileRepository,
     MappingWeightLabelRepository,
+    POTypeRepository,
 )
 from app.modules.ref_data.schemas import (
     AssessmentTypeCreate,
@@ -45,6 +47,8 @@ from app.modules.ref_data.schemas import (
     KnowledgeProfileUpdate,
     MappingWeightLabelCreate,
     MappingWeightLabelUpdate,
+    POTypeCreate,
+    POTypeUpdate,
 )
 
 _CACHE_TTL = 3600  # 1 hour
@@ -251,7 +255,7 @@ class ComplexProblemService:
     async def create(self, body: ComplexProblemCreate, org_id: UUID) -> ComplexProblem:
         if await self._repo.find_by_code(body.code, org_id):
             raise RefDataConflictError("A complex problem with this code already exists")
-        obj = ComplexProblem(organization_id=org_id, code=body.code, description=body.description)
+        obj = ComplexProblem(organization_id=org_id, code=body.code, name=body.name, description=body.description)
         result = await self._repo.create(obj)
         await _invalidate(org_id, "complex_problems")
         return result
@@ -285,7 +289,7 @@ class ComplexActivityService:
     async def create(self, body: ComplexActivityCreate, org_id: UUID) -> ComplexActivity:
         if await self._repo.find_by_code(body.code, org_id):
             raise RefDataConflictError("A complex activity with this code already exists")
-        obj = ComplexActivity(organization_id=org_id, code=body.code, description=body.description)
+        obj = ComplexActivity(organization_id=org_id, code=body.code, name=body.name, description=body.description)
         result = await self._repo.create(obj)
         await _invalidate(org_id, "complex_activities")
         return result
@@ -334,6 +338,40 @@ class KnowledgeProfileService:
                 raise RefDataConflictError("A knowledge profile with this code already exists")
         result = await self._repo.update(obj, data)
         await _invalidate(org_id, "knowledge_profiles")
+        return result
+
+
+class POTypeService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._repo = POTypeRepository(session)
+
+    async def list_active(self, org_id: UUID) -> list[POType]:
+        return await self._repo.list_active(org_id)
+
+    async def get(self, record_id: UUID, org_id: UUID) -> POType:
+        obj = await self._repo.get_by_id(record_id, org_id)
+        if obj is None:
+            raise RefDataNotFoundError("PO type")
+        return obj
+
+    async def create(self, body: POTypeCreate, org_id: UUID) -> POType:
+        if await self._repo.find_by_name(body.name, org_id):
+            raise RefDataConflictError("A PO type with this name already exists")
+        obj = POType(organization_id=org_id, name=body.name, description=body.description)
+        result = await self._repo.create(obj)
+        await _invalidate(org_id, "po_types")
+        return result
+
+    async def update(self, record_id: UUID, body: POTypeUpdate, org_id: UUID) -> POType:
+        obj = await self._repo.get_by_id(record_id, org_id)
+        if obj is None:
+            raise RefDataNotFoundError("PO type")
+        data = body.model_dump(exclude_none=True)
+        if "name" in data and data["name"] != obj.name:
+            if await self._repo.find_by_name(data["name"], org_id):
+                raise RefDataConflictError("A PO type with this name already exists")
+        result = await self._repo.update(obj, data)
+        await _invalidate(org_id, "po_types")
         return result
 
 

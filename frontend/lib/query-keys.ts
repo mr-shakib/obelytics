@@ -32,6 +32,10 @@ export const queryKeys = {
   refData: {
     bloomDomains: ["ref-data", "bloom-domains"] as const,
     assessmentTypes: ["ref-data", "assessment-types"] as const,
+    poTypes: ["ref-data", "po-types"] as const,
+    complexProblems: ["ref-data", "complex-problems"] as const,
+    complexActivities: ["ref-data", "complex-activities"] as const,
+    knowledgeProfiles: ["ref-data", "knowledge-profiles"] as const,
     all: ["ref-data"] as const,
   },
 

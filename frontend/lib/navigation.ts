@@ -22,6 +22,9 @@ import {
   ScrollText,
   CheckSquare,
   Settings,
+  SlidersHorizontal,
+  Tag,
+  Boxes,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -39,12 +42,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Approvals", href: "/approvals", icon: CheckSquare, permission: null, group: "Core" },
 
   // Organization & IAM
-  { label: "Organization", href: "/organization", icon: Building2, permission: "system.organization.configure", group: "Administration" },
-  { label: "Departments", href: "/departments", icon: Building, permission: "department.read", group: "Administration" },
-  { label: "Programs", href: "/programs", icon: GraduationCap, permission: "program.read", group: "Administration" },
-  { label: "Users", href: "/users", icon: Users, permission: "user.read", group: "Administration" },
-  { label: "Roles", href: "/roles", icon: Shield, permission: "system.roles.create", group: "Administration" },
-  { label: "Reference Data", href: "/ref-data", icon: Database, permission: "config.bloom.manage", group: "Administration" },
+  { label: "Organization", href: "/organization", icon: Building2, permission: "system.organization.configure", group: "Configuration" },
+  { label: "Departments", href: "/departments", icon: Building, permission: "department.update", group: "Configuration" },
+  { label: "Programs", href: "/programs", icon: GraduationCap, permission: "program.update", group: "Configuration" },
+  { label: "Users", href: "/users", icon: Users, permission: "user.read", group: "Configuration" },
+  { label: "PO Types", href: "/po-types", icon: Tag, permission: "config.manage", group: "Configuration" },
+  { label: "Complex Attributes", href: "/complex-attributes", icon: Boxes, permission: "config.manage", group: "Configuration" },
 
   // Curriculum
   { label: "Curricula", href: "/curricula", icon: BookCopy, permission: "curriculum.read", group: "Curriculum" },
@@ -68,19 +71,36 @@ export const NAV_ITEMS: NavItem[] = [
 
   // System
   { label: "Notifications", href: "/notifications", icon: Bell, permission: null, group: "System" },
+  { label: "Roles", href: "/roles", icon: Shield, permission: "system.roles.create", group: "System" },
+  { label: "Reference Data", href: "/ref-data", icon: Database, permission: "config.bloom.manage", group: "System" },
   { label: "Audit Log", href: "/audit", icon: ScrollText, permission: "system.audit.read", group: "System" },
 ]
 
-export const NAV_GROUPS = ["Core", "Administration", "Curriculum", "OBE", "Assessment", "Reports", "System"] as const
+export const NAV_GROUPS = ["Core", "Configuration", "Curriculum", "OBE", "Assessment", "Reports", "System"] as const
 
 export type NavGroup = typeof NAV_GROUPS[number]
 
 export const NAV_GROUP_META: Record<NavGroup, { icon: LucideIcon; label: string; short: string }> = {
-  Core:           { icon: LayoutDashboard, label: "Core",           short: "Core"    },
-  Administration: { icon: Building2,       label: "Administration", short: "Admin"   },
-  Curriculum:     { icon: GraduationCap,   label: "Curriculum",     short: "Curric"  },
-  OBE:            { icon: Target,          label: "OBE",            short: "OBE"     },
-  Assessment:     { icon: ClipboardList,   label: "Assessment",     short: "Assess"  },
-  Reports:        { icon: FileText,        label: "Reports",        short: "Reports" },
-  System:         { icon: Settings,        label: "System",         short: "System"  },
+  Core:          { icon: LayoutDashboard,   label: "Core",          short: "Core"    },
+  Configuration: { icon: SlidersHorizontal, label: "Configuration", short: "Config"  },
+  Curriculum:    { icon: GraduationCap,     label: "Curriculum",    short: "Curric"  },
+  OBE:           { icon: Target,            label: "OBE",           short: "OBE"     },
+  Assessment:    { icon: ClipboardList,     label: "Assessment",    short: "Assess"  },
+  Reports:       { icon: FileText,          label: "Reports",       short: "Reports" },
+  System:        { icon: Settings,          label: "System",        short: "System"  },
+}
+
+export function canViewNavItem(item: NavItem, permissions: string[]) {
+  return item.permission === null || permissions.includes(item.permission)
+}
+
+export function isNavItemActive(item: NavItem, pathname: string) {
+  return item.href === "/overview"
+    ? pathname === "/overview" || pathname === "/"
+    : pathname === item.href || pathname.startsWith(item.href + "/")
+}
+
+export function getActiveNavGroup(pathname: string, items: NavItem[]): NavGroup {
+  const active = items.find((item) => isNavItemActive(item, pathname))
+  return (active?.group as NavGroup | undefined) ?? "Core"
 }

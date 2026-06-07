@@ -28,7 +28,11 @@ async function interceptedFetch(
   const { accessToken, setAuth, user, manifest, clearAuth } = useAuthStore.getState()
   const { activeProgramId } = useAppStore.getState()
 
-  const headers = new Headers(init?.headers)
+  // openapi-fetch passes a pre-built Request as `input` (with `init` undefined) so its
+  // Content-Type/body are already baked in — seed from `input.headers` first, otherwise
+  // building a fresh Headers() here would silently drop Content-Type and break JSON bodies.
+  const seedHeaders = input instanceof Request ? input.headers : init?.headers
+  const headers = new Headers(seedHeaders)
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`)
   if (activeProgramId) headers.set("X-Program-Id", activeProgramId)
 

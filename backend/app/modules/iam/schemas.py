@@ -65,6 +65,10 @@ class UserUpdate(BaseModel):
     experience_years: int | None = Field(default=None, ge=0, le=99)
 
 
+class ResetPasswordRequest(BaseModel):
+    password: str = Field(min_length=8)
+
+
 class RoleAssignRequest(BaseModel):
     role_id: UUID
     scope_type: str = Field(pattern="^(GLOBAL|PROGRAM)$")

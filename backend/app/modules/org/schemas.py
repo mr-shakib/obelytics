@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -11,6 +11,7 @@ class OrgUpdate(BaseModel):
     description: str | None = None
     vision: str | None = None
     mission: str | None = None
+    logo_file_key: str | None = None
     website: str | None = None
     address_street: str | None = None
     address_city: str | None = None
@@ -29,6 +30,7 @@ class OrgResponse(BaseModel):
     vision: str | None
     mission: str | None
     logo_file_key: str | None
+    logo_url: str | None = None
     website: str | None
     address_street: str | None
     address_city: str | None
@@ -64,6 +66,22 @@ class DepartmentUpdate(BaseModel):
     mission: str | None = None
 
 
+class DepartmentHeadInfo(BaseModel):
+    user_id: UUID
+    full_name: str
+
+
+class DepartmentHeadHistoryEntry(BaseModel):
+    user_id: UUID
+    full_name: str
+    effective_from: date
+    effective_to: date | None
+
+
+class AssignDepartmentHead(BaseModel):
+    user_id: UUID
+
+
 class DepartmentResponse(BaseModel):
     id: UUID
     organization_id: UUID
@@ -77,6 +95,8 @@ class DepartmentResponse(BaseModel):
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    current_hod: DepartmentHeadInfo | None = None
+    hod_history: list[DepartmentHeadHistoryEntry] = []
 
     model_config = {"from_attributes": True}
 

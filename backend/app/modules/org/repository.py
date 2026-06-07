@@ -1,7 +1,8 @@
+from datetime import date
 from uuid import UUID
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.org.models import Department, Organization, Program
+from app.modules.org.models import Department, DepartmentHeadHistory, Organization, Program
 
 
 class OrgRepository:
@@ -70,6 +71,36 @@ class DepartmentRepository:
         await self._session.flush()
         await self._session.refresh(dept)
         return dept
+
+    async def list_head_history(self, dept_id: UUID) -> list[DepartmentHeadHistory]:
+        result = await self._session.execute(
+            select(DepartmentHeadHistory)
+            .where(DepartmentHeadHistory.department_id == dept_id)
+            .order_by(desc(DepartmentHeadHistory.effective_from))
+        )
+        return list(result.scalars().all())
+
+    async def close_current_head(self, dept_id: UUID, effective_to: date) -> None:
+        result = await self._session.execute(
+            select(DepartmentHeadHistory).where(
+                and_(
+                    DepartmentHeadHistory.department_id == dept_id,
+                    DepartmentHeadHistory.effective_to.is_(None),
+                )
+            )
+        )
+        current = result.scalar_one_or_none()
+        if current is not None:
+            current.effective_to = effective_to
+            self._session.add(current)
+            await self._session.flush()
+
+    async def add_head_history(self, dept_id: UUID, user_id: UUID, effective_from: date) -> DepartmentHeadHistory:
+        entry = DepartmentHeadHistory(department_id=dept_id, user_id=user_id, effective_from=effective_from)
+        self._session.add(entry)
+        await self._session.flush()
+        await self._session.refresh(entry)
+        return entry
 
 
 class ProgramRepository:

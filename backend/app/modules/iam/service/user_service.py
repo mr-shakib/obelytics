@@ -103,6 +103,23 @@ class UserService:
         await self._session.refresh(user)
         return user
 
+    async def reset_password(self, user_id: UUID, new_password: str) -> None:
+        user = await self._users.find_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id)
+
+        result = await self._session.execute(
+            select(PasswordCredential).where(PasswordCredential.user_id == user_id)
+        )
+        cred = result.scalar_one_or_none()
+        if cred is None:
+            cred = PasswordCredential(user_id=user_id)
+            self._session.add(cred)
+
+        cred.hashed_password = hash_password(new_password)
+        cred.must_change_password = True
+        await self._session.commit()
+
     async def deactivate_user(self, user_id: UUID, by: UUID) -> None:
         user = await self._users.find_by_id(user_id)
         if user is None:
@@ -114,6 +131,19 @@ class UserService:
 
         builder = PermissionManifestBuilder(self._session)
         await builder.invalidate(user_id)
+
+    async def list_roles(self, user_id: UUID) -> list[UserRoleAssignment]:
+        result = await self._session.execute(
+            select(UserRoleAssignment)
+            .options(selectinload(UserRoleAssignment.role))
+            .where(
+                and_(
+                    UserRoleAssignment.user_id == user_id,
+                    UserRoleAssignment.removed_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
 
     async def assign_role(
         self,
@@ -131,16 +161,43 @@ class UserService:
         if role is None:
             raise RoleNotFoundError()
 
-        assignment = UserRoleAssignment(
-            user_id=user_id,
-            role_id=role_id,
-            scope_type=scope_type,
-            scope_id=scope_id,
-            assigned_by=assigned_by,
+        # A user may hold multiple roles, but only one per scope — re-assigning
+        # within the same scope replaces whatever role currently occupies it.
+        scope_filter = (
+            UserRoleAssignment.scope_id.is_(None)
+            if scope_id is None
+            else UserRoleAssignment.scope_id == scope_id
         )
-        self._session.add(assignment)
-        await self._session.flush()
-        assignment_id = assignment.id
+        existing_result = await self._session.execute(
+            select(UserRoleAssignment).where(
+                and_(
+                    UserRoleAssignment.user_id == user_id,
+                    UserRoleAssignment.scope_type == scope_type,
+                    scope_filter,
+                    UserRoleAssignment.removed_at.is_(None),
+                )
+            )
+        )
+        now = datetime.now(timezone.utc)
+        assignment_id: UUID | None = None
+        for current in existing_result.scalars().all():
+            if current.role_id == role_id:
+                assignment_id = current.id
+            else:
+                current.removed_at = now
+
+        if assignment_id is None:
+            assignment = UserRoleAssignment(
+                user_id=user_id,
+                role_id=role_id,
+                scope_type=scope_type,
+                scope_id=scope_id,
+                assigned_by=assigned_by,
+            )
+            self._session.add(assignment)
+            await self._session.flush()
+            assignment_id = assignment.id
+
         await self._session.commit()
 
         # Re-fetch with role loaded so callers can access assignment.role.name

@@ -1,15 +1,24 @@
+import io
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from PIL import Image
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_permission
+from app.core.storage import presigned_get_url, put_object
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
+from app.modules.org.repository import DepartmentRepository
 from app.modules.org.schemas import (
+    AssignDepartmentHead,
     DepartmentCreate,
+    DepartmentHeadHistoryEntry,
+    DepartmentHeadInfo,
     DepartmentResponse,
     DepartmentUpdate,
     OrgResponse,
@@ -22,6 +31,41 @@ from app.modules.org.service import DepartmentService, OrgService, ProgramServic
 
 router = APIRouter(tags=["Organization"])
 
+_MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
+
+
+async def _org_response(org) -> OrgResponse:
+    response = OrgResponse.model_validate(org)
+    if org.logo_file_key:
+        response.logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+    return response
+
+
+async def _department_response(dept, db: AsyncSession) -> DepartmentResponse:
+    history = await DepartmentRepository(db).list_head_history(dept.id)
+    names: dict[UUID, str] = {}
+    user_ids = {h.user_id for h in history}
+    if user_ids:
+        result = await db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids)))
+        names = dict(result.all())
+
+    response = DepartmentResponse.model_validate(dept)
+    current = next((h for h in history if h.effective_to is None), None)
+    response.current_hod = (
+        DepartmentHeadInfo(user_id=current.user_id, full_name=names.get(current.user_id, "Unknown"))
+        if current is not None else None
+    )
+    response.hod_history = [
+        DepartmentHeadHistoryEntry(
+            user_id=h.user_id,
+            full_name=names.get(h.user_id, "Unknown"),
+            effective_from=h.effective_from,
+            effective_to=h.effective_to,
+        )
+        for h in history
+    ]
+    return response
+
 
 # ── Organization ──────────────────────────────────────────────────────────────
 
@@ -32,7 +76,8 @@ async def get_organization(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = OrgService(db)
-    return await svc.get(current_user.organization_id)
+    org = await svc.get(current_user.organization_id)
+    return await _org_response(org)
 
 
 @router.patch("/organization", response_model=OrgResponse)
@@ -43,7 +88,35 @@ async def update_organization(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = OrgService(db)
-    return await svc.update(current_user.organization_id, body)
+    org = await svc.update(current_user.organization_id, body)
+    return await _org_response(org)
+
+
+@router.post("/organization/logo", response_model=OrgResponse)
+async def upload_organization_logo(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("system.organization.configure"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+):
+    raw = await file.read()
+    if len(raw) > _MAX_LOGO_SIZE:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Logo must be 2MB or smaller")
+
+    try:
+        image = Image.open(io.BytesIO(raw))
+        image.verify()
+        image_format = (image.format or "png").lower()
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is not a valid image") from exc
+
+    svc = OrgService(db)
+    org = await svc.get(current_user.organization_id)
+    key = f"{org.id}/logo.{image_format}"
+    await put_object(settings.MINIO_BUCKET_LOGOS, key, raw, file.content_type or f"image/{image_format}")
+
+    org = await svc.update(current_user.organization_id, OrgUpdate(logo_file_key=key))
+    return await _org_response(org)
 
 
 # ── Departments ───────────────────────────────────────────────────────────────
@@ -77,7 +150,8 @@ async def get_department(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = DepartmentService(db)
-    return await svc.get(dept_id, current_user.organization_id)
+    dept = await svc.get(dept_id, current_user.organization_id)
+    return await _department_response(dept, db)
 
 
 @router.patch("/departments/{dept_id}", response_model=DepartmentResponse)
@@ -89,7 +163,21 @@ async def update_department(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = DepartmentService(db)
-    return await svc.update(dept_id, body, current_user.organization_id)
+    dept = await svc.update(dept_id, body, current_user.organization_id)
+    return await _department_response(dept, db)
+
+
+@router.post("/departments/{dept_id}/head", response_model=DepartmentResponse)
+async def assign_department_head(
+    dept_id: UUID,
+    body: AssignDepartmentHead,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("department.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = DepartmentService(db)
+    dept = await svc.assign_head(dept_id, body.user_id, current_user.organization_id)
+    return await _department_response(dept, db)
 
 
 @router.post("/departments/{dept_id}/archive", status_code=status.HTTP_200_OK, response_model=DepartmentResponse)
