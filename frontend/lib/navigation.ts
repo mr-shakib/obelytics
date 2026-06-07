@@ -21,6 +21,7 @@ import {
   Award,
   ScrollText,
   CheckSquare,
+  Settings,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -71,3 +72,15 @@ export const NAV_ITEMS: NavItem[] = [
 ]
 
 export const NAV_GROUPS = ["Core", "Administration", "Curriculum", "OBE", "Assessment", "Reports", "System"] as const
+
+export type NavGroup = typeof NAV_GROUPS[number]
+
+export const NAV_GROUP_META: Record<NavGroup, { icon: LucideIcon; label: string; short: string }> = {
+  Core:           { icon: LayoutDashboard, label: "Core",           short: "Core"    },
+  Administration: { icon: Building2,       label: "Administration", short: "Admin"   },
+  Curriculum:     { icon: GraduationCap,   label: "Curriculum",     short: "Curric"  },
+  OBE:            { icon: Target,          label: "OBE",            short: "OBE"     },
+  Assessment:     { icon: ClipboardList,   label: "Assessment",     short: "Assess"  },
+  Reports:        { icon: FileText,        label: "Reports",        short: "Reports" },
+  System:         { icon: Settings,        label: "System",         short: "System"  },
+}

@@ -10,6 +10,7 @@ interface AppState {
 
   setActiveProgram: (id: string | null) => void
   toggleSidebar: () => void
+  setSidebarCollapsed: (v: boolean) => void
   setTheme: (theme: "light" | "dark") => void
 }
 
@@ -22,6 +23,7 @@ export const useAppStore = create<AppState>()(
 
       setActiveProgram: (id) => set({ activeProgramId: id }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
       setTheme: (theme) => set({ theme }),
     }),
     { name: "obelytics-app-prefs", partialize: (s) => ({ sidebarCollapsed: s.sidebarCollapsed, theme: s.theme }) }
