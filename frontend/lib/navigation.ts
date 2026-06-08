@@ -51,7 +51,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Curriculum
   { label: "Curricula", href: "/curricula", icon: BookCopy, permission: "curriculum.read", group: "Curriculum" },
-  { label: "Courses", href: "/courses", icon: BookOpen, permission: "course.read", group: "Curriculum" },
+  { label: "Courses", href: "/courses", icon: BookOpen, permission: "curriculum.read", group: "Curriculum" },
   { label: "Batches", href: "/batches", icon: Users2, permission: "batch.read", group: "Curriculum" },
   { label: "Academic Terms", href: "/academic-terms", icon: CalendarDays, permission: "curriculum.read", group: "Curriculum" },
   { label: "Section Offerings", href: "/section-offerings", icon: Layers, permission: "curriculum.read", group: "Curriculum" },

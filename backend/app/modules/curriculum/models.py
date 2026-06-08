@@ -37,6 +37,7 @@ class Curriculum(Base):
         nullable=True,
     )
     status = Column(String(20), nullable=False, server_default="DRAFT")
+    archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),

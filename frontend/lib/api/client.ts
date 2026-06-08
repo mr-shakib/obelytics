@@ -67,20 +67,26 @@ async function interceptedFetch(
     }
   }
 
-  if (res.status === 403) {
-    toast.error("You don't have permission for this action")
-  }
-
-  if (res.status === 400 || res.status === 404 || res.status === 409 || res.status === 422) {
-    toast.error("Please check the information and try again.")
-  }
-
-  if (res.status >= 500) {
-    toast.error("Something went wrong. Please try again.")
-  }
-
   if (!res.ok) {
-    throw new Error(`api_error_${res.status}`)
+    // Try to surface the backend's specific error message (FastAPI's `detail` field)
+    // instead of a generic one, e.g. "A curriculum with this code already exists for this program".
+    let detail: string | undefined
+    try {
+      const body = await res.clone().json()
+      if (typeof body?.detail === "string") detail = body.detail
+    } catch {
+      // response body isn't JSON — fall back to generic messaging below
+    }
+
+    if (res.status === 403) {
+      toast.error(detail ?? "You don't have permission for this action")
+    } else if (res.status === 400 || res.status === 404 || res.status === 409 || res.status === 422) {
+      toast.error(detail ?? "Please check the information and try again.")
+    } else if (res.status >= 500) {
+      toast.error("Something went wrong. Please try again.")
+    }
+
+    throw new Error(detail ?? `api_error_${res.status}`)
   }
 
   return res

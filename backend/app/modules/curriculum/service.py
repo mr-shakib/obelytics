@@ -11,6 +11,7 @@ from app.modules.curriculum.exceptions import (
     BatchNotFoundError,
     CourseCodeConflictError,
     CourseNotFoundError,
+    CurriculumCodeConflictError,
     CurriculumLockedError,
     CurriculumNotFoundError,
     CycleDetectedError,
@@ -73,6 +74,9 @@ class CurriculumService:
         self._repo = CurriculumRepository(session)
 
     async def create(self, body: CurriculumCreate, org_id: UUID) -> Curriculum:
+        existing = await self._repo.find_by_code(body.code, body.program_id, version=1)
+        if existing:
+            raise CurriculumCodeConflictError()
         curriculum = Curriculum(
             organization_id=org_id,
             program_id=body.program_id,
@@ -119,6 +123,18 @@ class CurriculumService:
         if curriculum.status != "DRAFT":
             raise CurriculumLockedError()
         curriculum.status = "ACTIVE"
+        result = await self._repo.update(curriculum, {})
+        await self._session.commit()
+        return result
+
+    async def archive(self, curriculum_id: UUID, org_id: UUID) -> Curriculum:
+        curriculum = await self._repo.get_by_id(curriculum_id, org_id)
+        if curriculum is None:
+            raise CurriculumNotFoundError()
+        if curriculum.status == "ARCHIVED":
+            raise CurriculumLockedError()
+        curriculum.status = "ARCHIVED"
+        curriculum.archived_at = datetime.now(timezone.utc)
         result = await self._repo.update(curriculum, {})
         await self._session.commit()
         return result

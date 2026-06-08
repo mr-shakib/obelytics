@@ -44,11 +44,16 @@ export const queryKeys = {
     all: ["curricula"] as const,
     list: (filters?: Record<string, unknown>) => ["curricula", "list", filters] as const,
     detail: (id: string) => ["curricula", id] as const,
+    terms: (id: string) => ["curricula", id, "terms"] as const,
+    courseSlots: (id: string) => ["curricula", id, "course-slots"] as const,
   },
   courses: {
     all: ["courses"] as const,
     list: (filters?: Record<string, unknown>) => ["courses", "list", filters] as const,
     detail: (id: string) => ["courses", id] as const,
+  },
+  courseTypes: {
+    all: ["course-types"] as const,
   },
   batches: {
     all: ["batches"] as const,

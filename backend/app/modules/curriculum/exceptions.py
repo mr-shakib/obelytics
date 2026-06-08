@@ -14,6 +14,14 @@ class CurriculumLockedError(HTTPException):
         )
 
 
+class CurriculumCodeConflictError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A curriculum with this code already exists for this program",
+        )
+
+
 class CourseNotFoundError(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")

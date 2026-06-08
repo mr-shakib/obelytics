@@ -34,54 +34,37 @@ import {
 } from "@/components/ui/select"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
-import { formatDate } from "@/lib/utils"
 
 type Curriculum = {
   id: string
+  program_id: string
   name: string
-  program_name: string
-  version: string
+  code: string
+  effective_year: number
+  version_number: number
   status: string
-  effective_from: string
-  effective_to?: string
 }
 
-type Program = {
-  id: string
-  name: string
+type Program = { id: string; title?: string; name?: string; acronym?: string }
+
+function programLabel(p: Program) {
+  const title = p.title ?? p.name ?? ""
+  return p.acronym ? `${p.acronym} — ${title}` : title || p.id
 }
 
 const schema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: z.string().min(1, "Name is required").max(255),
+  code: z.string().min(1, "Code is required").max(50),
   program_id: z.string().min(1, "Program is required"),
-  version: z.string().min(1, "Version is required"),
-  effective_from: z.string().min(1, "Effective from date is required"),
+  effective_year: z.number().int().min(1900).max(2100),
+  batch_name: z.string().min(1, "Batch name is required").max(100),
+  semester_count: z.number().int().min(1, "At least 1 semester is required").max(20),
 })
 type FormValues = z.infer<typeof schema>
 
-const columns: ColumnDef<Curriculum>[] = [
-  { accessorKey: "name", header: "Name" },
-  { accessorKey: "program_name", header: "Program" },
-  { accessorKey: "version", header: "Version" },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
-  },
-  {
-    accessorKey: "effective_from",
-    header: "Effective From",
-    cell: ({ row }) => formatDate(row.original.effective_from),
-  },
-  {
-    accessorKey: "effective_to",
-    header: "Effective To",
-    cell: ({ row }) => row.original.effective_to ? formatDate(row.original.effective_to) : "—",
-  },
-]
-
 export function CurriculaClient() {
   const [open, setOpen] = useState(false)
+  const [selProgramId, setSelProgramId] = useState("")
   const qc = useQueryClient()
   const router = useRouter()
 
@@ -101,23 +84,73 @@ export function CurriculaClient() {
     },
   })
 
+  const programById = Object.fromEntries(programs.map((p) => [p.id, p]))
+
+  const columns: ColumnDef<Curriculum>[] = [
+    { accessorKey: "name", header: "Name" },
+    { accessorKey: "code", header: "Code" },
+    {
+      id: "program",
+      header: "Program",
+      cell: ({ row }) => {
+        const p = programById[row.original.program_id]
+        return p ? programLabel(p) : "—"
+      },
+    },
+    { accessorKey: "effective_year", header: "Effective Year" },
+    {
+      accessorKey: "version_number",
+      header: "Version",
+      cell: ({ row }) => `v${row.original.version_number}`,
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+  ]
+
   const {
     register,
     handleSubmit,
     setValue,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { semester_count: 8 } })
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      await apiClient.POST("/curricula" as never, { body: values } as never)
+      const { data: curriculum } = await apiClient.POST("/curricula" as never, {
+        body: {
+          name: values.name,
+          code: values.code,
+          program_id: values.program_id,
+          effective_year: values.effective_year,
+        },
+      } as never)
+      const created = (curriculum as unknown) as { id: string }
+      await apiClient.POST("/batches" as never, {
+        body: {
+          curriculum_id: created.id,
+          name: values.batch_name,
+          intake_year: values.effective_year,
+        },
+      } as never)
+      await apiClient.POST(`/curricula/${created.id}/terms` as never, {
+        body: Array.from({ length: values.semester_count }, (_, i) => ({
+          term_number: i + 1,
+          name: `Semester ${i + 1}`,
+          total_credit_hours: null,
+        })),
+      } as never)
     },
     onSuccess: () => {
       toast.success("Curriculum created")
       qc.invalidateQueries({ queryKey: queryKeys.curricula.all })
+      qc.invalidateQueries({ queryKey: queryKeys.batches.all })
       setOpen(false)
-      reset()
+      setSelProgramId("")
+      reset({ semester_count: 8 })
     },
     onError: () => toast.error("Failed to create curriculum"),
   })
@@ -129,7 +162,7 @@ export function CurriculaClient() {
         description="Manage academic curricula across programs."
         actions={
           <PermissionGate permission="curriculum.create">
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setSelProgramId(""); reset() } }}>
               <DialogTrigger render={<Button />}>
                 <Plus className="h-4 w-4" />
                 New Curriculum
@@ -145,21 +178,26 @@ export function CurriculaClient() {
                 >
                   <div className="space-y-2">
                     <Label htmlFor="name">Name</Label>
-                    <Input id="name" {...register("name")} />
+                    <Input id="name" placeholder="e.g. BSc in CSE Curriculum" {...register("name")} />
                     {errors.name && (
                       <p className="text-sm text-destructive">{errors.name.message}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="program_id">Program</Label>
-                    <Select onValueChange={(v) => v != null && setValue("program_id", v as string)}>
+                    <Select
+                      value={selProgramId}
+                      onValueChange={(v) => { if (v == null) return; setSelProgramId(v as string); setValue("program_id", v as string, { shouldValidate: true }) }}
+                    >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select program" />
+                        <SelectValue placeholder="Select program">
+                          {selProgramId ? (programById[selProgramId] ? programLabel(programById[selProgramId]) : undefined) : undefined}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {programs.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.name}
+                            {programLabel(p)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -168,19 +206,57 @@ export function CurriculaClient() {
                       <p className="text-sm text-destructive">{errors.program_id.message}</p>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="version">Version</Label>
-                    <Input id="version" {...register("version")} placeholder="e.g. 2024.1" />
-                    {errors.version && (
-                      <p className="text-sm text-destructive">{errors.version.message}</p>
-                    )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="code">Code</Label>
+                      <Input id="code" placeholder="e.g. CSE-2024" {...register("code")} />
+                      {errors.code && (
+                        <p className="text-sm text-destructive">{errors.code.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="effective_year">Effective Year</Label>
+                      <Input
+                        id="effective_year"
+                        type="number"
+                        min={1900}
+                        max={2100}
+                        placeholder="e.g. 2024"
+                        {...register("effective_year", { valueAsNumber: true })}
+                      />
+                      {errors.effective_year && (
+                        <p className="text-sm text-destructive">{errors.effective_year.message}</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="effective_from">Effective From</Label>
-                    <Input id="effective_from" type="date" {...register("effective_from")} />
-                    {errors.effective_from && (
-                      <p className="text-sm text-destructive">{errors.effective_from.message}</p>
+                  <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
+                    <Label htmlFor="batch_name">Batch Name</Label>
+                    <Input id="batch_name" placeholder="e.g. Fall 2024" {...register("batch_name")} />
+                    {errors.batch_name && (
+                      <p className="text-sm text-destructive">{errors.batch_name.message}</p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Creates the curriculum&apos;s first batch (cohort), with its intake year set to the
+                      effective year above.
+                    </p>
+                  </div>
+                  <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
+                    <Label htmlFor="semester_count">Number of Semesters</Label>
+                    <Input
+                      id="semester_count"
+                      type="number"
+                      min={1}
+                      max={20}
+                      placeholder="e.g. 8"
+                      {...register("semester_count", { valueAsNumber: true })}
+                    />
+                    {errors.semester_count && (
+                      <p className="text-sm text-destructive">{errors.semester_count.message}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Automatically creates this many semesters (Semester 1, Semester 2, …) for the
+                      curriculum, ready for courses to be placed into.
+                    </p>
                   </div>
                 </form>
                 <DialogFooter>

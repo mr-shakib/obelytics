@@ -28,6 +28,7 @@ class CurriculumResponse(BaseModel):
     version_number: int
     parent_curriculum_id: UUID | None
     status: str
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -37,7 +38,9 @@ class CurriculumResponse(BaseModel):
 # ── Curriculum Term Definition ─────────────────────────────────────────────────
 
 class CurriculumTermDefinitionCreate(BaseModel):
-    curriculum_id: UUID
+    # Supplied via the URL path (`/curricula/{curriculum_id}/terms`) and injected
+    # server-side — optional here so clients don't have to repeat it in the body.
+    curriculum_id: UUID | None = None
     term_number: int = Field(ge=1, le=20)
     name: str = Field(min_length=1, max_length=100)
     total_credit_hours: int | None = Field(default=None, ge=0)
@@ -95,7 +98,9 @@ class CourseResponse(BaseModel):
 # ── Course Slot ───────────────────────────────────────────────────────────────
 
 class CourseSlotCreate(BaseModel):
-    curriculum_id: UUID
+    # Supplied via the URL path (`/curricula/{curriculum_id}/course-slots`) and
+    # injected server-side — optional here so clients don't have to repeat it.
+    curriculum_id: UUID | None = None
     curriculum_term_definition_id: UUID
     course_id: UUID
     is_elective: bool = False
@@ -115,7 +120,9 @@ class CourseSlotResponse(BaseModel):
 # ── Prerequisite ──────────────────────────────────────────────────────────────
 
 class PrerequisiteCreate(BaseModel):
-    course_id: UUID
+    # Supplied via the URL path (`/courses/{course_id}/prerequisites`) and injected
+    # server-side — optional here so clients don't have to repeat it.
+    course_id: UUID | None = None
     prerequisite_course_id: UUID
 
 

@@ -98,6 +98,17 @@ async def update_curriculum(
     return await svc.update(curriculum_id, body, current_user.organization_id)
 
 
+@router.post("/curricula/{curriculum_id}/archive", response_model=CurriculumResponse)
+async def archive_curriculum(
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CurriculumService(db)
+    return await svc.archive(curriculum_id, current_user.organization_id)
+
+
 @router.post("/curricula/{curriculum_id}/version", response_model=CurriculumResponse, status_code=status.HTTP_201_CREATED)
 async def version_curriculum(
     curriculum_id: UUID,
