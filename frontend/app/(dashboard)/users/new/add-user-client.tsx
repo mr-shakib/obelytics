@@ -9,8 +9,9 @@ import { toast } from "sonner"
 import {
   Loader2, RefreshCw,
   FileSpreadsheet, Upload, Download, AlertCircle, CheckCircle2, ArrowLeft,
+  Info, ChevronDown,
 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import * as XLSX from "xlsx"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,6 +47,26 @@ const BULK_TEMPLATE_COLUMNS = [
   "first_name", "last_name", "middle_name", "title",
   "faculty_type", "email", "contact_number", "nid",
   "designation", "department_name", "qualification", "experience_years", "password",
+]
+
+// Column-by-column guidance shown both in-app and inside the downloadable template's
+// "Instructions" sheet — keep these in sync with BULK_TEMPLATE_COLUMNS and the backend
+// UserCreate schema (only first_name, email and password are actually required server-side;
+// password is auto-generated here when left blank, so it reads as optional to the importer).
+const BULK_COLUMN_GUIDE: { key: string; required: boolean; description: string; example: string }[] = [
+  { key: "first_name", required: true, description: "User's first name", example: "John" },
+  { key: "last_name", required: false, description: "User's last name", example: "Smith" },
+  { key: "middle_name", required: false, description: "User's middle name", example: "A." },
+  { key: "title", required: false, description: "Honorific — e.g. Dr., Mr., Ms., Prof., Assoc. Prof.", example: "Dr." },
+  { key: "faculty_type", required: false, description: "Faculty category — e.g. Teaching, Administrative, Management", example: "Teaching" },
+  { key: "email", required: true, description: "Valid, unique email address — this becomes the user's login", example: "john.smith@university.edu" },
+  { key: "contact_number", required: false, description: "Phone number, including country code if applicable", example: "+8801XXXXXXXXX" },
+  { key: "nid", required: false, description: "National ID number", example: "1234567890" },
+  { key: "designation", required: false, description: "Job title — e.g. Professor, Lecturer, Head of Department", example: "Lecturer" },
+  { key: "department_name", required: false, description: "Must exactly match an existing department's name (case-insensitive); leave blank if unsure", example: "Computer Science" },
+  { key: "qualification", required: false, description: "Highest academic qualification", example: "PhD" },
+  { key: "experience_years", required: false, description: "Whole number from 0 to 99", example: "5" },
+  { key: "password", required: false, description: "At least 8 characters; leave blank to use the default password set on the import screen", example: "(leave blank)" },
 ]
 
 // ── Schema ─────────────────────────────────────────────────────────────────────
@@ -311,6 +332,7 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
   const [rows, setRows] = useState<BulkRow[]>([])
   const [selRoleId, setSelRoleId] = useState("")
   const [selScopeType, setSelScopeType] = useState<"GLOBAL" | "PROGRAM">("GLOBAL")
+  const [sharedPassword, setSharedPassword] = useState(() => genPassword())
   const [importResult, setImportResult] = useState<{ created: number; errors: { row: number; email: string; error: string }[] } | null>(null)
 
   const deptByName = Object.fromEntries(departments.map((d) => [d.name.toLowerCase(), d.id]))
@@ -330,6 +352,7 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
 
   function downloadTemplate() {
     const ws = XLSX.utils.aoa_to_sheet([BULK_TEMPLATE_COLUMNS])
+    ws["!cols"] = BULK_TEMPLATE_COLUMNS.map(() => ({ wch: 16 }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Users")
     XLSX.writeFile(wb, "user_import_template.xlsx")
@@ -338,10 +361,12 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
   const mutation = useMutation({
     mutationFn: async () => {
       if (!selRoleId) throw new Error("Select a role before importing")
+      if (sharedPassword.trim().length < 8) throw new Error("Password must be at least 8 characters")
       const body = rows.map((r) => {
         const deptName = String(r["department_name"] ?? "").toLowerCase()
         const deptId = deptByName[deptName] ?? undefined
-        const pw = String(r["password"] ?? "").trim() || genPassword()
+        const rowPassword = String(r["password"] ?? "").trim()
+        const pw = rowPassword || sharedPassword
         return {
           first_name: String(r["first_name"] ?? ""),
           middle_name: String(r["middle_name"] ?? "") || null,
@@ -389,6 +414,51 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
         </Button>
       </div>
 
+      <details className="group rounded-xl border bg-muted/30">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            How to format your spreadsheet
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-3 px-4 pb-4">
+          <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
+            <li>Click <span className="font-medium text-foreground">Template</span> to download a spreadsheet with the exact column headers the importer expects.</li>
+            <li>Add one row per user below the header row — don&apos;t rename, reorder, or remove columns.</li>
+            <li><span className="font-mono text-foreground">first_name</span> and <span className="font-mono text-foreground">email</span> are required for every row; everything else is optional and can be left blank.</li>
+            <li>The <span className="font-medium text-foreground">Assign Role</span>, <span className="font-medium text-foreground">Scope</span>, and <span className="font-medium text-foreground">Password</span> set below apply to every user in the file — they aren&apos;t read from the spreadsheet (unless a row sets its own password).</li>
+            <li>Save as .xlsx, .xls, or .csv and upload it (maximum 200 rows per import).</li>
+          </ol>
+          <div className="overflow-auto rounded-lg border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="whitespace-nowrap px-2 py-1.5 font-medium text-muted-foreground">Column</th>
+                  <th className="whitespace-nowrap px-2 py-1.5 font-medium text-muted-foreground">Required</th>
+                  <th className="px-2 py-1.5 font-medium text-muted-foreground">What to enter</th>
+                  <th className="whitespace-nowrap px-2 py-1.5 font-medium text-muted-foreground">Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                {BULK_COLUMN_GUIDE.map((c) => (
+                  <tr key={c.key} className="border-t">
+                    <td className="whitespace-nowrap px-2 py-1.5 font-mono">{c.key}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      {c.required
+                        ? <Badge variant="secondary" className="text-[10px]">Required</Badge>
+                        : <span className="text-muted-foreground">Optional</span>}
+                    </td>
+                    <td className="px-2 py-1.5 text-muted-foreground">{c.description}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 text-muted-foreground">{c.example}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
@@ -427,6 +497,27 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
             </SelectContent>
           </Select>
         </Field>
+      </div>
+
+      <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Initial Password</p>
+        <Field label="Password" required>
+          <div className="flex gap-2">
+            <Input
+              className="font-mono flex-1"
+              value={sharedPassword}
+              onChange={(e) => setSharedPassword(e.target.value)}
+            />
+            <Button type="button" variant="outline" size="icon" title="Regenerate password" onClick={() => setSharedPassword(genPassword())}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </Field>
+        <p className="text-xs text-muted-foreground">
+          Auto-generated. You can edit it or regenerate. This password is applied to every imported user
+          (rows that set their own value in the spreadsheet&apos;s “password” column use that instead).
+          Everyone will be required to change it on first login.
+        </p>
       </div>
 
       {rows.length > 0 && (
@@ -478,6 +569,8 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
 
 export function AddUserClient() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get("tab") === "bulk" ? "bulk" : "individual"
   const [creds, setCreds] = useState<CreatedCreds | null>(null)
 
   const { data: roles = [] } = useQuery({
@@ -520,7 +613,7 @@ export function AddUserClient() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="individual">
+      <Tabs defaultValue={initialTab}>
         <TabsList variant="line" className="mb-6">
           <TabsTrigger value="individual">Individual</TabsTrigger>
           <TabsTrigger value="bulk">Bulk Import</TabsTrigger>

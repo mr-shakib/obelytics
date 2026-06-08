@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Plus, Search } from "lucide-react"
+import { Plus, Search, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/data-table"
@@ -132,10 +132,16 @@ export function UsersClient() {
         description="Manage faculty and staff accounts."
         actions={
           <PermissionGate permission="user.create">
-            <Button className="gap-2" onClick={() => router.push("/users/new")}>
-              <Plus className="h-4 w-4" />
-              Add User
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2" onClick={() => router.push("/users/new?tab=bulk")}>
+                <Upload className="h-4 w-4" />
+                Bulk Import
+              </Button>
+              <Button className="gap-2" onClick={() => router.push("/users/new")}>
+                <Plus className="h-4 w-4" />
+                Add User
+              </Button>
+            </div>
           </PermissionGate>
         }
       />
