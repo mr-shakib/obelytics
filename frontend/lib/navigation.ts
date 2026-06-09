@@ -52,14 +52,13 @@ export const NAV_ITEMS: NavItem[] = [
   // Curriculum
   { label: "Curricula", href: "/curricula", icon: BookCopy, permission: "curriculum.read", group: "Curriculum" },
   { label: "Courses", href: "/courses", icon: BookOpen, permission: "curriculum.read", group: "Curriculum" },
-  { label: "Batches", href: "/batches", icon: Users2, permission: "batch.read", group: "Curriculum" },
-  { label: "Academic Terms", href: "/academic-terms", icon: CalendarDays, permission: "curriculum.read", group: "Curriculum" },
+  { label: "Academic Batches", href: "/batches", icon: Users2, permission: "curriculum.read", group: "Curriculum" },
   { label: "Section Offerings", href: "/section-offerings", icon: Layers, permission: "curriculum.read", group: "Curriculum" },
+  { label: "Course Outcomes", href: "/course-outcomes", icon: ListChecks, permission: "co.read", group: "Curriculum" },
+  { label: "CO-PO Mapping", href: "/mappings/co-po", icon: Grid3x3, permission: "mapping.co_po.read", group: "Curriculum" },
 
   // OBE
   { label: "Program Outcomes", href: "/program-outcomes", icon: Target, permission: "po.read", group: "OBE" },
-  { label: "Course Outcomes", href: "/course-outcomes", icon: ListChecks, permission: "co.read", group: "OBE" },
-  { label: "CO-PO Mapping", href: "/mappings/co-po", icon: Grid3x3, permission: "mapping.co_po.read", group: "OBE" },
 
   // Assessment
   { label: "Assessments", href: "/assessments", icon: ClipboardList, permission: "assessment.read", group: "Assessment" },

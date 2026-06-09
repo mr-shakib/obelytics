@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Loader2, Save } from "lucide-react"
@@ -18,135 +18,254 @@ import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 
-type Curriculum = { id: string; name: string; program_name: string }
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+type Curriculum  = { id: string; name: string; program_id: string }
+type TermDef     = { id: string; term_number: number; name: string }
+type CourseSlot  = { id: string; curriculum_term_definition_id: string; course_id: string }
+type Course      = { id: string; code: string; title: string }
 type ProgramOutcome = { id: string; code: string; statement: string }
-type CourseOutcome = { id: string; code: string; statement: string; course_name?: string }
+type CourseOutcome  = { id: string; code: string; statement: string }
 
-type Strength = 1 | 2 | 3
-
+type MappingSet = { id: string }
 type MappingEntry = {
-  co_id: string
-  po_id: string
-  strength: Strength | null
+  id: string
+  mapping_set_id: string
+  course_outcome_id: string
+  program_outcome_id: string
+  weight: 1 | 2 | 3
 }
 
-const STRENGTH_LABELS: Record<Strength, string> = { 1: "L", 2: "M", 3: "H" }
-const STRENGTH_COLORS: Record<Strength, string> = {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+type Weight = 1 | 2 | 3
+
+const WEIGHT_LABELS: Record<Weight, string> = { 1: "L", 2: "M", 3: "H" }
+const WEIGHT_COLORS: Record<Weight, string> = {
   1: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
   2: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   3: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
 }
 
-function nextStrength(s: Strength | null): Strength | null {
-  if (s === null) return 1
-  if (s === 1) return 2
-  if (s === 2) return 3
+function nextWeight(w: Weight | null): Weight | null {
+  if (w === null) return 1
+  if (w === 1) return 2
+  if (w === 2) return 3
   return null
 }
 
+function matrixKey(coId: string, poId: string) {
+  return `${coId}:${poId}`
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function CoPoMappingClient() {
   const qc = useQueryClient()
-  const [curriculumId, setCurriculumId] = useState<string>("")
-  const [matrix, setMatrix] = useState<Map<string, Strength | null>>(new Map())
-  const [dirty, setDirty] = useState(false)
 
-  const { data: curricula } = useQuery({
-    queryKey: queryKeys.curricula.list(),
+  const [curriculumId, setCurriculumId] = useState("")
+  const [termDefId,    setTermDefId]    = useState("")
+  const [courseId,     setCourseId]     = useState("")
+  const [setId,        setSetId]        = useState<string | null>(null)
+  const [matrix,       setMatrix]       = useState<Map<string, Weight>>(new Map())
+  const [dirty,        setDirty]        = useState(false)
+
+  // ── Data fetching ────────────────────────────────────────────────────────
+
+  const { data: curricula = [] } = useQuery({
+    queryKey: queryKeys.curricula.all,
     queryFn: async () => {
       const { data } = await apiClient.GET("/curricula" as never)
-      return ((data as unknown) as { items?: Curriculum[] })?.items ?? ((data as unknown) as Curriculum[]) ?? []
+      return ((data as unknown) as Curriculum[]) ?? []
     },
   })
 
-  const { data: programOutcomes } = useQuery({
-    queryKey: queryKeys.programOutcomes.list({ curriculum_id: curriculumId }),
+  const { data: termDefs = [] } = useQuery({
+    queryKey: queryKeys.curricula.terms(curriculumId),
     queryFn: async () => {
-      const url = curriculumId
-        ? `/program-outcomes?curriculum_id=${curriculumId}`
-        : "/program-outcomes"
-      const { data } = await apiClient.GET(url as never)
-      return ((data as unknown) as { items?: ProgramOutcome[] })?.items ?? ((data as unknown) as ProgramOutcome[]) ?? []
+      const { data } = await apiClient.GET(`/curricula/${curriculumId}/terms` as never)
+      return ((data as unknown) as TermDef[]) ?? []
     },
     enabled: !!curriculumId,
   })
 
-  const { data: courseOutcomes } = useQuery({
-    queryKey: queryKeys.courseOutcomes.list(curriculumId),
+  const { data: courseSlots = [] } = useQuery({
+    queryKey: queryKeys.curricula.courseSlots(curriculumId),
     queryFn: async () => {
-      const { data } = await apiClient.GET(`/course-outcomes?curriculum_id=${curriculumId}` as never)
-      return ((data as unknown) as { items?: CourseOutcome[] })?.items ?? ((data as unknown) as CourseOutcome[]) ?? []
+      const { data } = await apiClient.GET(`/curricula/${curriculumId}/course-slots` as never)
+      return ((data as unknown) as CourseSlot[]) ?? []
     },
     enabled: !!curriculumId,
   })
 
-  const { data: existingMappings } = useQuery({
-    queryKey: queryKeys.coPoMappings.list({ curriculum_id: curriculumId }),
+  const { data: allCourses = [] } = useQuery({
+    queryKey: queryKeys.courses.all,
     queryFn: async () => {
-      const { data } = await apiClient.GET(`/co-po-mappings?curriculum_id=${curriculumId}` as never)
-      return ((data as unknown) as { items?: MappingEntry[] })?.items ?? ((data as unknown) as MappingEntry[]) ?? []
+      const { data } = await apiClient.GET("/courses" as never)
+      return ((data as unknown) as Course[]) ?? []
     },
-    enabled: !!curriculumId,
-    onSuccess: (entries: MappingEntry[]) => {
-      const m = new Map<string, Strength | null>()
-      for (const e of entries) {
-        m.set(`${e.co_id}:${e.po_id}`, e.strength)
+  })
+
+  const selectedCurriculum = curricula.find((c) => c.id === curriculumId)
+  const programId = selectedCurriculum?.program_id ?? ""
+
+  const { data: pos = [] } = useQuery({
+    queryKey: queryKeys.programOutcomes.list({ program_id: programId }),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/program-outcomes?program_id=${programId}` as never)
+      return ((data as unknown) as ProgramOutcome[]) ?? []
+    },
+    enabled: !!programId,
+  })
+
+  const { data: cos = [] } = useQuery({
+    queryKey: queryKeys.courseOutcomes.list(curriculumId, courseId),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(
+        `/course-outcomes?curriculum_id=${curriculumId}&course_id=${courseId}` as never
+      )
+      return ((data as unknown) as CourseOutcome[]) ?? []
+    },
+    enabled: !!curriculumId && !!courseId,
+  })
+
+  // ── Existing mapping set ─────────────────────────────────────────────────
+
+  const { data: existingSet } = useQuery({
+    queryKey: queryKeys.coPoMappings.byCourse(curriculumId, courseId),
+    queryFn: async () => {
+      try {
+        const { data, response } = await apiClient.GET(
+          `/mappings/co-po?curriculum_id=${curriculumId}&course_id=${courseId}` as never
+        ) as { data: unknown; response: Response }
+        if (response.status === 404) return null
+        return ((data as unknown) as MappingSet) ?? null
+      } catch {
+        return null
       }
-      setMatrix(m)
-      setDirty(false)
     },
-  } as Parameters<typeof useQuery>[0])
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const entries = Array.from(matrix.entries())
-        .filter(([, s]) => s !== null)
-        .map(([key, strength]) => {
-          const [co_id, po_id] = key.split(":")
-          return { co_id, po_id, strength }
-        })
-      await apiClient.PUT(`/co-po-mappings?curriculum_id=${curriculumId}` as never, {
-        body: { entries },
-      } as never)
-    },
-    onSuccess: () => {
-      toast.success("CO-PO mapping saved")
-      qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.list({ curriculum_id: curriculumId }) })
-      setDirty(false)
-    },
-    onError: () => toast.error("Failed to save mappings"),
+    enabled: !!curriculumId && !!courseId,
+    retry: false,
   })
+
+  const { data: existingEntries = [] } = useQuery({
+    queryKey: queryKeys.coPoMappings.entries(setId ?? ""),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/mappings/co-po/${setId}/entries` as never)
+      return ((data as unknown) as MappingEntry[]) ?? []
+    },
+    enabled: !!setId,
+  })
+
+  // ── Sync state from loaded data ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (existingSet !== undefined) {
+      setSetId(existingSet?.id ?? null)
+    }
+  }, [existingSet])
+
+  useEffect(() => {
+    const m = new Map<string, Weight>()
+    for (const e of existingEntries) {
+      m.set(matrixKey(e.course_outcome_id, e.program_outcome_id), e.weight)
+    }
+    setMatrix(m)
+    setDirty(false)
+  }, [existingEntries])
+
+  // ── Derived ──────────────────────────────────────────────────────────────
+
+  const courseIdsInTerm = termDefId
+    ? courseSlots
+        .filter((s) => s.curriculum_term_definition_id === termDefId)
+        .map((s) => s.course_id)
+    : []
+
+  const coursesInTerm = allCourses.filter((c) => courseIdsInTerm.includes(c.id))
+  const selectedCourse = allCourses.find((c) => c.id === courseId)
+  const hasMatrix = !!courseId && cos.length > 0 && pos.length > 0
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+
+  function handleChangeCurriculum(val: string | null) {
+    setCurriculumId(val ?? "")
+    setTermDefId("")
+    setCourseId("")
+    setSetId(null)
+    setMatrix(new Map())
+    setDirty(false)
+  }
+
+  function handleChangeTerm(val: string | null) {
+    setTermDefId(val ?? "")
+    setCourseId("")
+    setSetId(null)
+    setMatrix(new Map())
+    setDirty(false)
+  }
+
+  function handleChangeCourse(val: string | null) {
+    setCourseId(val ?? "")
+    setSetId(null)
+    setMatrix(new Map())
+    setDirty(false)
+  }
 
   function toggleCell(coId: string, poId: string) {
-    const key = `${coId}:${poId}`
-    const current = matrix.get(key) ?? null
-    const next = nextStrength(current)
+    const key = matrixKey(coId, poId)
     setMatrix((prev) => {
-      const next_ = new Map(prev)
-      if (next === null) {
-        next_.delete(key)
-      } else {
-        next_.set(key, next)
-      }
-      return next_
+      const next = new Map(prev)
+      const current = prev.get(key) ?? null
+      const nextVal = nextWeight(current)
+      if (nextVal === null) next.delete(key)
+      else next.set(key, nextVal)
+      return next
     })
     setDirty(true)
   }
 
-  const pos = programOutcomes ?? []
-  const cos = courseOutcomes ?? []
+  // ── Save ─────────────────────────────────────────────────────────────────
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const { data: setData } = await apiClient.POST("/mappings/co-po" as never, {
+        body: { curriculum_id: curriculumId, course_id: courseId },
+      } as never) as { data: unknown }
+      const resolvedSetId = (setData as MappingSet).id
+
+      const entries = Array.from(matrix.entries()).map(([key, weight]) => {
+        const [course_outcome_id, program_outcome_id] = key.split(":")
+        return { course_outcome_id, program_outcome_id, weight }
+      })
+
+      await apiClient.PUT(`/mappings/co-po/${resolvedSetId}/entries` as never, {
+        body: entries,
+      } as never)
+
+      return resolvedSetId
+    },
+    onSuccess: (resolvedSetId: string) => {
+      toast.success("CO-PO mapping saved")
+      setSetId(resolvedSetId)
+      setDirty(false)
+      qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.entries(resolvedSetId) })
+      qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.byCourse(curriculumId, courseId) })
+    },
+    onError: () => toast.error("Failed to save mapping"),
+  })
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="CO-PO Mapping Matrix"
-        description="Map course outcomes to program outcomes. Click cells to cycle: empty → Low → Medium → High → empty."
+        title="CO-PO Mapping"
+        description="Map course outcomes to program outcomes per course. Click cells to cycle: empty → Low → Medium → High → empty."
         actions={
           dirty && (
-            <PermissionGate permission="co.po.map">
-              <Button
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
-              >
+            <PermissionGate permission="mapping.co_po.update">
+              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
                 {saveMutation.isPending ? <Loader2 className="animate-spin" /> : <Save />}
                 Save Matrix
               </Button>
@@ -155,57 +274,118 @@ export function CoPoMappingClient() {
         }
       />
 
-      <div className="flex gap-4 items-center mb-4">
-        <div className="w-64">
-          <Select
-            value={curriculumId}
-            onValueChange={(v) => setCurriculumId((v as string | null) ?? "")}
-          >
+      {/* Selectors */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="w-56">
+          <Select value={curriculumId} onValueChange={handleChangeCurriculum}>
             <SelectTrigger>
-              <SelectValue placeholder="Select curriculum" />
+              <SelectValue placeholder="1. Select curriculum">
+                {(v: string | null) => v ? (curricula.find((c) => c.id === v)?.name ?? v) : null}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {(curricula ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
+              {curricula.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="w-5 h-5 inline-flex items-center justify-center rounded text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 font-bold">L</span>Low (1)
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-5 h-5 inline-flex items-center justify-center rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 font-bold">M</span>Medium (2)
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-5 h-5 inline-flex items-center justify-center rounded text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 font-bold">H</span>High (3)
-          </span>
+
+        <div className="w-48">
+          <Select value={termDefId} onValueChange={handleChangeTerm} disabled={!curriculumId}>
+            <SelectTrigger>
+              <SelectValue placeholder={curriculumId ? "2. Select semester" : "2. Curriculum first"}>
+                {(v: string | null) => {
+                  const t = termDefs.find((td) => td.id === v)
+                  return t ? `Sem ${t.term_number} — ${t.name}` : null
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {termDefs.map((t) => (
+                <SelectItem key={t.id} value={t.id}>Sem {t.term_number} — {t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        <div className="w-72">
+          <Select value={courseId} onValueChange={handleChangeCourse} disabled={!termDefId}>
+            <SelectTrigger>
+              <SelectValue placeholder={termDefId ? "3. Select course" : "3. Semester first"}>
+                {(v: string | null) => {
+                  const c = coursesInTerm.find((co) => co.id === v)
+                  return c ? `${c.code} — ${c.title}` : null
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {coursesInTerm.length === 0 && (
+                <SelectItem value="__none__" disabled>No courses in this semester</SelectItem>
+              )}
+              {coursesInTerm.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.code} — {c.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Legend */}
+        {hasMatrix && (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground ml-2">
+            {([1, 2, 3] as Weight[]).map((w) => (
+              <span key={w} className="flex items-center gap-1">
+                <span className={cn(
+                  "w-5 h-5 inline-flex items-center justify-center rounded text-xs font-bold",
+                  WEIGHT_COLORS[w]
+                )}>
+                  {WEIGHT_LABELS[w]}
+                </span>
+                {w === 1 ? "Low" : w === 2 ? "Medium" : "High"}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {!curriculumId && (
-        <p className="text-sm text-muted-foreground">Select a curriculum to view the CO-PO matrix.</p>
+      {/* Empty states */}
+      {!courseId && (
+        <div className="border border-dashed border-border rounded-lg p-12 text-center text-sm text-muted-foreground">
+          {!curriculumId
+            ? "Select a curriculum, semester, and course to view or edit its CO-PO mapping."
+            : !termDefId
+            ? "Now select a semester."
+            : "Now select a course."}
+        </div>
       )}
 
-      {curriculumId && cos.length === 0 && (
-        <p className="text-sm text-muted-foreground">No course outcomes found for this curriculum.</p>
+      {courseId && cos.length === 0 && (
+        <div className="border border-dashed border-border rounded-lg p-12 text-center text-sm text-muted-foreground">
+          No course outcomes for{" "}
+          <strong>{selectedCourse ? `${selectedCourse.code} — ${selectedCourse.title}` : "this course"}</strong>.
+          Add COs on the Course Outcomes page first.
+        </div>
       )}
 
-      {curriculumId && cos.length > 0 && pos.length > 0 && (
+      {courseId && cos.length > 0 && pos.length === 0 && (
+        <div className="border border-dashed border-border rounded-lg p-12 text-center text-sm text-muted-foreground">
+          No program outcomes found for this curriculum&apos;s program.
+        </div>
+      )}
+
+      {/* Matrix */}
+      {hasMatrix && (
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-muted/50">
-                <th className="px-3 py-2 text-left font-medium border-b border-r min-w-[180px]">
+                <th className="px-3 py-2 text-left font-medium border-b border-r min-w-[200px] sticky left-0 bg-muted/50 z-10">
                   CO / PO
                 </th>
                 {pos.map((po) => (
                   <th
                     key={po.id}
-                    className="px-2 py-2 text-center font-medium border-b border-r min-w-[56px] max-w-[56px]"
+                    className="px-2 py-2 text-center font-medium border-b border-r min-w-[54px] max-w-[54px]"
                     title={po.statement}
                   >
                     {po.code}
@@ -215,35 +395,30 @@ export function CoPoMappingClient() {
             </thead>
             <tbody>
               {cos.map((co, i) => (
-                <tr
-                  key={co.id}
-                  className={cn("hover:bg-muted/30", i % 2 === 0 ? "" : "bg-muted/10")}
-                >
-                  <td className="px-3 py-2 border-b border-r font-medium text-xs">
-                    <div className="flex flex-col">
-                      <span>{co.code}</span>
-                      {co.course_name && (
-                        <span className="text-muted-foreground font-normal">{co.course_name}</span>
-                      )}
-                    </div>
+                <tr key={co.id} className={cn("hover:bg-muted/30", i % 2 !== 0 && "bg-muted/10")}>
+                  <td
+                    className="px-3 py-2 border-b border-r font-mono font-semibold text-xs sticky left-0 bg-background z-10"
+                    title={co.statement}
+                  >
+                    {co.code}
                   </td>
                   {pos.map((po) => {
-                    const key = `${co.id}:${po.id}`
-                    const strength = matrix.get(key) ?? null
+                    const key    = matrixKey(co.id, po.id)
+                    const weight = matrix.get(key) ?? null
                     return (
                       <td key={po.id} className="border-b border-r text-center p-0">
                         <PermissionGate
-                          permission="co.po.map"
+                          permission="mapping.co_po.update"
                           fallback={
                             <div className="h-9 flex items-center justify-center">
-                              {strength !== null ? (
+                              {weight !== null && (
                                 <span className={cn(
                                   "w-7 h-7 inline-flex items-center justify-center rounded text-xs font-bold",
-                                  STRENGTH_COLORS[strength]
+                                  WEIGHT_COLORS[weight]
                                 )}>
-                                  {STRENGTH_LABELS[strength]}
+                                  {WEIGHT_LABELS[weight]}
                                 </span>
-                              ) : null}
+                              )}
                             </div>
                           }
                         >
@@ -251,14 +426,14 @@ export function CoPoMappingClient() {
                             type="button"
                             className="w-full h-9 flex items-center justify-center hover:bg-accent/50 transition-colors"
                             onClick={() => toggleCell(co.id, po.id)}
-                            title={`${co.code} × ${po.code}${strength ? ` — ${strength === 1 ? "Low" : strength === 2 ? "Medium" : "High"}` : ""}`}
+                            title={`${co.code} × ${po.code}${weight ? ` — ${weight === 1 ? "Low" : weight === 2 ? "Medium" : "High"}` : ""}`}
                           >
-                            {strength !== null ? (
+                            {weight !== null ? (
                               <span className={cn(
                                 "w-7 h-7 inline-flex items-center justify-center rounded text-xs font-bold",
-                                STRENGTH_COLORS[strength]
+                                WEIGHT_COLORS[weight]
                               )}>
-                                {STRENGTH_LABELS[strength]}
+                                {WEIGHT_LABELS[weight]}
                               </span>
                             ) : (
                               <span className="w-7 h-7 inline-flex items-center justify-center rounded border border-dashed border-muted-foreground/20 text-muted-foreground/30 text-xs">

@@ -338,26 +338,321 @@ class PrerequisiteService:
         await self._session.commit()
 
 
+# Season schedule: (season, start_month, start_day, end_month, end_day)
+_TERM_SCHEDULES: dict[str, list[tuple[str, int, int, int, int]]] = {
+    "TRIMESTER": [
+        ("SPRING", 1, 1, 4, 30),
+        ("SUMMER", 5, 1, 8, 31),
+        ("FALL",   9, 1, 12, 31),
+    ],
+    "SEMESTER": [
+        ("SPRING", 1, 1, 6, 30),
+        ("FALL",   7, 1, 12, 31),
+    ],
+}
+
+
 class BatchService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = BatchRepository(session)
 
     async def create(self, body: BatchCreate, org_id: UUID) -> Batch:
+        from datetime import date as date_type
         existing = await self._repo.find_by_name(body.name, body.curriculum_id)
         if existing:
             raise BatchNameConflictError()
+
         batch = Batch(
             organization_id=org_id,
             curriculum_id=body.curriculum_id,
             name=body.name,
-            intake_year=body.intake_year,
-            graduation_year=body.graduation_year,
+            intake_year=body.start_date.year,
+            start_date=body.start_date,
+            term_system=body.term_system,
+            num_semesters=body.num_semesters,
             status="ACTIVE",
         )
         result = await self._repo.create(batch)
+
+        # Auto-generate academic terms and batch calendar
+        await self._generate_term_calendar(result, body, org_id)
+
         await self._session.commit()
         return result
+
+    async def _generate_term_calendar(
+        self, batch: Batch, body: BatchCreate, org_id: UUID
+    ) -> None:
+        from datetime import date as date_type
+        from app.modules.curriculum.models import AcademicTerm, BatchTermCalendar
+
+        schedule = _TERM_SCHEDULES[body.term_system]
+        terms_per_year = len(schedule)
+        start_month = body.start_date.month
+        start_year = body.start_date.year
+
+        # Find the season index that contains the start month
+        start_idx = 0
+        for i, (_, sm, _, _, _) in enumerate(schedule):
+            if start_month >= sm:
+                start_idx = i
+
+        term_repo = AcademicTermRepository(self._session)
+
+        for term_num in range(1, body.num_semesters + 1):
+            abs_idx = start_idx + (term_num - 1)
+            season_idx = abs_idx % terms_per_year
+            year_offset = abs_idx // terms_per_year
+            year = start_year + year_offset
+
+            season, sm, sd, em, ed = schedule[season_idx]
+            t_start = date_type(year, sm, sd)
+            t_end = date_type(year, em, ed)
+            name = f"{season.capitalize()} {year}"
+
+            # Upsert: reuse existing term for this org/year/season
+            term = await term_repo.find_by_year_season(year, season, org_id)
+            if term is None:
+                term = AcademicTerm(
+                    organization_id=org_id,
+                    name=name,
+                    year=year,
+                    season=season,
+                    start_date=t_start,
+                    end_date=t_end,
+                    status="UPCOMING",
+                )
+                self._session.add(term)
+                await self._session.flush()
+                await self._session.refresh(term)
+
+            calendar_entry = BatchTermCalendar(
+                batch_id=batch.id,
+                term_number=term_num,
+                academic_term_id=term.id,
+            )
+            self._session.add(calendar_entry)
+
+        await self._session.flush()
+
+    async def get_term_calendar(
+        self, batch_id: UUID, org_id: UUID
+    ) -> list[tuple[int, "AcademicTerm"]]:
+        from app.modules.curriculum.models import AcademicTerm, BatchTermCalendar
+        from sqlalchemy import select
+        result = await self._session.execute(
+            select(BatchTermCalendar, AcademicTerm)
+            .join(AcademicTerm, BatchTermCalendar.academic_term_id == AcademicTerm.id)
+            .where(BatchTermCalendar.batch_id == batch_id)
+            .order_by(BatchTermCalendar.term_number)
+        )
+        return [(row.BatchTermCalendar.term_number, row.AcademicTerm) for row in result]
+
+    async def get_semester_plan(self, batch_id: UUID, org_id: UUID) -> list[dict]:
+        from sqlalchemy import select
+        from app.modules.curriculum.models import (
+            BatchTermCalendar, AcademicTerm, Batch,
+            CurriculumTermDefinition, CurriculumCourseSlot, Course,
+        )
+
+        batch = await self._repo.get_by_id(batch_id, org_id)
+        if batch is None:
+            raise BatchNotFoundError()
+
+        stmt = (
+            select(
+                BatchTermCalendar.term_number,
+                AcademicTerm.id.label("academic_term_id"),
+                AcademicTerm.name,
+                AcademicTerm.year,
+                AcademicTerm.season,
+                AcademicTerm.start_date,
+                AcademicTerm.end_date,
+                AcademicTerm.status,
+                Course.id.label("course_id"),
+                Course.code,
+                Course.title,
+                Course.credits,
+                Course.theory_hours,
+                Course.lab_hours,
+                CurriculumCourseSlot.is_elective,
+            )
+            .select_from(BatchTermCalendar)
+            .join(AcademicTerm, BatchTermCalendar.academic_term_id == AcademicTerm.id)
+            .join(Batch, BatchTermCalendar.batch_id == Batch.id)
+            .outerjoin(
+                CurriculumTermDefinition,
+                (CurriculumTermDefinition.curriculum_id == Batch.curriculum_id)
+                & (CurriculumTermDefinition.term_number == BatchTermCalendar.term_number),
+            )
+            .outerjoin(
+                CurriculumCourseSlot,
+                CurriculumCourseSlot.curriculum_term_definition_id == CurriculumTermDefinition.id,
+            )
+            .outerjoin(Course, CurriculumCourseSlot.course_id == Course.id)
+            .where(BatchTermCalendar.batch_id == batch_id)
+            .order_by(BatchTermCalendar.term_number, Course.code)
+        )
+
+        rows = (await self._session.execute(stmt)).all()
+
+        plan: dict[int, dict] = {}
+        for row in rows:
+            tn = row.term_number
+            if tn not in plan:
+                plan[tn] = {
+                    "term_number": tn,
+                    "academic_term_id": row.academic_term_id,
+                    "name": row.name,
+                    "year": row.year,
+                    "season": row.season,
+                    "start_date": row.start_date,
+                    "end_date": row.end_date,
+                    "status": row.status,
+                    "courses": [],
+                }
+            if row.course_id is not None:
+                plan[tn]["courses"].append({
+                    "course_id": row.course_id,
+                    "code": row.code,
+                    "title": row.title,
+                    "credits": row.credits,
+                    "theory_hours": row.theory_hours,
+                    "lab_hours": row.lab_hours,
+                    "is_elective": bool(row.is_elective),
+                })
+
+        result = []
+        for tn in sorted(plan.keys()):
+            entry = plan[tn]
+            entry["total_credits"] = sum(c["credits"] for c in entry["courses"])
+            result.append(entry)
+        return result
+
+    async def get_batch_term_offerings(
+        self, batch_id: UUID, academic_term_id: UUID, org_id: UUID
+    ) -> list[dict]:
+        from sqlalchemy import select
+        from app.modules.curriculum.models import (
+            BatchTermCalendar, CurriculumTermDefinition, CurriculumCourseSlot,
+            Course, SectionOffering, Section,
+        )
+        from app.modules.curriculum.exceptions import AcademicTermNotFoundError
+
+        batch = await self._repo.get_by_id(batch_id, org_id)
+        if batch is None:
+            raise BatchNotFoundError()
+
+        # Resolve term_number for this academic_term within this batch
+        btc_result = await self._session.execute(
+            select(BatchTermCalendar).where(
+                BatchTermCalendar.batch_id == batch_id,
+                BatchTermCalendar.academic_term_id == academic_term_id,
+            )
+        )
+        btc = btc_result.scalar_one_or_none()
+        if btc is None:
+            raise AcademicTermNotFoundError()
+
+        # Courses for this curriculum+term_number
+        courses_result = await self._session.execute(
+            select(
+                CurriculumCourseSlot.id.label("slot_id"),
+                CurriculumCourseSlot.course_id,
+                CurriculumCourseSlot.curriculum_term_definition_id,
+                CurriculumCourseSlot.is_elective,
+                Course.code,
+                Course.title,
+                Course.credits,
+                Course.theory_hours,
+                Course.lab_hours,
+            )
+            .join(CurriculumTermDefinition, CurriculumCourseSlot.curriculum_term_definition_id == CurriculumTermDefinition.id)
+            .join(Course, CurriculumCourseSlot.course_id == Course.id)
+            .where(
+                CurriculumTermDefinition.curriculum_id == batch.curriculum_id,
+                CurriculumTermDefinition.term_number == btc.term_number,
+            )
+            .order_by(Course.code)
+        )
+        courses = courses_result.all()
+
+        # Existing section offerings for this batch+term with section names
+        offerings_result = await self._session.execute(
+            select(
+                SectionOffering.id,
+                SectionOffering.course_id,
+                SectionOffering.section_id,
+                SectionOffering.status,
+                Section.name.label("section_name"),
+                Section.capacity,
+            )
+            .join(Section, SectionOffering.section_id == Section.id)
+            .where(
+                SectionOffering.batch_id == batch_id,
+                SectionOffering.academic_term_id == academic_term_id,
+            )
+            .order_by(SectionOffering.course_id, Section.name)
+        )
+        offerings_by_course: dict = {}
+        for o in offerings_result.all():
+            offerings_by_course.setdefault(o.course_id, []).append({
+                "id": o.id,
+                "section_id": o.section_id,
+                "section_name": o.section_name,
+                "capacity": o.capacity,
+                "status": o.status,
+            })
+
+        return [
+            {
+                "course_id": c.course_id,
+                "curriculum_term_definition_id": c.curriculum_term_definition_id,
+                "code": c.code,
+                "title": c.title,
+                "credits": c.credits,
+                "theory_hours": c.theory_hours,
+                "lab_hours": c.lab_hours,
+                "is_elective": bool(c.is_elective),
+                "offerings": offerings_by_course.get(c.course_id, []),
+            }
+            for c in courses
+        ]
+
+    async def add_section_offering(
+        self,
+        batch_id: UUID,
+        academic_term_id: UUID,
+        course_id: UUID,
+        section_name: str,
+        org_id: UUID,
+    ) -> SectionOffering:
+        batch = await self._repo.get_by_id(batch_id, org_id)
+        if batch is None:
+            raise BatchNotFoundError()
+
+        section_svc = SectionService(self._session)
+        section = await section_svc.get_or_create(section_name.strip().upper(), org_id)
+
+        repo = SectionOfferingRepository(self._session)
+        if await repo.find_duplicate(batch_id, course_id, academic_term_id, section.id):
+            raise SectionOfferingConflictError()
+
+        offering = SectionOffering(
+            organization_id=org_id,
+            curriculum_id=batch.curriculum_id,
+            batch_id=batch_id,
+            course_id=course_id,
+            academic_term_id=academic_term_id,
+            section_id=section.id,
+            status="UPCOMING",
+        )
+        self._session.add(offering)
+        await self._session.flush()
+        await self._session.refresh(offering)
+        await self._session.commit()
+        return offering
 
     async def update(self, batch_id: UUID, body: BatchUpdate, org_id: UUID) -> Batch:
         batch = await self._repo.get_by_id(batch_id, org_id)
@@ -444,6 +739,16 @@ class SectionService:
     async def list_all(self, org_id: UUID) -> list[Section]:
         return await self._repo.list_all(org_id)
 
+    async def get_or_create(self, name: str, org_id: UUID) -> Section:
+        existing = await self._repo.find_by_name(name, org_id)
+        if existing:
+            return existing
+        section = Section(organization_id=org_id, name=name)
+        self._session.add(section)
+        await self._session.flush()
+        await self._session.refresh(section)
+        return section
+
 
 class SectionOfferingService:
     def __init__(self, session: AsyncSession) -> None:
@@ -493,6 +798,13 @@ class SectionOfferingService:
         if offering is None:
             raise SectionOfferingNotFoundError()
         return offering
+
+    async def delete(self, offering_id: UUID, org_id: UUID) -> None:
+        offering = await self._repo.get_by_id(offering_id, org_id)
+        if offering is None:
+            raise SectionOfferingNotFoundError()
+        await self._repo.delete(offering)
+        await self._session.commit()
 
 
 class FacultyAssignmentService:

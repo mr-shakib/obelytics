@@ -18,9 +18,9 @@ export function ComplexAttributesClient() {
           title="Complex Problems"
           description="Manage the master list of Complex Problem (CP) attributes."
           queryKey={queryKeys.refData.complexProblems}
-          listPath="/config/complex-problems"
-          createPath="/config/complex-problems"
-          updatePath={(id) => `/config/complex-problems/${id}`}
+          listPath="/ref-data/complex-problems"
+          createPath="/ref-data/complex-problems"
+          updatePath={(id) => `/ref-data/complex-problems/${id}`}
           entityLabel="Complex Problem"
           permission="config.manage"
           fields={[
@@ -41,9 +41,9 @@ export function ComplexAttributesClient() {
           title="Complex Activities"
           description="Manage the master list of Complex Activity (CA) attributes."
           queryKey={queryKeys.refData.complexActivities}
-          listPath="/config/complex-activities"
-          createPath="/config/complex-activities"
-          updatePath={(id) => `/config/complex-activities/${id}`}
+          listPath="/ref-data/complex-activities"
+          createPath="/ref-data/complex-activities"
+          updatePath={(id) => `/ref-data/complex-activities/${id}`}
           entityLabel="Complex Activity"
           permission="config.manage"
           fields={[
@@ -64,9 +64,9 @@ export function ComplexAttributesClient() {
           title="Knowledge Profiles"
           description="Manage the master list of Knowledge Profile (KP) attributes."
           queryKey={queryKeys.refData.knowledgeProfiles}
-          listPath="/config/knowledge-profiles"
-          createPath="/config/knowledge-profiles"
-          updatePath={(id) => `/config/knowledge-profiles/${id}`}
+          listPath="/ref-data/knowledge-profiles"
+          createPath="/ref-data/knowledge-profiles"
+          updatePath={(id) => `/ref-data/knowledge-profiles/${id}`}
           entityLabel="Knowledge Profile"
           permission="config.manage"
           fields={[

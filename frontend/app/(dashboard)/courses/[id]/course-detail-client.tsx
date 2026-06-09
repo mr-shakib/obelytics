@@ -59,7 +59,7 @@ export function CourseDetailClient({ id }: Props) {
   const { data: courseTypes = [] } = useQuery({
     queryKey: queryKeys.courseTypes.all,
     queryFn: async () => {
-      const { data } = await apiClient.GET("/config/course-types" as never)
+      const { data } = await apiClient.GET("/ref-data/course-types" as never)
       return ((data as unknown) as CourseType[]) ?? []
     },
   })

@@ -100,20 +100,38 @@ async def upload_organization_logo(
     file: Annotated[UploadFile, File()],
 ):
     raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty")
     if len(raw) > _MAX_LOGO_SIZE:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Logo must be 2MB or smaller")
 
-    try:
-        image = Image.open(io.BytesIO(raw))
-        image.verify()
-        image_format = (image.format or "png").lower()
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is not a valid image") from exc
+    content_type = (file.content_type or "").lower()
+    is_svg = content_type == "image/svg+xml" or (file.filename or "").lower().endswith(".svg")
+
+    if is_svg:
+        # Pillow cannot parse SVG — do a lightweight XML sanity check instead
+        try:
+            text = raw.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SVG file is not valid UTF-8") from exc
+        stripped = text.lstrip()
+        if "<svg" not in stripped and "<!DOCTYPE svg" not in stripped:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File does not appear to be a valid SVG")
+        image_format = "svg"
+        mime = "image/svg+xml"
+    else:
+        try:
+            image = Image.open(io.BytesIO(raw))
+            image.verify()
+            image_format = (image.format or "png").lower()
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is not a valid image") from exc
+        mime = file.content_type or f"image/{image_format}"
 
     svc = OrgService(db)
     org = await svc.get(current_user.organization_id)
     key = f"{org.id}/logo.{image_format}"
-    await put_object(settings.MINIO_BUCKET_LOGOS, key, raw, file.content_type or f"image/{image_format}")
+    await put_object(settings.MINIO_BUCKET_LOGOS, key, raw, mime)
 
     org = await svc.update(current_user.organization_id, OrgUpdate(logo_file_key=key))
     return await _org_response(org)
@@ -128,7 +146,8 @@ async def list_departments(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = DepartmentService(db)
-    return await svc.list_active(current_user.organization_id)
+    depts = await svc.list_active(current_user.organization_id)
+    return [await _department_response(d, db) for d in depts]
 
 
 @router.post("/departments", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)

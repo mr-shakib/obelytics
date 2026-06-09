@@ -78,7 +78,7 @@ export function CoursesClient() {
   const { data: courseTypes = [] } = useQuery({
     queryKey: queryKeys.courseTypes.all,
     queryFn: async () => {
-      const { data } = await apiClient.GET("/config/course-types" as never)
+      const { data } = await apiClient.GET("/ref-data/course-types" as never)
       return ((data as unknown) as CourseType[]) ?? []
     },
   })
@@ -90,7 +90,7 @@ export function CoursesClient() {
 
   const createTypeMutation = useMutation({
     mutationFn: async (name: string) => {
-      const { data } = await apiClient.POST("/config/course-types" as never, { body: { name } } as never)
+      const { data } = await apiClient.POST("/ref-data/course-types" as never, { body: { name } } as never)
       return (data as unknown) as CourseType
     },
     onSuccess: (created) => {

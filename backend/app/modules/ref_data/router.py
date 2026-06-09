@@ -53,7 +53,7 @@ from app.modules.ref_data.service import (
     POTypeService,
 )
 
-router = APIRouter(prefix="/config", tags=["Reference Data"])
+router = APIRouter(prefix="/ref-data", tags=["Reference Data"])
 
 _manage = require_permission("config.manage")
 
@@ -91,6 +91,15 @@ async def update_bloom_domain(
 
 
 # ── Bloom Levels ──────────────────────────────────────────────────────────────
+
+@router.get("/bloom-levels", response_model=list[BloomLevelResponse])
+async def list_all_bloom_levels(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await BloomLevelService(db).list_all_active(current_user.organization_id)
+
 
 @router.get("/bloom-domains/{domain_id}/levels", response_model=list[BloomLevelResponse])
 async def list_bloom_levels(

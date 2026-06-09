@@ -155,6 +155,10 @@ class CORepository:
         await self._session.refresh(obj)
         return obj
 
+    async def delete(self, obj: CourseOutcome) -> None:
+        await self._session.delete(obj)
+        await self._session.flush()
+
 
 class CODeliveryMethodRepository:
     def __init__(self, session: AsyncSession) -> None:

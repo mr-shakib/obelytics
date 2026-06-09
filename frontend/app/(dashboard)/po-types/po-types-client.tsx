@@ -9,9 +9,9 @@ export function PoTypesClient() {
       title="PO Types"
       description="Manage the master list of Program Outcome (PO) types."
       queryKey={queryKeys.refData.poTypes}
-      listPath="/config/po-types"
-      createPath="/config/po-types"
-      updatePath={(id) => `/config/po-types/${id}`}
+      listPath="/ref-data/po-types"
+      createPath="/ref-data/po-types"
+      updatePath={(id) => `/ref-data/po-types/${id}`}
       entityLabel="PO Type"
       permission="config.manage"
       fields={[

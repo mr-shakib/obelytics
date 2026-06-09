@@ -31,6 +31,7 @@ export const queryKeys = {
   // Reference Data
   refData: {
     bloomDomains: ["ref-data", "bloom-domains"] as const,
+    bloomLevels:  ["ref-data", "bloom-levels"] as const,
     assessmentTypes: ["ref-data", "assessment-types"] as const,
     poTypes: ["ref-data", "po-types"] as const,
     complexProblems: ["ref-data", "complex-problems"] as const,
@@ -59,6 +60,9 @@ export const queryKeys = {
     all: ["batches"] as const,
     list: (filters?: Record<string, unknown>) => ["batches", "list", filters] as const,
     detail: (id: string) => ["batches", id] as const,
+    terms: (id: string) => ["batches", id, "terms"] as const,
+    semesterPlan: (id: string) => ["batches", id, "semester-plan"] as const,
+    termOfferings: (batchId: string, termId: string) => ["batches", batchId, "terms", termId, "offerings"] as const,
   },
   academicTerms: {
     all: ["academic-terms"] as const,
@@ -91,6 +95,7 @@ export const queryKeys = {
     list: (filters?: Record<string, unknown>) => ["co-po-mappings", "list", filters] as const,
     detail: (id: string) => ["co-po-mappings", id] as const,
     entries: (id: string) => ["co-po-mappings", id, "entries"] as const,
+    byCourse: (curriculumId: string, courseId: string) => ["co-po-mappings", "by-course", curriculumId, courseId] as const,
   },
 
   // Assessment

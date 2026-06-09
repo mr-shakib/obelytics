@@ -80,6 +80,14 @@ class BloomLevelRepository(_BaseRefRepo):
         )
         return list(result.scalars().all())
 
+    async def list_all_active(self, org_id: UUID) -> list[BloomLevel]:
+        result = await self._session.execute(
+            select(BloomLevel).where(
+                and_(BloomLevel.organization_id == org_id, BloomLevel.is_active.is_(True))
+            ).order_by(BloomLevel.bloom_domain_id, BloomLevel.order_index)
+        )
+        return list(result.scalars().all())
+
     async def find_by_code(self, code: str, domain_id: UUID, org_id: UUID) -> BloomLevel | None:
         result = await self._session.execute(
             select(BloomLevel).where(

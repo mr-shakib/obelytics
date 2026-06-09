@@ -300,6 +300,15 @@ class COService:
         await self._session.commit()
         return result
 
+    async def delete(self, co_id: UUID, org_id: UUID) -> None:
+        co = await self._repo.get_by_id(co_id, org_id)
+        if co is None:
+            raise CONotFoundError()
+        if co.status in _CO_PUBLISHED_LOCKED or co.status in ("APPROVED", "SUBMITTED"):
+            raise CONotEditableError()
+        await self._repo.delete(co)
+        await self._session.commit()
+
     async def publish(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
@@ -417,6 +426,12 @@ class MappingSetService:
         if ms is None:
             raise MappingSetNotFoundError()
         return ms
+
+    async def list_entries(self, set_id: UUID, org_id: UUID) -> list:
+        ms = await self._repo.get_by_id(set_id, org_id)
+        if ms is None:
+            raise MappingSetNotFoundError()
+        return await self._entry_repo.list_by_set(set_id)
 
     async def upsert_entries(
         self,

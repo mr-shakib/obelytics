@@ -141,14 +141,25 @@ class PrerequisiteResponse(BaseModel):
 class BatchCreate(BaseModel):
     curriculum_id: UUID
     name: str = Field(min_length=1, max_length=100)
-    intake_year: int = Field(ge=1900, le=2100)
-    graduation_year: int | None = Field(default=None, ge=1900, le=2200)
+    start_date: date
+    term_system: str = Field(pattern="^(TRIMESTER|SEMESTER)$")
+    num_semesters: int = Field(ge=1, le=30)
 
 
 class BatchUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
-    graduation_year: int | None = Field(default=None, ge=1900, le=2200)
     status: str | None = Field(default=None, pattern="^(ACTIVE|GRADUATED|ARCHIVED)$")
+
+
+class BatchTermCalendarEntry(BaseModel):
+    term_number: int
+    academic_term_id: UUID
+    name: str
+    year: int
+    season: str
+    start_date: date
+    end_date: date
+    status: str
 
 
 class BatchResponse(BaseModel):
@@ -156,13 +167,68 @@ class BatchResponse(BaseModel):
     organization_id: UUID
     curriculum_id: UUID
     name: str
-    intake_year: int
-    graduation_year: int | None
+    intake_year: int | None
+    start_date: date | None
+    term_system: str | None
+    num_semesters: int | None
     status: str
     created_at: datetime
     updated_at: datetime
+    term_calendar: list[BatchTermCalendarEntry] = []
 
     model_config = {"from_attributes": True}
+
+
+# ── Batch Term Offerings ──────────────────────────────────────────────────────
+
+class AddSectionOfferingBody(BaseModel):
+    course_id: UUID
+    section_name: str = Field(min_length=1, max_length=20)
+
+
+class SectionOfferingInfo(BaseModel):
+    id: UUID
+    section_id: UUID
+    section_name: str
+    capacity: int | None
+    status: str
+
+
+class BatchTermOfferingCourse(BaseModel):
+    course_id: UUID
+    curriculum_term_definition_id: UUID
+    code: str
+    title: str
+    credits: int
+    theory_hours: int
+    lab_hours: int
+    is_elective: bool
+    offerings: list[SectionOfferingInfo]
+
+
+# ── Batch Semester Plan ───────────────────────────────────────────────────────
+
+class BatchSemesterCourse(BaseModel):
+    course_id: UUID
+    code: str
+    title: str
+    credits: int
+    theory_hours: int
+    lab_hours: int
+    is_elective: bool
+
+
+class BatchSemesterPlanItem(BaseModel):
+    term_number: int
+    academic_term_id: UUID
+    name: str
+    year: int
+    season: str
+    start_date: date
+    end_date: date
+    status: str
+    total_credits: int
+    courses: list[BatchSemesterCourse]
 
 
 # ── Academic Term ─────────────────────────────────────────────────────────────

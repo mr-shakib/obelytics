@@ -104,6 +104,9 @@ class BloomLevelService:
     async def list_by_domain(self, domain_id: UUID, org_id: UUID) -> list[BloomLevel]:
         return await self._repo.list_by_domain(domain_id, org_id)
 
+    async def list_all_active(self, org_id: UUID) -> list[BloomLevel]:
+        return await self._repo.list_all_active(org_id)
+
     async def get(self, record_id: UUID, org_id: UUID) -> BloomLevel:
         obj = await self._repo.get_by_id(record_id, org_id)
         if obj is None:

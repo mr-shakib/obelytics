@@ -169,6 +169,17 @@ async def create_course_outcome(
     return await svc.create(body, current_user.organization_id, current_user.id)
 
 
+@router.delete("/course-outcomes/{co_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_course_outcome(
+    co_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = COService(db)
+    await svc.delete(co_id, current_user.organization_id)
+
+
 @router.get("/course-outcomes/{co_id}", response_model=CourseOutcomeResponse)
 async def get_course_outcome(
     co_id: UUID,
@@ -322,6 +333,17 @@ async def get_co_po_mapping_set_by_id(
 ):
     svc = MappingSetService(db)
     return await svc.get(set_id, current_user.organization_id)
+
+
+@router.get("/mappings/co-po/{set_id}/entries", response_model=list[COPOMappingEntryResponse])
+async def list_co_po_mapping_entries(
+    set_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_po.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MappingSetService(db)
+    return await svc.list_entries(set_id, current_user.organization_id)
 
 
 @router.put("/mappings/co-po/{set_id}/entries", response_model=list[COPOMappingEntryResponse])

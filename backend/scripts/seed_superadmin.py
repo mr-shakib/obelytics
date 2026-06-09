@@ -1,13 +1,8 @@
 """
 Run: python -m scripts.seed_superadmin [options]
 
-Creates system permissions, system roles, and the first Super Admin user.
-Safe to re-run — skips records that already exist.
-
-NOTE (Phase 1): The org.organizations table does not exist yet.
-  Users carry an organization_id UUID that references it logically.
-  When Phase 2 is built, run: python -m scripts.seed_org --org-id <printed_id>
-  to create the matching organization record.
+Creates the organization record, system permissions, system roles, and the
+first Super Admin user.  Safe to re-run — skips records that already exist.
 """
 import asyncio
 import os
@@ -30,23 +25,38 @@ from app.modules.iam.models import (
     UserRoleAssignment,
 )
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
+from app.modules.org.models import Organization
 
 
 async def seed(
     admin_email: str = "admin@obelytics.local",
     admin_password: str = "Admin@123",
     org_id: UUID | None = None,
+    org_name: str = "My University",
+    org_short_name: str = "UNIV",
 ) -> None:
     if org_id is None:
         org_id = uuid4()
         print(f"[i] Generated organization_id: {org_id}")
-        print(f"    Use --org-id {org_id} on subsequent runs to keep it stable.")
-        print(f"    In Phase 2, create the org record with this same ID.\n")
+        print(f"    Use --org-id {org_id} on subsequent runs to keep it stable.\n")
 
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     async with Session() as session:
+        # ── Organization ──────────────────────────────────────────────────────
+        result = await session.execute(
+            select(Organization).where(Organization.id == org_id)
+        )
+        org = result.scalar_one_or_none()
+        if org is None:
+            org = Organization(id=org_id, name=org_name, short_name=org_short_name)
+            session.add(org)
+            await session.flush()
+            print(f"[+] Organization created: {org_name} ({org_short_name})")
+        else:
+            print(f"[=] Organization already exists: {org.name}")
+
         # ── Permissions ───────────────────────────────────────────────────────
         perm_map: dict[str, Permission] = {}
         for pdef in ALL_PERMISSIONS:
@@ -141,10 +151,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Seed Obelytics super admin")
-    parser.add_argument("--email",    default="admin@obelytics.local")
-    parser.add_argument("--password", default="Admin@123")
-    parser.add_argument("--org-id",   default=None, help="UUID of the organization")
+    parser.add_argument("--email",          default="admin@obelytics.local")
+    parser.add_argument("--password",       default="Admin@123")
+    parser.add_argument("--org-id",         default=None, help="UUID of the organization")
+    parser.add_argument("--org-name",       default="My University", help="Organization display name")
+    parser.add_argument("--org-short-name", default="UNIV", help="Organization acronym/short name")
     args = parser.parse_args()
 
     org_id = UUID(args.org_id) if args.org_id else None
-    asyncio.run(seed(args.email, args.password, org_id))
+    asyncio.run(seed(args.email, args.password, org_id, args.org_name, args.org_short_name))

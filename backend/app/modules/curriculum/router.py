@@ -9,11 +9,15 @@ from app.core.dependencies import get_current_user, require_permission
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
 from app.modules.curriculum.schemas import (
+    AddSectionOfferingBody,
     AcademicTermCreate,
     AcademicTermResponse,
     AcademicTermUpdate,
     BatchCreate,
     BatchResponse,
+    BatchSemesterPlanItem,
+    BatchTermCalendarEntry,
+    BatchTermOfferingCourse,
     BatchUpdate,
     CourseCreate,
     CourseResponse,
@@ -311,6 +315,26 @@ async def remove_course_slot(
 
 # ── Batches ───────────────────────────────────────────────────────────────────
 
+async def _batch_response(batch, db: AsyncSession) -> BatchResponse:
+    svc = BatchService(db)
+    calendar_rows = await svc.get_term_calendar(batch.id, batch.organization_id)
+    response = BatchResponse.model_validate(batch)
+    response.term_calendar = [
+        BatchTermCalendarEntry(
+            term_number=num,
+            academic_term_id=term.id,
+            name=term.name,
+            year=term.year,
+            season=term.season,
+            start_date=term.start_date,
+            end_date=term.end_date,
+            status=term.status,
+        )
+        for num, term in calendar_rows
+    ]
+    return response
+
+
 @router.get("/batches", response_model=list[BatchResponse])
 async def list_batches(
     _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
@@ -319,7 +343,8 @@ async def list_batches(
     curriculum_id: UUID | None = None,
 ):
     svc = BatchService(db)
-    return await svc.list_active(current_user.organization_id, curriculum_id)
+    batches = await svc.list_active(current_user.organization_id, curriculum_id)
+    return [await _batch_response(b, db) for b in batches]
 
 
 @router.post("/batches", response_model=BatchResponse, status_code=status.HTTP_201_CREATED)
@@ -330,7 +355,8 @@ async def create_batch(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = BatchService(db)
-    return await svc.create(body, current_user.organization_id)
+    batch = await svc.create(body, current_user.organization_id)
+    return await _batch_response(batch, db)
 
 
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
@@ -341,7 +367,86 @@ async def get_batch(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = BatchService(db)
-    return await svc.get(batch_id, current_user.organization_id)
+    batch = await svc.get(batch_id, current_user.organization_id)
+    return await _batch_response(batch, db)
+
+
+@router.get("/batches/{batch_id}/terms", response_model=list[BatchTermCalendarEntry])
+async def get_batch_terms(
+    batch_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = BatchService(db)
+    batch = await svc.get(batch_id, current_user.organization_id)
+    rows = await svc.get_term_calendar(batch.id, batch.organization_id)
+    return [
+        BatchTermCalendarEntry(
+            term_number=num,
+            academic_term_id=term.id,
+            name=term.name,
+            year=term.year,
+            season=term.season,
+            start_date=term.start_date,
+            end_date=term.end_date,
+            status=term.status,
+        )
+        for num, term in rows
+    ]
+
+
+@router.get("/batches/{batch_id}/semester-plan", response_model=list[BatchSemesterPlanItem])
+async def get_batch_semester_plan(
+    batch_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = BatchService(db)
+    return await svc.get_semester_plan(batch_id, current_user.organization_id)
+
+
+@router.get("/batches/{batch_id}/terms/{academic_term_id}/offerings", response_model=list[BatchTermOfferingCourse])
+async def get_batch_term_offerings(
+    batch_id: UUID,
+    academic_term_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = BatchService(db)
+    return await svc.get_batch_term_offerings(batch_id, academic_term_id, current_user.organization_id)
+
+
+@router.post(
+    "/batches/{batch_id}/terms/{academic_term_id}/offerings",
+    response_model=SectionOfferingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_batch_term_offering(
+    batch_id: UUID,
+    academic_term_id: UUID,
+    body: AddSectionOfferingBody,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("section_offering.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = BatchService(db)
+    return await svc.add_section_offering(
+        batch_id, academic_term_id, body.course_id, body.section_name, current_user.organization_id
+    )
+
+
+@router.delete("/section-offerings/{offering_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_section_offering(
+    offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("section_offering.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = SectionOfferingService(db)
+    await svc.delete(offering_id, current_user.organization_id)
 
 
 @router.patch("/batches/{batch_id}", response_model=BatchResponse)
@@ -353,7 +458,8 @@ async def update_batch(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = BatchService(db)
-    return await svc.update(batch_id, body, current_user.organization_id)
+    batch = await svc.update(batch_id, body, current_user.organization_id)
+    return await _batch_response(batch, db)
 
 
 # ── Academic Terms ────────────────────────────────────────────────────────────

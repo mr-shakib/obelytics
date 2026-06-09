@@ -186,7 +186,10 @@ class Batch(Base):
         index=True,
     )
     name = Column(String(100), nullable=False)
-    intake_year = Column(SmallInteger, nullable=False)
+    intake_year = Column(SmallInteger, nullable=True)
+    start_date = Column(sa.Date, nullable=True)
+    term_system = Column(String(20), nullable=True)   # TRIMESTER | SEMESTER
+    num_semesters = Column(SmallInteger, nullable=True)
     graduation_year = Column(SmallInteger, nullable=True)
     status = Column(String(20), nullable=False, server_default="ACTIVE")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
@@ -196,6 +199,29 @@ class Batch(Base):
         server_default=sa.text("now()"),
         onupdate=sa.text("now()"),
     )
+
+
+class BatchTermCalendar(Base):
+    __tablename__ = "batch_term_calendar"
+    __table_args__ = (
+        UniqueConstraint("batch_id", "term_number", name="uq_batch_term_calendar_batch_term"),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    batch_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.batches.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    term_number = Column(SmallInteger, nullable=False)
+    academic_term_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.academic_terms.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
 class AcademicTerm(Base):

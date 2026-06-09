@@ -440,6 +440,10 @@ class SectionOfferingRepository:
         await self._session.refresh(offering)
         return offering
 
+    async def delete(self, offering: SectionOffering) -> None:
+        await self._session.delete(offering)
+        await self._session.flush()
+
 
 class FacultyAssignmentRepository:
     def __init__(self, session: AsyncSession) -> None:
