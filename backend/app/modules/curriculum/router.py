@@ -23,6 +23,8 @@ from app.modules.curriculum.schemas import (
     CourseAssessmentToolsUpdate,
     CourseBloomDomainsUpdate,
     CourseCreate,
+    CourseObjectiveResponse,
+    CourseObjectivesUpdate,
     CourseResponse,
     CourseSlotCreate,
     CourseSlotResponse,
@@ -49,6 +51,7 @@ from app.modules.curriculum.service import (
     BatchService,
     CourseAssessmentToolService,
     CourseBloomDomainService,
+    CourseObjectiveService,
     CourseService,
     CourseSlotService,
     CurriculumService,
@@ -252,6 +255,29 @@ async def set_course_bloom_domains(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = CourseBloomDomainService(db)
+    return await svc.set_for_course(course_id, body, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}/objectives", response_model=list[CourseObjectiveResponse])
+async def list_course_objectives(
+    course_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseObjectiveService(db)
+    return await svc.list_for_course(course_id, current_user.organization_id)
+
+
+@router.put("/courses/{course_id}/objectives", response_model=list[CourseObjectiveResponse])
+async def set_course_objectives(
+    course_id: UUID,
+    body: CourseObjectivesUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseObjectiveService(db)
     return await svc.set_for_course(course_id, body, current_user.organization_id)
 
 

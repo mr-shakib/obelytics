@@ -17,10 +17,10 @@ repository → service → router → `api.d.ts` regen → frontend).
 | PDF section | Status | System entity |
 |---|---|---|
 | Basic Information (code, title, credits, hours) | ✅ Exists | `curriculum.courses` |
-| Prerequisite | ⚠️ Backend exists, no UI | `curriculum.course_prerequisites` |
-| Course Content (from syllabus) | ❌ Missing | **Phase 1** — new field |
-| Course Description/Rationale | ⚠️ Partial (`description` field exists, generic) | **Phase 1** — repurpose/extend |
-| Course Objective (bullets) | ❌ Missing | **Phase 1** — new table |
+| Prerequisite | ✅ Exists (UI shipped in Phase 1) | `curriculum.course_prerequisites` |
+| Course Content (from syllabus) | ✅ Exists (shipped in Phase 1) | `curriculum.courses.syllabus_content` |
+| Course Description/Rationale | ✅ Exists (relabeled in Phase 1) | `curriculum.courses.description` |
+| Course Objective (bullets) | ✅ Exists (shipped in Phase 1) | `curriculum.course_objectives` |
 | COs + CO statements | ✅ Exists | `obe.course_outcomes` |
 | Learning Domains (Bloom) per CO | ✅ Exists (multi-select, just shipped) | `obe.course_outcome_bloom_levels` |
 | Knowledge Profile per CO | ⚠️ Model + API exist, no UI | `obe.co_kp_mappings` |
@@ -64,13 +64,17 @@ Module-Leader banner):
 - `id`, `course_id` (FK CASCADE), `order_index`, `statement` (Text)
 
 **Tasks**
-- [ ] Migration: add `syllabus_content` column to `curriculum.courses`; create `course_objectives` table
-- [ ] `curriculum/models.py`: add column + `CourseObjective` model
-- [ ] `curriculum/schemas.py`: extend `CourseUpdate`/`CourseResponse`; add `CourseObjectiveCreate/Response`
-- [ ] `curriculum/repository.py` + `service.py`: CRUD for objectives (list/replace pattern, like `set_bloom_levels`)
-- [ ] `curriculum/router.py`: `GET/PUT /courses/{id}/objectives`
-- [ ] Frontend: regenerate `api.d.ts`
-- [ ] Frontend: Overview tab — Description, Course Content, Objectives (editable list), Prerequisites (read-only list + edit dialog backed by existing `course_prerequisites` API — confirm/add API if missing)
+- [x] Migration `0021`: add `syllabus_content` column to `curriculum.courses`; create `course_objectives` table
+- [x] `curriculum/models.py`: add column + `CourseObjective` model (no relationships, mirrors `CourseBloomDomain`)
+- [x] `curriculum/schemas.py`: extend `CourseUpdate`/`CourseResponse` with `syllabus_content`; add `CourseObjectiveResponse`/`CourseObjectivesUpdate`
+- [x] `curriculum/repository.py` + `service.py`: `CourseObjectiveRepository`/`CourseObjectiveService` — list/replace pattern (delete + bulk-insert by `order_index`), like `CourseBloomDomainRepository.replace_for_course`
+- [x] `curriculum/router.py`: `GET/PUT /courses/{id}/objectives` (`curriculum.read` / `course.update`)
+- [x] Frontend: regenerate `api.d.ts`
+- [x] Frontend: course detail page — "Course Content" display card (syllabus_content), "Course Objectives" card with editable reorderable list (`useFieldArray`, save via PUT), "Prerequisites" card (list + remove + add-via-combobox using existing `course_prerequisites` API, no backend changes needed there), "Edit Details" form extended with a Course Content textarea
+
+Note: scope decision — these fields are **course-level** (shared across all
+curricula using the course), per user confirmation; `course_objectives` FKs
+only to `course_id`, no `curriculum_id`.
 
 ---
 
@@ -234,8 +238,8 @@ cognitive level × assessment component marks):
 
 1. ✅ **Phase 2** (Assessment Tools) — done.
 2. ✅ **Phase 3** (CO-CP/CO-CA UI + CEP/CEA validation) — done (CO-KP deferred, see Open Question #3).
-3. ▶️ **Phase 1** (narrative fields) — **next up**. Quick wins for "show course info properly".
-4. **Phase 6** (Learning Materials) — small, isolated.
+3. ✅ **Phase 1** (narrative fields) — done.
+4. ▶️ **Phase 6** (Learning Materials) — **next up**. Small, isolated.
 5. **Phase 4** (Delivery Plan) — larger, standalone.
 6. **Phase 5** (Assessment Pattern / CIE-SEE) — largest, do last once the above stabilize the page layout.
 
@@ -243,9 +247,9 @@ cognitive level × assessment component marks):
 
 ## Resume point
 
-Phases 2 and 3 are complete and verified. Next session should start on
-**Phase 1** (course narrative fields — `syllabus_content`, `course_objectives`
-table, prerequisites UI), following its task checklist above. Open Questions
-1 and 2 (Phase 1 scope, "Lab Final" seed) are relevant there — Q2 is already
-resolved (added to seed in Phase 2); Q1 (course-level vs per-curriculum
-scope for narrative fields) still needs a decision before/while implementing.
+Phases 1, 2, and 3 are complete and verified. Next session should start on
+**Phase 6** (Learning Materials — `course_learning_materials` table,
+Textbooks/References lists on the course detail page), following its task
+checklist above. All open questions are resolved or deferred (Q3: CO-KP
+deferred; Q1/Q2: resolved during Phases 1/2). Q4 (justification text on
+mapping rows) remains unscoped — flag to the user if it becomes relevant.

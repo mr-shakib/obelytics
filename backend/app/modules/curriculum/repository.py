@@ -9,6 +9,7 @@ from app.modules.curriculum.models import (
     Course,
     CourseAssessmentTool,
     CourseBloomDomain,
+    CourseObjective,
     CoursePrerequisite,
     Curriculum,
     CurriculumCourseSlot,
@@ -152,6 +153,33 @@ class CourseRepository:
         await self._session.flush()
         await self._session.refresh(course)
         return course
+
+
+class CourseObjectiveRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_course(self, course_id: UUID) -> list[CourseObjective]:
+        result = await self._session.execute(
+            select(CourseObjective)
+            .where(CourseObjective.course_id == course_id)
+            .order_by(CourseObjective.order_index)
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_course(
+        self, course_id: UUID, statements: list[str]
+    ) -> list[CourseObjective]:
+        await self._session.execute(
+            delete(CourseObjective).where(CourseObjective.course_id == course_id)
+        )
+        records = [
+            CourseObjective(course_id=course_id, order_index=index, statement=statement)
+            for index, statement in enumerate(statements)
+        ]
+        self._session.add_all(records)
+        await self._session.flush()
+        return records
 
 
 class CourseBloomDomainRepository:

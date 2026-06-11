@@ -31,6 +31,7 @@ from app.modules.curriculum.models import (
     Batch,
     Course,
     CourseAssessmentTool,
+    CourseObjective,
     CoursePrerequisite,
     Curriculum,
     CurriculumCourseSlot,
@@ -45,6 +46,7 @@ from app.modules.curriculum.repository import (
     BatchRepository,
     CourseAssessmentToolRepository,
     CourseBloomDomainRepository,
+    CourseObjectiveRepository,
     CourseRepository,
     CourseSlotRepository,
     CurriculumRepository,
@@ -64,6 +66,7 @@ from app.modules.curriculum.schemas import (
     CourseAssessmentToolsUpdate,
     CourseBloomDomainsUpdate,
     CourseCreate,
+    CourseObjectivesUpdate,
     CourseSlotCreate,
     CourseUpdate,
     CurriculumCreate,
@@ -260,6 +263,28 @@ class CourseService:
         if course is None:
             raise CourseNotFoundError()
         return course
+
+
+class CourseObjectiveService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CourseObjectiveRepository(session)
+        self._course_repo = CourseRepository(session)
+
+    async def list_for_course(self, course_id: UUID, org_id: UUID) -> list[CourseObjective]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        return await self._repo.list_by_course(course_id)
+
+    async def set_for_course(
+        self, course_id: UUID, body: CourseObjectivesUpdate, org_id: UUID
+    ) -> list[CourseObjective]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        statements = [s.strip() for s in body.statements if s.strip()]
+        records = await self._repo.replace_for_course(course_id, statements)
+        await self._session.commit()
+        return records
 
 
 class CourseBloomDomainService:

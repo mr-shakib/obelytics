@@ -2,11 +2,11 @@
 
 import { useState, type FormEvent } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useForm } from "react-hook-form"
+import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Loader2, Lock, Plus } from "lucide-react"
+import { Loader2, Lock, Plus, Trash2, ArrowUp, ArrowDown, X } from "lucide-react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -35,6 +35,7 @@ type Course = {
   theory_hours: number
   lab_hours: number
   description: string | null
+  syllabus_content: string | null
   status: string
 }
 
@@ -52,6 +53,12 @@ type CourseAssessmentTool = {
   is_locked: boolean
 }
 
+type CourseObjective = { id: string; order_index: number; statement: string }
+
+type Prerequisite = { id: string; course_id: string; prerequisite_course_id: string }
+
+type CourseListItem = { id: string; code: string; title: string }
+
 const COURSE_TYPE_LABELS: Record<string, string> = {
   THEORY: "Theory",
   LAB: "Lab",
@@ -65,8 +72,14 @@ const schema = z.object({
   theory_hours: z.number().int().min(0),
   lab_hours: z.number().int().min(0),
   description: z.string().max(2000).optional(),
+  syllabus_content: z.string().max(5000).optional(),
 })
 type FormValues = z.infer<typeof schema>
+
+const objectivesSchema = z.object({
+  items: z.array(z.object({ statement: z.string().min(1, "Cannot be empty").max(500) })),
+})
+type ObjectivesFormValues = z.infer<typeof objectivesSchema>
 
 interface Props {
   id: string
@@ -234,6 +247,7 @@ export function CourseDetailClient({ id }: Props) {
           theory_hours: data.theory_hours,
           lab_hours: data.lab_hours,
           description: data.description ?? "",
+          syllabus_content: data.syllabus_content ?? "",
         }
       : undefined,
   })
@@ -247,6 +261,7 @@ export function CourseDetailClient({ id }: Props) {
           theory_hours: values.theory_hours,
           lab_hours: values.lab_hours,
           description: values.description || undefined,
+          syllabus_content: values.syllabus_content || undefined,
         },
       } as never)
     },
@@ -257,6 +272,94 @@ export function CourseDetailClient({ id }: Props) {
     },
     onError: () => toast.error("Failed to update course"),
   })
+
+  // ── Course Objectives ──────────────────────────────────────────────────────
+
+  const { data: objectives = [] } = useQuery({
+    queryKey: queryKeys.courseObjectives.byCourse(id),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/courses/${id}/objectives` as never)
+      return ((data as unknown) as CourseObjective[]) ?? []
+    },
+  })
+
+  const objectivesForm = useForm<ObjectivesFormValues>({
+    resolver: zodResolver(objectivesSchema),
+    values: { items: objectives.map((o) => ({ statement: o.statement })) },
+  })
+  const objectivesFieldArray = useFieldArray({ control: objectivesForm.control, name: "items" })
+
+  const objectivesMutation = useMutation({
+    mutationFn: async (statements: string[]) => {
+      const { data } = await apiClient.PUT(`/courses/${id}/objectives` as never, {
+        body: { statements },
+      } as never)
+      return ((data as unknown) as CourseObjective[]) ?? []
+    },
+    onSuccess: (next) => {
+      qc.setQueryData(queryKeys.courseObjectives.byCourse(id), next)
+      toast.success("Objectives updated")
+    },
+    onError: () => toast.error("Failed to update objectives"),
+  })
+
+  const onSubmitObjectives = objectivesForm.handleSubmit((values) => {
+    objectivesMutation.mutate(values.items.map((i) => i.statement.trim()))
+  })
+
+  // ── Prerequisites ─────────────────────────────────────────────────────────
+
+  const { data: prerequisites = [] } = useQuery({
+    queryKey: queryKeys.coursePrerequisites.byCourse(id),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/courses/${id}/prerequisites` as never)
+      return ((data as unknown) as Prerequisite[]) ?? []
+    },
+  })
+
+  const { data: allCourses = [] } = useQuery({
+    queryKey: queryKeys.courses.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/courses" as never)
+      return ((data as unknown) as CourseListItem[]) ?? []
+    },
+  })
+  const courseById = Object.fromEntries(allCourses.map((c) => [c.id, c]))
+
+  const addPrerequisiteMutation = useMutation({
+    mutationFn: async (prerequisiteCourseId: string) => {
+      const { data } = await apiClient.POST(`/courses/${id}/prerequisites` as never, {
+        body: { prerequisite_course_id: prerequisiteCourseId },
+      } as never)
+      return (data as unknown) as Prerequisite
+    },
+    onSuccess: (created) => {
+      qc.setQueryData(
+        queryKeys.coursePrerequisites.byCourse(id),
+        (prev: Prerequisite[] = []) => [...prev, created]
+      )
+    },
+    onError: () => toast.error("Failed to add prerequisite — it may create a circular dependency"),
+  })
+
+  const removePrerequisiteMutation = useMutation({
+    mutationFn: async (prereqId: string) => {
+      await apiClient.DELETE(`/courses/${id}/prerequisites/${prereqId}` as never)
+      return prereqId
+    },
+    onSuccess: (prereqId) => {
+      qc.setQueryData(
+        queryKeys.coursePrerequisites.byCourse(id),
+        (prev: Prerequisite[] = []) => prev.filter((p) => p.id !== prereqId)
+      )
+    },
+    onError: () => toast.error("Failed to remove prerequisite"),
+  })
+
+  const prerequisiteCourseIds = new Set(prerequisites.map((p) => p.prerequisite_course_id))
+  const availablePrerequisiteOptions = allCourses
+    .filter((c) => c.id !== id && !prerequisiteCourseIds.has(c.id))
+    .map((c) => ({ value: c.id, label: `${c.code} — ${c.title}` }))
 
   if (isLoading) return <div className="animate-pulse h-40 bg-muted rounded-md" />
   if (!data) return <p className="text-muted-foreground">Course not found.</p>
@@ -310,6 +413,84 @@ export function CourseDetailClient({ id }: Props) {
               </CardContent>
             </Card>
           )}
+
+          {data.syllabus_content && (
+            <Card>
+              <CardHeader><CardTitle>Course Content</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{data.syllabus_content}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader><CardTitle>Course Objectives</CardTitle></CardHeader>
+            <CardContent>
+              {canEditCourse ? (
+                <form onSubmit={onSubmitObjectives} className="space-y-3">
+                  {objectivesFieldArray.fields.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No objectives added yet.</p>
+                  )}
+                  {objectivesFieldArray.fields.map((field, index) => (
+                    <div key={field.id} className="flex items-start gap-2">
+                      <span className="mt-2 text-sm text-muted-foreground w-5 shrink-0">{index + 1}.</span>
+                      <div className="flex-1 space-y-1">
+                        <Input {...objectivesForm.register(`items.${index}.statement`)} />
+                        {objectivesForm.formState.errors.items?.[index]?.statement && (
+                          <p className="text-sm text-destructive">
+                            {objectivesForm.formState.errors.items[index]?.statement?.message}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={index === 0}
+                        onClick={() => objectivesFieldArray.move(index, index - 1)}
+                      >
+                        <ArrowUp />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={index === objectivesFieldArray.fields.length - 1}
+                        onClick={() => objectivesFieldArray.move(index, index + 1)}
+                      >
+                        <ArrowDown />
+                      </Button>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => objectivesFieldArray.remove(index)}>
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => objectivesFieldArray.append({ statement: "" })}>
+                      <Plus />
+                      Add objective
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={!objectivesForm.formState.isDirty || objectivesMutation.isPending}
+                    >
+                      {objectivesMutation.isPending && <Loader2 className="animate-spin" />}
+                      Save Objectives
+                    </Button>
+                  </div>
+                </form>
+              ) : objectives.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No objectives added yet.</p>
+              ) : (
+                <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                  {objectives.map((o) => (
+                    <li key={o.id}>{o.statement}</li>
+                  ))}
+                </ol>
+              )}
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader><CardTitle>Assessment Tools</CardTitle></CardHeader>
@@ -404,6 +585,51 @@ export function CourseDetailClient({ id }: Props) {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader><CardTitle>Prerequisites</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {prerequisites.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No prerequisites set.</p>
+              ) : (
+                <div className="space-y-2">
+                  {prerequisites.map((prereq) => {
+                    const course = courseById[prereq.prerequisite_course_id]
+                    return (
+                      <div key={prereq.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2">
+                        <span className="text-sm">
+                          {course ? `${course.code} — ${course.title}` : prereq.prerequisite_course_id}
+                        </span>
+                        <PermissionGate permission="course.update">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={removePrerequisiteMutation.isPending}
+                            onClick={() => removePrerequisiteMutation.mutate(prereq.id)}
+                          >
+                            <X />
+                          </Button>
+                        </PermissionGate>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              <PermissionGate permission="course.update">
+                <Combobox
+                  options={availablePrerequisiteOptions}
+                  value=""
+                  onValueChange={(courseId) => addPrerequisiteMutation.mutate(courseId)}
+                  placeholder="Add prerequisite…"
+                  searchPlaceholder="Search courses…"
+                  emptyText="No more courses available."
+                  triggerClassName="w-72"
+                  disabled={addPrerequisiteMutation.isPending}
+                />
+              </PermissionGate>
+            </CardContent>
+          </Card>
+
           <PermissionGate permission="course.update">
             <Card>
               <CardHeader><CardTitle>Edit Details</CardTitle></CardHeader>
@@ -432,9 +658,14 @@ export function CourseDetailClient({ id }: Props) {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
+                    <Label htmlFor="description">Description / Rationale</Label>
                     <Textarea id="description" rows={3} {...register("description")} />
                     {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="syllabus_content">Course Content (Syllabus)</Label>
+                    <Textarea id="syllabus_content" rows={5} {...register("syllabus_content")} />
+                    {errors.syllabus_content && <p className="text-sm text-destructive">{errors.syllabus_content.message}</p>}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Code, course category, and course type are fixed after creation. Archive and recreate the course to change them.

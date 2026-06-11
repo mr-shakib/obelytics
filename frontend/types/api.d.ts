@@ -1084,6 +1084,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/courses/{course_id}/objectives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Objectives */
+        get: operations["list_course_objectives_api_v1_courses__course_id__objectives_get"];
+        /** Set Course Objectives */
+        put: operations["set_course_objectives_api_v1_courses__course_id__objectives_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/courses/{course_id}/assessment-tools": {
         parameters: {
             query?: never;
@@ -3993,6 +4011,33 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** CourseObjectiveResponse */
+        CourseObjectiveResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Order Index */
+            order_index: number;
+            /** Statement */
+            statement: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CourseObjectivesUpdate */
+        CourseObjectivesUpdate: {
+            /** Statements */
+            statements?: string[];
+        };
         /** CourseOutcomeCreate */
         CourseOutcomeCreate: {
             /**
@@ -4097,6 +4142,8 @@ export interface components {
             lab_hours: number;
             /** Description */
             description: string | null;
+            /** Syllabus Content */
+            syllabus_content: string | null;
             /** Status */
             status: string;
             /** Archived At */
@@ -4170,6 +4217,8 @@ export interface components {
             credits?: number | null;
             /** Description */
             description?: string | null;
+            /** Syllabus Content */
+            syllabus_content?: string | null;
             /** Theory Hours */
             theory_hours?: number | null;
             /** Lab Hours */
@@ -8466,6 +8515,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_course_objectives_api_v1_courses__course_id__objectives_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseObjectiveResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_course_objectives_api_v1_courses__course_id__objectives_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseObjectivesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseObjectiveResponse"][];
                 };
             };
             /** @description Validation Error */

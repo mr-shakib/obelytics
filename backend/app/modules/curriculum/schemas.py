@@ -75,6 +75,7 @@ class CourseUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     credits: int | None = Field(default=None, ge=0, le=20)
     description: str | None = None
+    syllabus_content: str | None = None
     theory_hours: int | None = Field(default=None, ge=0)
     lab_hours: int | None = Field(default=None, ge=0)
 
@@ -90,12 +91,29 @@ class CourseResponse(BaseModel):
     theory_hours: int
     lab_hours: int
     description: str | None
+    syllabus_content: str | None
     status: str
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Course Objectives ─────────────────────────────────────────────────────────
+
+class CourseObjectiveResponse(BaseModel):
+    id: UUID
+    course_id: UUID
+    order_index: int
+    statement: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CourseObjectivesUpdate(BaseModel):
+    statements: list[str] = Field(default_factory=list)
 
 
 # ── Course Bloom Domains ──────────────────────────────────────────────────────

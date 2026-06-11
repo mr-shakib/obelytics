@@ -63,6 +63,12 @@ export const queryKeys = {
     byCourse: (courseId: string, curriculumId: string) =>
       ["courses", courseId, "assessment-tools", curriculumId] as const,
   },
+  courseObjectives: {
+    byCourse: (courseId: string) => ["courses", courseId, "objectives"] as const,
+  },
+  coursePrerequisites: {
+    byCourse: (courseId: string) => ["courses", courseId, "prerequisites"] as const,
+  },
   batches: {
     all: ["batches"] as const,
     list: (filters?: Record<string, unknown>) => ["batches", "list", filters] as const,

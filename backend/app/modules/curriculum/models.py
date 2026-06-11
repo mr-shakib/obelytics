@@ -102,6 +102,7 @@ class Course(Base):
     theory_hours = Column(SmallInteger, nullable=False, server_default=sa.text("0"))
     lab_hours = Column(SmallInteger, nullable=False, server_default=sa.text("0"))
     description = Column(Text, nullable=True)
+    syllabus_content = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, server_default="ACTIVE")
     archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
@@ -111,6 +112,22 @@ class Course(Base):
         server_default=sa.text("now()"),
         onupdate=sa.text("now()"),
     )
+
+
+class CourseObjective(Base):
+    __tablename__ = "course_objectives"
+    __table_args__ = ({"schema": "curriculum"},)
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    order_index = Column(SmallInteger, nullable=False)
+    statement = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
 class CourseBloomDomain(Base):
