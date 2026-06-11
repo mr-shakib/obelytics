@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Loader2, Save, Grid3x3 } from "lucide-react"
+import { Loader2, Save, Grid3x3, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react"
 import { useResolveCourseLocation } from "@/hooks/use-course-location"
 import { PageHeader } from "@/components/shared/page-header"
 import { PermissionGate } from "@/components/shared/permission-gate"
@@ -38,6 +39,14 @@ type MappingEntry = {
   program_outcome_id: string
   weight: 1 | 2 | 3
 }
+
+type ValidationIssue = {
+  course_outcome_id: string
+  course_outcome_code: string
+  missing_cep: boolean
+  missing_cea: boolean
+}
+type ValidationResponse = { is_valid: boolean; issues: ValidationIssue[] }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -177,6 +186,15 @@ export function CoPoMappingClient() {
     enabled: !!setId,
   })
 
+  const { data: validation } = useQuery({
+    queryKey: queryKeys.coPoMappings.validation(setId ?? ""),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/mappings/co-po/${setId}/validate` as never)
+      return ((data as unknown) as ValidationResponse) ?? null
+    },
+    enabled: !!setId,
+  })
+
   // ── Sync state from loaded data ──────────────────────────────────────────
 
   useEffect(() => {
@@ -271,6 +289,7 @@ export function CoPoMappingClient() {
       setDirty(false)
       qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.entries(resolvedSetId) })
       qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.byCourse(curriculumId, courseId) })
+      qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.validation(resolvedSetId) })
     },
     onError: () => toast.error("Failed to save mapping"),
   })
@@ -477,6 +496,53 @@ export function CoPoMappingClient() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* CEP/CEA validation checklist */}
+      {hasMatrix && validation && (
+        <div className={cn(
+          "rounded-xl border p-4",
+          validation.is_valid
+            ? "border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-900/10"
+            : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/10"
+        )}>
+          {validation.is_valid ? (
+            <div className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
+              <CheckCircle2 className="h-4 w-4" />
+              All COs mapped to PO1–PO7 have a CEP mapping, and all COs mapped to PO10 have a CEA mapping.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+                <AlertTriangle className="h-4 w-4" />
+                Some course outcomes are missing required CEP/CEA mappings
+              </div>
+              <ul className="space-y-1.5 text-sm">
+                {validation.issues.map((issue) => (
+                  <li key={issue.course_outcome_id} className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono font-semibold">{issue.course_outcome_code}</span>
+                    {issue.missing_cep && (
+                      <Link
+                        href={`/mappings/co-cp?course_id=${courseId}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300"
+                      >
+                        Missing CEP <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    )}
+                    {issue.missing_cea && (
+                      <Link
+                        href={`/mappings/co-ca?course_id=${courseId}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300"
+                      >
+                        Missing CEA <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

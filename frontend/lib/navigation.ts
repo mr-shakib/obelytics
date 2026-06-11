@@ -56,6 +56,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Module Leaders", href: "/module-leaders", icon: UserCog, permission: "faculty_assignment.create", group: "Curriculum" },
   { label: "Course Outcomes", href: "/course-outcomes", icon: ListChecks, permission: "co.read", group: "Curriculum" },
   { label: "CO-PO Mapping", href: "/mappings/co-po", icon: Grid3x3, permission: "mapping.co_po.read", group: "Curriculum" },
+  { label: "CO-CP Mapping", href: "/mappings/co-cp", icon: Grid3x3, permission: "co.read", group: "Curriculum" },
+  { label: "CO-CA Mapping", href: "/mappings/co-ca", icon: Grid3x3, permission: "co.read", group: "Curriculum" },
 
   // OBE
   { label: "Program Outcomes", href: "/program-outcomes", icon: Target, permission: "po.read", group: "OBE" },

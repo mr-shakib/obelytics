@@ -96,3 +96,14 @@ class SubMappingNotApprovableError(HTTPException):
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot approve mapping in current CO state",
         )
+
+
+class MappingSetValidationError(HTTPException):
+    def __init__(self, issues: list[dict]):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "CO-PO mapping has unresolved CEP/CEA requirements",
+                "issues": issues,
+            },
+        )

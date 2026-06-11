@@ -104,6 +104,25 @@ class CourseBloomDomainsUpdate(BaseModel):
     bloom_domain_ids: list[UUID]
 
 
+# ── Course Assessment Tools ──────────────────────────────────────────────────
+
+class CourseAssessmentToolResponse(BaseModel):
+    id: UUID
+    curriculum_id: UUID
+    course_id: UUID
+    assessment_type_id: UUID
+    assessment_type_name: str
+    is_sessional: bool
+    is_locked: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CourseAssessmentToolsUpdate(BaseModel):
+    assessment_type_ids: list[UUID]
+
+
 # ── Course Slot ───────────────────────────────────────────────────────────────
 
 class CourseSlotCreate(BaseModel):

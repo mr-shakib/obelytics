@@ -135,6 +135,38 @@ class CourseBloomDomain(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
+class CourseAssessmentTool(Base):
+    __tablename__ = "course_assessment_tools"
+    __table_args__ = (
+        UniqueConstraint(
+            "curriculum_id", "course_id", "assessment_type_id",
+            name="uq_curriculum_course_assessment_tool",
+        ),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    curriculum_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.curricula.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assessment_type_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("config.assessment_types.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    is_locked = Column(Boolean, nullable=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
 class CurriculumCourseSlot(Base):
     __tablename__ = "curriculum_course_slots"
     __table_args__ = (

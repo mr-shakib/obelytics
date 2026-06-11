@@ -7,6 +7,7 @@ from app.modules.curriculum.models import (
     AcademicTerm,
     Batch,
     Course,
+    CourseAssessmentTool,
     CourseBloomDomain,
     CoursePrerequisite,
     Curriculum,
@@ -172,6 +173,48 @@ class CourseBloomDomainRepository:
         records = [
             CourseBloomDomain(course_id=course_id, bloom_domain_id=domain_id)
             for domain_id in bloom_domain_ids
+        ]
+        self._session.add_all(records)
+        await self._session.flush()
+        return records
+
+
+class CourseAssessmentToolRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_for_course(
+        self, curriculum_id: UUID, course_id: UUID
+    ) -> list[CourseAssessmentTool]:
+        result = await self._session.execute(
+            select(CourseAssessmentTool).where(
+                and_(
+                    CourseAssessmentTool.curriculum_id == curriculum_id,
+                    CourseAssessmentTool.course_id == course_id,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_course(
+        self, curriculum_id: UUID, course_id: UUID, entries: list[tuple[UUID, bool]]
+    ) -> list[CourseAssessmentTool]:
+        await self._session.execute(
+            delete(CourseAssessmentTool).where(
+                and_(
+                    CourseAssessmentTool.curriculum_id == curriculum_id,
+                    CourseAssessmentTool.course_id == course_id,
+                )
+            )
+        )
+        records = [
+            CourseAssessmentTool(
+                curriculum_id=curriculum_id,
+                course_id=course_id,
+                assessment_type_id=assessment_type_id,
+                is_locked=is_locked,
+            )
+            for assessment_type_id, is_locked in entries
         ]
         self._session.add_all(records)
         await self._session.flush()

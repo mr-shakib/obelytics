@@ -1,23 +1,27 @@
 "use client"
 
+import { useState, type FormEvent } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Lock, Plus } from "lucide-react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { Combobox } from "@/components/ui/combobox"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PageHeader } from "@/components/shared/page-header"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { usePermission } from "@/hooks/use-permission"
+import { useResolveCourseLocation } from "@/hooks/use-course-location"
 
 type ModuleLeaderAssignment = { course_id: string }
 
@@ -37,6 +41,16 @@ type Course = {
 type CourseCategory = { id: string; name: string }
 
 type BloomDomain = { id: string; name: string }
+
+type AssessmentType = { id: string; name: string; is_sessional: boolean }
+
+type CourseAssessmentTool = {
+  id: string
+  assessment_type_id: string
+  assessment_type_name: string
+  is_sessional: boolean
+  is_locked: boolean
+}
 
 const COURSE_TYPE_LABELS: Record<string, string> = {
   THEORY: "Theory",
@@ -120,6 +134,88 @@ export function CourseDetailClient({ id }: Props) {
       : courseBloomDomainIds.filter((d) => d !== domainId)
     bloomDomainsMutation.mutate(next)
   }
+
+  const courseLocation = useResolveCourseLocation(id)
+  const curriculumId = courseLocation?.curriculumId
+
+  const { data: assessmentTypes = [] } = useQuery({
+    queryKey: queryKeys.refData.assessmentTypes,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/ref-data/assessment-types" as never)
+      return ((data as unknown) as AssessmentType[]) ?? []
+    },
+  })
+
+  const { data: assessmentTools = [] } = useQuery({
+    queryKey: queryKeys.courseAssessmentTools.byCourse(id, curriculumId ?? ""),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(
+        `/courses/${id}/assessment-tools?curriculum_id=${curriculumId}` as never
+      )
+      return ((data as unknown) as CourseAssessmentTool[]) ?? []
+    },
+    enabled: !!curriculumId,
+  })
+
+  const setToolsMutation = useMutation({
+    mutationFn: async (assessmentTypeIds: string[]) => {
+      const { data } = await apiClient.PUT(
+        `/courses/${id}/assessment-tools?curriculum_id=${curriculumId}` as never,
+        { body: { assessment_type_ids: assessmentTypeIds } } as never
+      )
+      return ((data as unknown) as CourseAssessmentTool[]) ?? []
+    },
+    onSuccess: (next) => {
+      qc.setQueryData(queryKeys.courseAssessmentTools.byCourse(id, curriculumId ?? ""), next)
+    },
+    onError: () => toast.error("Failed to update assessment tools"),
+  })
+
+  const toggleAssessmentTool = (assessmentTypeId: string, checked: boolean) => {
+    const currentIds = assessmentTools.map((t) => t.assessment_type_id)
+    const next = checked
+      ? [...currentIds, assessmentTypeId]
+      : currentIds.filter((tid) => tid !== assessmentTypeId)
+    setToolsMutation.mutate(next)
+  }
+
+  const addAssessmentTool = (assessmentTypeId: string) => {
+    if (!assessmentTypeId) return
+    const currentIds = assessmentTools.map((t) => t.assessment_type_id)
+    if (currentIds.includes(assessmentTypeId)) return
+    setToolsMutation.mutate([...currentIds, assessmentTypeId])
+  }
+
+  const [showNewToolForm, setShowNewToolForm] = useState(false)
+  const [newToolName, setNewToolName] = useState("")
+
+  const createToolTypeMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const { data } = await apiClient.POST("/ref-data/assessment-types" as never, {
+        body: { name, is_sessional: false },
+      } as never)
+      return (data as unknown) as AssessmentType
+    },
+    onSuccess: (newType) => {
+      qc.invalidateQueries({ queryKey: queryKeys.refData.assessmentTypes })
+      addAssessmentTool(newType.id)
+      setNewToolName("")
+      setShowNewToolForm(false)
+    },
+    onError: () => toast.error("Failed to create assessment tool type"),
+  })
+
+  const handleCreateNewTool = (e: FormEvent) => {
+    e.preventDefault()
+    const name = newToolName.trim()
+    if (!name) return
+    createToolTypeMutation.mutate(name)
+  }
+
+  const usedAssessmentTypeIds = new Set(assessmentTools.map((t) => t.assessment_type_id))
+  const availableAssessmentTypeOptions = assessmentTypes
+    .filter((t) => !usedAssessmentTypeIds.has(t.id))
+    .map((t) => ({ value: t.id, label: t.is_sessional ? `${t.name} (Sessional)` : t.name }))
 
   const isMyModule = myAssignments.some((a) => a.course_id === id)
 
@@ -214,6 +310,99 @@ export function CourseDetailClient({ id }: Props) {
               </CardContent>
             </Card>
           )}
+
+          <Card>
+            <CardHeader><CardTitle>Assessment Tools</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {!curriculumId ? (
+                <p className="text-sm text-muted-foreground">
+                  This course is not part of any curriculum yet.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Select the assessment tools used to evaluate this course.
+                  </p>
+
+                  <PermissionGate permission="course.update">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Combobox
+                        options={availableAssessmentTypeOptions}
+                        value=""
+                        onValueChange={addAssessmentTool}
+                        placeholder="Add assessment tool…"
+                        searchPlaceholder="Search tools…"
+                        emptyText="No more tools available."
+                        triggerClassName="w-56"
+                        disabled={setToolsMutation.isPending}
+                      />
+                      {showNewToolForm ? (
+                        <form onSubmit={handleCreateNewTool} className="flex items-center gap-2">
+                          <Input
+                            value={newToolName}
+                            onChange={(e) => setNewToolName(e.target.value)}
+                            placeholder="New tool name"
+                            className="h-9 w-44"
+                            autoFocus
+                          />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={!newToolName.trim() || createToolTypeMutation.isPending}
+                          >
+                            {createToolTypeMutation.isPending && <Loader2 className="animate-spin" />}
+                            Create
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setShowNewToolForm(false)
+                              setNewToolName("")
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </form>
+                      ) : (
+                        <Button type="button" variant="outline" size="sm" onClick={() => setShowNewToolForm(true)}>
+                          <Plus />
+                          Add new
+                        </Button>
+                      )}
+                    </div>
+                  </PermissionGate>
+
+                  {assessmentTools.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No assessment tools selected.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {assessmentTools.map((tool) => (
+                        <div key={tool.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`assessment-tool-${tool.assessment_type_id}`}
+                            checked
+                            disabled={tool.is_locked || !canEditCourse || setToolsMutation.isPending}
+                            onChange={(e) => toggleAssessmentTool(tool.assessment_type_id, e.target.checked)}
+                            className="h-4 w-4 rounded border-border disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                          <Label htmlFor={`assessment-tool-${tool.assessment_type_id}`} className="font-normal">
+                            {tool.assessment_type_name}
+                          </Label>
+                          {tool.is_sessional && (
+                            <Badge variant="secondary" className="font-normal">Sessional</Badge>
+                          )}
+                          {tool.is_locked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
 
           <PermissionGate permission="course.update">
             <Card>

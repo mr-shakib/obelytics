@@ -59,6 +59,10 @@ export const queryKeys = {
   courseBloomDomains: {
     byCourse: (courseId: string) => ["courses", courseId, "bloom-domains"] as const,
   },
+  courseAssessmentTools: {
+    byCourse: (courseId: string, curriculumId: string) =>
+      ["courses", courseId, "assessment-tools", curriculumId] as const,
+  },
   batches: {
     all: ["batches"] as const,
     list: (filters?: Record<string, unknown>) => ["batches", "list", filters] as const,
@@ -100,6 +104,10 @@ export const queryKeys = {
     detail: (id: string) => ["co-po-mappings", id] as const,
     entries: (id: string) => ["co-po-mappings", id, "entries"] as const,
     byCourse: (curriculumId: string, courseId: string) => ["co-po-mappings", "by-course", curriculumId, courseId] as const,
+    validation: (id: string) => ["co-po-mappings", id, "validation"] as const,
+  },
+  complexMappings: {
+    byCo: (kind: "cp" | "ca", coId: string) => ["complex-mappings", kind, coId] as const,
   },
 
   // Assessment

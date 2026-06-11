@@ -232,7 +232,7 @@ async def update_assessment_type(
 
 @router.get("/complex-problems", response_model=list[ComplexProblemResponse])
 async def list_complex_problems(
-    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -264,7 +264,7 @@ async def update_complex_problem(
 
 @router.get("/complex-activities", response_model=list[ComplexActivityResponse])
 async def list_complex_activities(
-    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):

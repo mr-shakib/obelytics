@@ -15,7 +15,9 @@ import { PageHeader } from "@/components/shared/page-header"
 import { DataTable } from "@/components/shared/data-table"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
+import { BloomLevelCheckboxGroup, sortBloomLevelIds } from "@/components/shared/bloom-level-checkbox-group"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -29,9 +31,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -51,7 +51,7 @@ type CourseOutcome = {
   id: string
   code: string
   statement: string
-  bloom_level_id: string | null
+  bloom_level_ids: string[]
   status: string
 }
 type ModuleLeaderAssignment = { course_id: string }
@@ -59,9 +59,9 @@ type ModuleLeaderAssignment = { course_id: string }
 // ── Form schema ───────────────────────────────────────────────────────────────
 
 const coSchema = z.object({
-  code:           z.string().min(1, "Code is required").max(20),
-  statement:      z.string().min(10, "At least 10 characters"),
-  bloom_level_id: z.string().optional(),
+  code:            z.string().min(1, "Code is required").max(20),
+  statement:       z.string().min(10, "At least 10 characters"),
+  bloom_level_ids: z.array(z.string()),
 })
 type COFormValues = z.infer<typeof coSchema>
 
@@ -84,7 +84,6 @@ function CODialog({
   onSubmit: (values: COFormValues) => void
   isPending: boolean
 }) {
-  const bloomLevelById = Object.fromEntries(bloomLevels.map((l) => [l.id, l]))
   const {
     register,
     handleSubmit,
@@ -95,7 +94,7 @@ function CODialog({
 
   useEffect(() => {
     if (open) {
-      reset({ code: suggestedCode, statement: "", bloom_level_id: "" })
+      reset({ code: suggestedCode, statement: "", bloom_level_ids: [] })
     }
   }, [open, suggestedCode, reset])
 
@@ -124,37 +123,17 @@ function CODialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Bloom Level <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Label>Bloom Level <span className="text-muted-foreground font-normal">(optional, multiple allowed)</span></Label>
             <Controller
-              name="bloom_level_id"
+              name="bloom_level_ids"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select bloom level">
-                      {(v: string | null) => {
-                        const bl = bloomLevelById[v ?? ""]
-                        return bl ? `${bl.code} — ${bl.name}` : null
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bloomDomains.map((domain) => {
-                      const levels = bloomLevels
-                        .filter((l) => l.bloom_domain_id === domain.id)
-                        .sort((a, b) => a.order_index - b.order_index)
-                      if (levels.length === 0) return null
-                      return (
-                        <SelectGroup key={domain.id}>
-                          <SelectLabel>{domain.name}</SelectLabel>
-                          {levels.map((l) => (
-                            <SelectItem key={l.id} value={l.id}>{l.code} — {l.name}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
+                <BloomLevelCheckboxGroup
+                  bloomDomains={bloomDomains}
+                  bloomLevels={bloomLevels}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                />
               )}
             />
           </div>
@@ -307,10 +286,19 @@ export function CourseOutcomesClient() {
     {
       id: "bloom_level",
       header: "Bloom Level",
-      cell: ({ row }) =>
-        bloomMap.get(row.original.bloom_level_id ?? "") ?? (
-          <span className="text-muted-foreground">—</span>
-        ),
+      cell: ({ row }) => {
+        const ids = sortBloomLevelIds(row.original.bloom_level_ids ?? [], bloomLevels, bloomDomains)
+        if (ids.length === 0) return <span className="text-muted-foreground">—</span>
+        return (
+          <div className="flex flex-wrap gap-1">
+            {ids.map((id) => (
+              <Badge key={id} variant="secondary" className="font-normal">
+                {bloomMap.get(id) ?? id}
+              </Badge>
+            ))}
+          </div>
+        )
+      },
     },
     {
       accessorKey: "status",
@@ -328,7 +316,6 @@ export function CourseOutcomesClient() {
           curriculum_id: curriculumId,
           course_id: courseId,
           ...values,
-          bloom_level_id: values.bloom_level_id || undefined,
         },
       } as never)
     },

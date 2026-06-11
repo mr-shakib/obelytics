@@ -90,6 +90,7 @@ _ASSESSMENT_TYPES = [
     ("Mid-term Exam", False),
     ("Final Exam", False),
     ("Lab Report", True),
+    ("Lab Final", True),
     ("Project", False),
     ("Presentation", False),
     ("Viva", False),

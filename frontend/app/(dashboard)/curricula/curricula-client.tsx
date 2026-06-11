@@ -133,7 +133,9 @@ export function CurriculaClient() {
         body: {
           curriculum_id: created.id,
           name: values.batch_name,
-          intake_year: values.effective_year,
+          start_date: `${values.effective_year}-01-01`,
+          term_system: "SEMESTER",
+          num_semesters: values.semester_count,
         },
       } as never)
       await apiClient.POST(`/curricula/${created.id}/terms` as never, {

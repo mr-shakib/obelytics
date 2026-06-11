@@ -19,6 +19,8 @@ from app.modules.curriculum.schemas import (
     BatchTermCalendarEntry,
     BatchTermOfferingCourse,
     BatchUpdate,
+    CourseAssessmentToolResponse,
+    CourseAssessmentToolsUpdate,
     CourseBloomDomainsUpdate,
     CourseCreate,
     CourseResponse,
@@ -45,6 +47,7 @@ from app.modules.curriculum.schemas import (
 from app.modules.curriculum.service import (
     AcademicTermService,
     BatchService,
+    CourseAssessmentToolService,
     CourseBloomDomainService,
     CourseService,
     CourseSlotService,
@@ -250,6 +253,31 @@ async def set_course_bloom_domains(
 ):
     svc = CourseBloomDomainService(db)
     return await svc.set_for_course(course_id, body, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}/assessment-tools", response_model=list[CourseAssessmentToolResponse])
+async def list_course_assessment_tools(
+    course_id: UUID,
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseAssessmentToolService(db)
+    return await svc.list_for_course(course_id, curriculum_id, current_user.organization_id)
+
+
+@router.put("/courses/{course_id}/assessment-tools", response_model=list[CourseAssessmentToolResponse])
+async def set_course_assessment_tools(
+    course_id: UUID,
+    curriculum_id: UUID,
+    body: CourseAssessmentToolsUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseAssessmentToolService(db)
+    return await svc.set_tools(course_id, curriculum_id, body, current_user.organization_id)
 
 
 @router.get("/courses/{course_id}/prerequisites", response_model=list[PrerequisiteResponse])

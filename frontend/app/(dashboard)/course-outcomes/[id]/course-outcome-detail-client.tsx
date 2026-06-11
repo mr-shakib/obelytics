@@ -9,21 +9,14 @@ import { Loader2, GitBranch } from "lucide-react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
+import { BloomLevelCheckboxGroup, sortBloomLevelIds } from "@/components/shared/bloom-level-checkbox-group"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
@@ -34,8 +27,7 @@ type CourseOutcome = {
   statement: string
   status: string
   course_id: string
-  bloom_level_id?: string
-  bloom_level_name?: string
+  bloom_level_ids: string[]
   course_name?: string
   curriculum_name?: string
 }
@@ -55,7 +47,7 @@ const CO_STATUSES = [
 const schema = z.object({
   code: z.string().min(1, "Code is required"),
   statement: z.string().min(20, "Statement must be at least 20 characters"),
-  bloom_level_id: z.string().min(1, "Bloom level is required"),
+  bloom_level_ids: z.array(z.string()),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -135,7 +127,7 @@ export function CourseOutcomeDetailClient({ id }: Props) {
     },
   })
 
-  const bloomLevelById = Object.fromEntries(bloomLevels.map((l) => [l.id, l]))
+  const bloomMap = new Map(bloomLevels.map((b) => [b.id, `${b.code} — ${b.name}`]))
 
   const {
     register,
@@ -148,7 +140,7 @@ export function CourseOutcomeDetailClient({ id }: Props) {
       ? {
           code: data.code,
           statement: data.statement,
-          bloom_level_id: data.bloom_level_id ?? "",
+          bloom_level_ids: data.bloom_level_ids ?? [],
         }
       : undefined,
   })
@@ -294,7 +286,19 @@ export function CourseOutcomeDetailClient({ id }: Props) {
             </div>
             <div className="grid grid-cols-[auto_1fr] gap-x-4 items-start">
               <dt className="text-muted-foreground font-medium">Bloom Level</dt>
-              <dd>{data.bloom_level_name ?? <span className="text-muted-foreground">—</span>}</dd>
+              <dd>
+                {data.bloom_level_ids.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {sortBloomLevelIds(data.bloom_level_ids, bloomLevels, bloomDomains).map((bid) => (
+                      <Badge key={bid} variant="secondary" className="font-normal">
+                        {bloomMap.get(bid) ?? bid}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </dd>
             </div>
             {data.course_name && (
               <div className="grid grid-cols-[auto_1fr] gap-x-4 items-start">
@@ -341,43 +345,21 @@ export function CourseOutcomeDetailClient({ id }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Bloom Level</Label>
+                  <Label>Bloom Level <span className="text-muted-foreground font-normal">(optional, multiple allowed)</span></Label>
                   <Controller
-                    name="bloom_level_id"
+                    name="bloom_level_ids"
                     control={control}
                     render={({ field }) => (
-                      <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select bloom level">
-                            {(v: string | null) => {
-                              const bl = bloomLevelById[v ?? ""]
-                              return bl ? `${bl.code} — ${bl.name}` : null
-                            }}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {bloomDomains.map((domain) => {
-                            const levels = bloomLevels
-                              .filter((l) => l.bloom_domain_id === domain.id)
-                              .sort((a, b) => a.order_index - b.order_index)
-                            if (levels.length === 0) return null
-                            return (
-                              <SelectGroup key={domain.id}>
-                                <SelectLabel>{domain.name}</SelectLabel>
-                                {levels.map((l) => (
-                                  <SelectItem key={l.id} value={l.id}>
-                                    {l.code} — {l.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
+                      <BloomLevelCheckboxGroup
+                        bloomDomains={bloomDomains}
+                        bloomLevels={bloomLevels}
+                        value={field.value ?? []}
+                        onChange={field.onChange}
+                      />
                     )}
                   />
-                  {errors.bloom_level_id && (
-                    <p className="text-sm text-destructive">{errors.bloom_level_id.message}</p>
+                  {errors.bloom_level_ids && (
+                    <p className="text-sm text-destructive">{errors.bloom_level_ids.message}</p>
                   )}
                 </div>
 

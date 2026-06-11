@@ -181,7 +181,7 @@ pip install -r requirements-dev.txt
 ### 3c. Configure environment variables
 
 ```powershell
-copy .env.example .env        # Windows
+clear       # Windows
 # cp .env.example .env        # macOS / Linux
 ```
 

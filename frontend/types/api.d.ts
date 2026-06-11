@@ -1084,6 +1084,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/courses/{course_id}/assessment-tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Assessment Tools */
+        get: operations["list_course_assessment_tools_api_v1_courses__course_id__assessment_tools_get"];
+        /** Set Course Assessment Tools */
+        put: operations["set_course_assessment_tools_api_v1_courses__course_id__assessment_tools_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/courses/{course_id}/prerequisites": {
         parameters: {
             query?: never;
@@ -1694,6 +1712,23 @@ export interface paths {
         get: operations["list_co_po_mapping_entries_api_v1_mappings_co_po__set_id__entries_get"];
         /** Upsert Co Po Mapping Entries */
         put: operations["upsert_co_po_mapping_entries_api_v1_mappings_co_po__set_id__entries_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mappings/co-po/{set_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Validate Co Po Mapping Set */
+        get: operations["validate_co_po_mapping_set_api_v1_mappings_co_po__set_id__validate_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -3613,6 +3648,20 @@ export interface components {
              */
             updated_at: string;
         };
+        /** COMappingValidationIssue */
+        COMappingValidationIssue: {
+            /**
+             * Course Outcome Id
+             * Format: uuid
+             */
+            course_outcome_id: string;
+            /** Course Outcome Code */
+            course_outcome_code: string;
+            /** Missing Cep */
+            missing_cep: boolean;
+            /** Missing Cea */
+            missing_cea: boolean;
+        };
         /** COPOMappingEntryResponse */
         COPOMappingEntryResponse: {
             /**
@@ -3714,6 +3763,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** COPOMappingValidationResponse */
+        COPOMappingValidationResponse: {
+            /** Is Valid */
+            is_valid: boolean;
+            /** Issues */
+            issues: components["schemas"]["COMappingValidationIssue"][];
         };
         /** ComplexActivityCreate */
         ComplexActivityCreate: {
@@ -3817,6 +3873,45 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
         };
+        /** CourseAssessmentToolResponse */
+        CourseAssessmentToolResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Curriculum Id
+             * Format: uuid
+             */
+            curriculum_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Assessment Type Id
+             * Format: uuid
+             */
+            assessment_type_id: string;
+            /** Assessment Type Name */
+            assessment_type_name: string;
+            /** Is Sessional */
+            is_sessional: boolean;
+            /** Is Locked */
+            is_locked: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CourseAssessmentToolsUpdate */
+        CourseAssessmentToolsUpdate: {
+            /** Assessment Type Ids */
+            assessment_type_ids: string[];
+        };
         /** CourseBloomDomainsUpdate */
         CourseBloomDomainsUpdate: {
             /** Bloom Domain Ids */
@@ -3910,8 +4005,8 @@ export interface components {
              * Format: uuid
              */
             course_id: string;
-            /** Bloom Level Id */
-            bloom_level_id?: string | null;
+            /** Bloom Level Ids */
+            bloom_level_ids?: string[];
             /** Code */
             code: string;
             /** Statement */
@@ -3939,8 +4034,8 @@ export interface components {
              * Format: uuid
              */
             course_id: string;
-            /** Bloom Level Id */
-            bloom_level_id: string | null;
+            /** Bloom Level Ids */
+            bloom_level_ids?: string[];
             /** Code */
             code: string;
             /** Statement */
@@ -3964,8 +4059,8 @@ export interface components {
         };
         /** CourseOutcomeUpdate */
         CourseOutcomeUpdate: {
-            /** Bloom Level Id */
-            bloom_level_id?: string | null;
+            /** Bloom Level Ids */
+            bloom_level_ids?: string[] | null;
             /** Code */
             code?: string | null;
             /** Statement */
@@ -8384,6 +8479,76 @@ export interface operations {
             };
         };
     };
+    list_course_assessment_tools_api_v1_courses__course_id__assessment_tools_get: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseAssessmentToolResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_course_assessment_tools_api_v1_courses__course_id__assessment_tools_put: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseAssessmentToolsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseAssessmentToolResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_prerequisites_api_v1_courses__course_id__prerequisites_get: {
         parameters: {
             query?: never;
@@ -10165,6 +10330,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["COPOMappingEntryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_co_po_mapping_set_api_v1_mappings_co_po__set_id__validate_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["COPOMappingValidationResponse"];
                 };
             };
             /** @description Validation Error */

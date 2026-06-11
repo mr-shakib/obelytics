@@ -11,6 +11,7 @@ from app.modules.obe.models import (
     COPOMappingEntry,
     COPOMappingSet,
     CourseOutcome,
+    CourseOutcomeBloomLevel,
     POKnowledgeProfile,
     ProgramOutcome,
 )
@@ -157,6 +158,38 @@ class CORepository:
 
     async def delete(self, obj: CourseOutcome) -> None:
         await self._session.delete(obj)
+        await self._session.flush()
+
+    async def get_bloom_level_ids(self, co_id: UUID) -> list[UUID]:
+        result = await self._session.execute(
+            select(CourseOutcomeBloomLevel.bloom_level_id).where(
+                CourseOutcomeBloomLevel.course_outcome_id == co_id
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_bloom_level_ids_bulk(self, co_ids: list[UUID]) -> dict[UUID, list[UUID]]:
+        result_map: dict[UUID, list[UUID]] = {co_id: [] for co_id in co_ids}
+        if not co_ids:
+            return result_map
+        result = await self._session.execute(
+            select(
+                CourseOutcomeBloomLevel.course_outcome_id,
+                CourseOutcomeBloomLevel.bloom_level_id,
+            ).where(CourseOutcomeBloomLevel.course_outcome_id.in_(co_ids))
+        )
+        for co_id, bloom_level_id in result.all():
+            result_map[co_id].append(bloom_level_id)
+        return result_map
+
+    async def set_bloom_levels(self, co_id: UUID, bloom_level_ids: list[UUID]) -> None:
+        await self._session.execute(
+            delete(CourseOutcomeBloomLevel).where(CourseOutcomeBloomLevel.course_outcome_id == co_id)
+        )
+        for bloom_level_id in dict.fromkeys(bloom_level_ids):
+            self._session.add(
+                CourseOutcomeBloomLevel(course_outcome_id=co_id, bloom_level_id=bloom_level_id)
+            )
         await self._session.flush()
 
 

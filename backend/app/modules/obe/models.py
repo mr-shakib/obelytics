@@ -103,11 +103,6 @@ class CourseOutcome(Base):
         nullable=False,
         index=True,
     )
-    bloom_level_id = Column(
-        PGUUID(as_uuid=True),
-        ForeignKey("config.bloom_levels.id", ondelete="RESTRICT"),
-        nullable=True,
-    )
     code = Column(String(20), nullable=False)
     statement = Column(Text, nullable=False)
     status = Column(String(20), nullable=False, server_default="DRAFT")
@@ -121,6 +116,28 @@ class CourseOutcome(Base):
         server_default=sa.text("now()"),
         onupdate=sa.text("now()"),
     )
+
+
+class CourseOutcomeBloomLevel(Base):
+    __tablename__ = "course_outcome_bloom_levels"
+    __table_args__ = (
+        UniqueConstraint("course_outcome_id", "bloom_level_id", name="uq_obe_co_bloom_level"),
+        {"schema": "obe"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    course_outcome_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.course_outcomes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bloom_level_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("config.bloom_levels.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
 class CODeliveryMethod(Base):

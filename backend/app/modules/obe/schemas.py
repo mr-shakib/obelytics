@@ -62,13 +62,13 @@ class POKnowledgeProfileResponse(BaseModel):
 class CourseOutcomeCreate(BaseModel):
     curriculum_id: UUID
     course_id: UUID
-    bloom_level_id: UUID | None = None
+    bloom_level_ids: list[UUID] = Field(default_factory=list)
     code: str = Field(min_length=1, max_length=20)
     statement: str
 
 
 class CourseOutcomeUpdate(BaseModel):
-    bloom_level_id: UUID | None = None
+    bloom_level_ids: list[UUID] | None = None
     code: str | None = Field(default=None, min_length=1, max_length=20)
     statement: str | None = None
 
@@ -78,7 +78,7 @@ class CourseOutcomeResponse(BaseModel):
     organization_id: UUID
     curriculum_id: UUID
     course_id: UUID
-    bloom_level_id: UUID | None
+    bloom_level_ids: list[UUID] = Field(default_factory=list)
     code: str
     statement: str
     status: str
@@ -210,3 +210,17 @@ class COKPMappingResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── CO-PO Mapping Validation (CEP/CEA requirements) ───────────────────────────
+
+class COMappingValidationIssue(BaseModel):
+    course_outcome_id: UUID
+    course_outcome_code: str
+    missing_cep: bool
+    missing_cea: bool
+
+
+class COPOMappingValidationResponse(BaseModel):
+    is_valid: bool
+    issues: list[COMappingValidationIssue]

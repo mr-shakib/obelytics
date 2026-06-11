@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from app.modules.obe.exceptions import (
     COStateError,
     MappingSetNotFoundError,
     MappingSetPublishedError,
+    MappingSetValidationError,
     POArchivedError,
     POCodeConflictError,
     POHasActiveMappingsError,
@@ -45,9 +47,12 @@ from app.modules.obe.schemas import (
     COCPMappingCreate,
     CODeliveryMethodCreate,
     COKPMappingCreate,
+    COMappingValidationIssue,
     COPOMappingEntryUpsert,
     COPOMappingSetCreate,
+    COPOMappingValidationResponse,
     CourseOutcomeCreate,
+    CourseOutcomeResponse,
     CourseOutcomeUpdate,
     ProgramOutcomeCreate,
     ProgramOutcomeUpdate,
@@ -168,20 +173,29 @@ class COService:
         self._session = session
         self._repo = CORepository(session)
 
+    @staticmethod
+    def _to_response(co: CourseOutcome, bloom_level_ids: list[UUID]) -> CourseOutcomeResponse:
+        response = CourseOutcomeResponse.model_validate(co)
+        response.bloom_level_ids = bloom_level_ids
+        return response
+
     async def list_by_curriculum_course(
         self, curriculum_id: UUID, course_id: UUID, org_id: UUID
-    ) -> list[CourseOutcome]:
-        return await self._repo.list_by_curriculum_course(curriculum_id, course_id)
+    ) -> list[CourseOutcomeResponse]:
+        cos = await self._repo.list_by_curriculum_course(curriculum_id, course_id)
+        bloom_level_ids_by_co = await self._repo.get_bloom_level_ids_bulk([co.id for co in cos])
+        return [self._to_response(co, bloom_level_ids_by_co.get(co.id, [])) for co in cos]
 
-    async def get(self, co_id: UUID, org_id: UUID) -> CourseOutcome:
+    async def get(self, co_id: UUID, org_id: UUID) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
-        return co
+        bloom_level_ids = await self._repo.get_bloom_level_ids(co.id)
+        return self._to_response(co, bloom_level_ids)
 
     async def create(
         self, body: CourseOutcomeCreate, org_id: UUID, created_by_user_id: UUID
-    ) -> CourseOutcome:
+    ) -> CourseOutcomeResponse:
         existing = await self._repo.find_by_code(body.curriculum_id, body.course_id, body.code)
         if existing:
             from app.modules.obe.exceptions import MappingEntryConflictError
@@ -190,30 +204,35 @@ class COService:
             organization_id=org_id,
             curriculum_id=body.curriculum_id,
             course_id=body.course_id,
-            bloom_level_id=body.bloom_level_id,
             code=body.code,
             statement=body.statement,
             status="DRAFT",
             created_by_user_id=created_by_user_id,
         )
         result = await self._repo.create(co)
+        await self._repo.set_bloom_levels(result.id, body.bloom_level_ids)
         await self._session.commit()
-        return result
+        return self._to_response(result, body.bloom_level_ids)
 
     async def update(
         self, co_id: UUID, body: CourseOutcomeUpdate, org_id: UUID
-    ) -> CourseOutcome:
+    ) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
         if co.status != "DRAFT":
             raise CONotEditableError()
         data = body.model_dump(exclude_none=True)
+        bloom_level_ids = data.pop("bloom_level_ids", None)
         result = await self._repo.update(co, data)
+        if bloom_level_ids is not None:
+            await self._repo.set_bloom_levels(co_id, bloom_level_ids)
+        else:
+            bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
         await self._session.commit()
-        return result
+        return self._to_response(result, bloom_level_ids)
 
-    async def submit(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
+    async def submit(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -232,9 +251,10 @@ class COService:
             after_status="SUBMITTED",
         )
         await self._session.commit()
-        return result
+        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
+        return self._to_response(result, bloom_level_ids)
 
-    async def approve(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
+    async def approve(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -265,9 +285,10 @@ class COService:
                 entity_id=co_id,
             )
         await self._session.commit()
-        return result
+        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
+        return self._to_response(result, bloom_level_ids)
 
-    async def reject(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
+    async def reject(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -298,7 +319,8 @@ class COService:
                 entity_id=co_id,
             )
         await self._session.commit()
-        return result
+        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
+        return self._to_response(result, bloom_level_ids)
 
     async def delete(self, co_id: UUID, org_id: UUID) -> None:
         co = await self._repo.get_by_id(co_id, org_id)
@@ -309,7 +331,7 @@ class COService:
         await self._repo.delete(co)
         await self._session.commit()
 
-    async def publish(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
+    async def publish(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -328,7 +350,8 @@ class COService:
             after_status="PUBLISHED",
         )
         await self._session.commit()
-        return result
+        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
+        return self._to_response(result, bloom_level_ids)
 
     async def lock(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
         co = await self._repo.get_by_id(co_id, org_id)
@@ -402,6 +425,10 @@ class MappingSetService:
         self._session = session
         self._repo = MappingSetRepository(session)
         self._entry_repo = MappingEntryRepository(session)
+        self._co_repo = CORepository(session)
+        self._po_repo = PORepository(session)
+        self._cp_repo = COCPMappingRepository(session)
+        self._ca_repo = COCAMappingRepository(session)
 
     async def get_or_create(
         self, curriculum_id: UUID, course_id: UUID, org_id: UUID, user_id: UUID
@@ -454,6 +481,45 @@ class MappingSetService:
         await self._session.commit()
         return results
 
+    async def validate(self, set_id: UUID, org_id: UUID) -> COPOMappingValidationResponse:
+        ms = await self._repo.get_by_id(set_id, org_id)
+        if ms is None:
+            raise MappingSetNotFoundError()
+        entries = await self._entry_repo.list_by_set(set_id)
+
+        po_codes: dict[UUID, str] = {}
+        for po_id in {e.program_outcome_id for e in entries}:
+            po = await self._po_repo.get_by_id(po_id, org_id)
+            if po is not None:
+                po_codes[po_id] = po.code
+
+        co_to_po_numbers: dict[UUID, set[int]] = {}
+        for e in entries:
+            match = re.fullmatch(r"PO(\d+)", po_codes.get(e.program_outcome_id, ""))
+            if not match:
+                continue
+            co_to_po_numbers.setdefault(e.course_outcome_id, set()).add(int(match.group(1)))
+
+        issues: list[COMappingValidationIssue] = []
+        for co_id, po_numbers in co_to_po_numbers.items():
+            needs_cep = any(1 <= n <= 7 for n in po_numbers)
+            needs_cea = 10 in po_numbers
+            if not needs_cep and not needs_cea:
+                continue
+            missing_cep = needs_cep and not await self._cp_repo.list_by_co(co_id)
+            missing_cea = needs_cea and not await self._ca_repo.list_by_co(co_id)
+            if not missing_cep and not missing_cea:
+                continue
+            co = await self._co_repo.get_by_id(co_id, org_id)
+            issues.append(COMappingValidationIssue(
+                course_outcome_id=co_id,
+                course_outcome_code=co.code if co else "",
+                missing_cep=missing_cep,
+                missing_cea=missing_cea,
+            ))
+
+        return COPOMappingValidationResponse(is_valid=not issues, issues=issues)
+
     async def publish(
         self, set_id: UUID, org_id: UUID, user_id: UUID
     ) -> COPOMappingSet:
@@ -462,6 +528,11 @@ class MappingSetService:
             raise MappingSetNotFoundError()
         if ms.status == "PUBLISHED":
             raise MappingSetPublishedError()
+        validation = await self.validate(set_id, org_id)
+        if not validation.is_valid:
+            raise MappingSetValidationError(
+                [issue.model_dump(mode="json") for issue in validation.issues]
+            )
         ms.status = "PUBLISHED"
         ms.published_at = datetime.now(timezone.utc)
         result = await self._repo.update(ms, {})

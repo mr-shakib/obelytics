@@ -21,6 +21,7 @@ from app.modules.obe.schemas import (
     COPOMappingEntryResponse,
     COPOMappingSetCreate,
     COPOMappingSetResponse,
+    COPOMappingValidationResponse,
     CourseOutcomeCreate,
     CourseOutcomeResponse,
     CourseOutcomeUpdate,
@@ -356,6 +357,17 @@ async def upsert_co_po_mapping_entries(
 ):
     svc = MappingSetService(db)
     return await svc.upsert_entries(set_id, entries, current_user.organization_id)
+
+
+@router.get("/mappings/co-po/{set_id}/validate", response_model=COPOMappingValidationResponse)
+async def validate_co_po_mapping_set(
+    set_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_po.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MappingSetService(db)
+    return await svc.validate(set_id, current_user.organization_id)
 
 
 @router.post("/mappings/co-po/{set_id}/publish", response_model=COPOMappingSetResponse)

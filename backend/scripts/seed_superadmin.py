@@ -95,14 +95,25 @@ async def seed(
                 )
                 session.add(role)
                 await session.flush()
-                for pcode in rdef["permissions"]:
-                    if pcode in perm_map:
-                        session.add(
-                            RolePermission(
-                                role_id=role.id, permission_id=perm_map[pcode].id
-                            )
-                        )
+                existing_codes: set[str] = set()
+            else:
+                result = await session.execute(
+                    select(Permission.code)
+                    .join(RolePermission, RolePermission.permission_id == Permission.id)
+                    .where(RolePermission.role_id == role.id)
+                )
+                existing_codes = set(result.scalars().all())
+
+            added = 0
+            for pcode in rdef["permissions"]:
+                if pcode in perm_map and pcode not in existing_codes:
+                    session.add(
+                        RolePermission(role_id=role.id, permission_id=perm_map[pcode].id)
+                    )
+                    added += 1
+            if added:
                 await session.flush()
+                print(f"[+] {role.name}: added {added} missing permission(s)")
             role_map[role.name] = role
         print(f"[ok] {len(role_map)} roles ready")
 

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.curriculum.domain.prerequisite_graph import PrerequisiteGraphValidator
 from app.modules.ref_data.exceptions import RefDataNotFoundError
-from app.modules.ref_data.repository import BloomDomainRepository
+from app.modules.ref_data.repository import AssessmentTypeRepository, BloomDomainRepository
 from app.modules.curriculum.exceptions import (
     AcademicTermConflictError,
     AcademicTermNotFoundError,
@@ -30,6 +30,7 @@ from app.modules.curriculum.models import (
     AcademicTerm,
     Batch,
     Course,
+    CourseAssessmentTool,
     CoursePrerequisite,
     Curriculum,
     CurriculumCourseSlot,
@@ -42,6 +43,7 @@ from app.modules.curriculum.models import (
 from app.modules.curriculum.repository import (
     AcademicTermRepository,
     BatchRepository,
+    CourseAssessmentToolRepository,
     CourseBloomDomainRepository,
     CourseRepository,
     CourseSlotRepository,
@@ -58,6 +60,8 @@ from app.modules.curriculum.schemas import (
     AcademicTermUpdate,
     BatchCreate,
     BatchUpdate,
+    CourseAssessmentToolResponse,
+    CourseAssessmentToolsUpdate,
     CourseBloomDomainsUpdate,
     CourseCreate,
     CourseSlotCreate,
@@ -285,6 +289,94 @@ class CourseBloomDomainService:
         records = await self._repo.replace_for_course(course_id, body.bloom_domain_ids)
         await self._session.commit()
         return [r.bloom_domain_id for r in records]
+
+
+class CourseAssessmentToolService:
+    _LAB_TOOL_NAMES = ["Lab Final"]
+    _THEORY_TOOL_NAMES = ["Mid-term Exam", "Final Exam"]
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CourseAssessmentToolRepository(session)
+        self._course_repo = CourseRepository(session)
+        self._curriculum_repo = CurriculumRepository(session)
+        self._assessment_type_repo = AssessmentTypeRepository(session)
+
+    async def _to_response_list(
+        self, records: list[CourseAssessmentTool], org_id: UUID
+    ) -> list[CourseAssessmentToolResponse]:
+        types = {a.id: a for a in await self._assessment_type_repo.list_active(org_id)}
+        return [
+            CourseAssessmentToolResponse(
+                id=r.id,
+                curriculum_id=r.curriculum_id,
+                course_id=r.course_id,
+                assessment_type_id=r.assessment_type_id,
+                assessment_type_name=types[r.assessment_type_id].name if r.assessment_type_id in types else "",
+                is_sessional=types[r.assessment_type_id].is_sessional if r.assessment_type_id in types else False,
+                is_locked=r.is_locked,
+                created_at=r.created_at,
+            )
+            for r in records
+        ]
+
+    async def _seed_defaults(
+        self, course: Course, curriculum_id: UUID, org_id: UUID
+    ) -> list[CourseAssessmentTool]:
+        names_with_lock: list[tuple[str, bool]] = []
+        if course.course_type in ("LAB", "THEORY_LAB"):
+            names_with_lock += [(name, True) for name in self._LAB_TOOL_NAMES]
+        if course.course_type in ("THEORY", "THEORY_LAB"):
+            names_with_lock += [(name, False) for name in self._THEORY_TOOL_NAMES]
+        if not names_with_lock:
+            return []
+
+        entries: list[tuple[UUID, bool]] = []
+        for name, is_locked in names_with_lock:
+            assessment_type = await self._assessment_type_repo.find_by_name(name, org_id)
+            if assessment_type is not None:
+                entries.append((assessment_type.id, is_locked))
+        if not entries:
+            return []
+        return await self._repo.replace_for_course(curriculum_id, course.id, entries)
+
+    async def list_for_course(
+        self, course_id: UUID, curriculum_id: UUID, org_id: UUID
+    ) -> list[CourseAssessmentToolResponse]:
+        course = await self._course_repo.get_by_id(course_id, org_id)
+        if course is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+
+        records = await self._repo.list_for_course(curriculum_id, course_id)
+        if not records:
+            records = await self._seed_defaults(course, curriculum_id, org_id)
+            await self._session.commit()
+        return await self._to_response_list(records, org_id)
+
+    async def set_tools(
+        self, course_id: UUID, curriculum_id: UUID, body: CourseAssessmentToolsUpdate, org_id: UUID
+    ) -> list[CourseAssessmentToolResponse]:
+        course = await self._course_repo.get_by_id(course_id, org_id)
+        if course is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+
+        valid_types = {a.id: a for a in await self._assessment_type_repo.list_active(org_id)}
+        for assessment_type_id in body.assessment_type_ids:
+            if assessment_type_id not in valid_types:
+                raise RefDataNotFoundError("Assessment type")
+
+        existing = await self._repo.list_for_course(curriculum_id, course_id)
+        locked_ids = {r.assessment_type_id for r in existing if r.is_locked}
+
+        selected_ids = set(body.assessment_type_ids) | locked_ids
+        entries = [(aid, aid in locked_ids) for aid in selected_ids]
+        records = await self._repo.replace_for_course(curriculum_id, course_id, entries)
+        await self._session.commit()
+        return await self._to_response_list(records, org_id)
 
 
 class CourseSlotService:
