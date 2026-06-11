@@ -76,6 +76,10 @@ class Course(Base):
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
+        CheckConstraint(
+            "course_type IN ('THEORY', 'LAB', 'THEORY_LAB', 'THESIS_DEFENSE')",
+            name="ck_curriculum_course_type_valid",
+        ),
         {"schema": "curriculum"},
     )
 
@@ -86,11 +90,12 @@ class Course(Base):
         nullable=False,
         index=True,
     )
-    course_type_id = Column(
+    course_category_id = Column(
         PGUUID(as_uuid=True),
-        ForeignKey("config.course_types.id", ondelete="RESTRICT"),
+        ForeignKey("config.course_categories.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    course_type = Column(String(20), nullable=False)
     code = Column(String(30), nullable=False)
     title = Column(String(255), nullable=False)
     credits = Column(SmallInteger, nullable=False)
@@ -106,6 +111,28 @@ class Course(Base):
         server_default=sa.text("now()"),
         onupdate=sa.text("now()"),
     )
+
+
+class CourseBloomDomain(Base):
+    __tablename__ = "course_bloom_domains"
+    __table_args__ = (
+        UniqueConstraint("course_id", "bloom_domain_id", name="uq_curriculum_course_bloom_domain"),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bloom_domain_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("config.bloom_domains.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
 class CurriculumCourseSlot(Base):
@@ -348,5 +375,47 @@ class FacultyAssignment(Base):
     # user_id stored without ORM FK — avoids cross-schema model coupling with IAM
     user_id = Column(PGUUID(as_uuid=True), nullable=False)
     role_in_course = Column(String(30), nullable=False)
+    assigned_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    removed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ModuleLeaderAssignment(Base):
+    __tablename__ = "module_leader_assignments"
+    __table_args__ = (
+        Index(
+            "uq_curriculum_module_leader_active",
+            "batch_id", "academic_term_id", "course_id",
+            unique=True,
+            postgresql_where=sa.text("removed_at IS NULL"),
+        ),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    batch_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.batches.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    academic_term_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.academic_terms.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    # user_id stored without ORM FK — avoids cross-schema model coupling with IAM
+    user_id = Column(PGUUID(as_uuid=True), nullable=False)
     assigned_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     removed_at = Column(DateTime(timezone=True), nullable=True)

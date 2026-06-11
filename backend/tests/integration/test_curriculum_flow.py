@@ -35,13 +35,13 @@ async def _create_program(client: AsyncClient, headers: dict) -> str:
 
 
 async def _create_course_type(client: AsyncClient, headers: dict) -> str:
-    """Create a course type and return its id."""
+    """Create a course category and return its id."""
     import uuid
     suffix = uuid.uuid4().hex[:6]
     resp = await client.post(
-        "/api/v1/config/course-types",
+        "/api/v1/ref-data/course-categories",
         headers=headers,
-        json={"name": f"Theory {suffix}", "description": "Theory course type"},
+        json={"name": f"Theory {suffix}", "description": "Theory course category"},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
@@ -177,7 +177,8 @@ async def test_create_course(client: AsyncClient, auth_headers):
         "/api/v1/courses",
         headers=auth_headers,
         json={
-            "course_type_id": ct_id,
+            "course_category_id": ct_id,
+            "course_type": "THEORY",
             "code": "CSE101",
             "title": "Introduction to Programming",
             "credits": 3,
@@ -197,7 +198,8 @@ async def test_create_course_denied_for_teacher(client: AsyncClient, auth_header
         "/api/v1/courses",
         headers=teacher_auth_headers,
         json={
-            "course_type_id": ct_id,
+            "course_category_id": ct_id,
+            "course_type": "THEORY",
             "code": "CSE999",
             "title": "Denied Course",
             "credits": 3,
@@ -209,7 +211,8 @@ async def test_create_course_denied_for_teacher(client: AsyncClient, auth_header
 async def test_create_course_duplicate_code(client: AsyncClient, auth_headers):
     ct_id = await _create_course_type(client, auth_headers)
     payload = {
-        "course_type_id": ct_id,
+        "course_category_id": ct_id,
+        "course_type": "THEORY",
         "code": "DUPL-CODE",
         "title": "First Course",
         "credits": 3,
@@ -224,7 +227,7 @@ async def test_update_course(client: AsyncClient, auth_headers):
     create_resp = await client.post(
         "/api/v1/courses",
         headers=auth_headers,
-        json={"course_type_id": ct_id, "code": "UPD-COURSE", "title": "Original Title", "credits": 3},
+        json={"course_category_id": ct_id, "course_type": "THEORY", "code": "UPD-COURSE", "title": "Original Title", "credits": 3},
     )
     course_id = create_resp.json()["id"]
     resp = await client.patch(
@@ -241,7 +244,7 @@ async def test_archive_course(client: AsyncClient, auth_headers):
     create_resp = await client.post(
         "/api/v1/courses",
         headers=auth_headers,
-        json={"course_type_id": ct_id, "code": "ARCH-COURSE", "title": "Course To Archive", "credits": 3},
+        json={"course_category_id": ct_id, "course_type": "THEORY", "code": "ARCH-COURSE", "title": "Course To Archive", "credits": 3},
     )
     course_id = create_resp.json()["id"]
     resp = await client.post(f"/api/v1/courses/{course_id}/archive", headers=auth_headers)
@@ -273,7 +276,7 @@ async def test_add_course_to_curriculum_slot(client: AsyncClient, auth_headers):
     course_resp = await client.post(
         "/api/v1/courses",
         headers=auth_headers,
-        json={"course_type_id": ct_id, "code": "SLOT-CSE101", "title": "Prog 101", "credits": 3},
+        json={"course_category_id": ct_id, "course_type": "THEORY", "code": "SLOT-CSE101", "title": "Prog 101", "credits": 3},
     )
     course_id = course_resp.json()["id"]
 
@@ -304,7 +307,7 @@ async def test_add_prerequisites_and_cycle_detection(client: AsyncClient, auth_h
         resp = await client.post(
             "/api/v1/courses",
             headers=auth_headers,
-            json={"course_type_id": ct_id, "code": code, "title": f"Course {code}", "credits": 3},
+            json={"course_category_id": ct_id, "course_type": "THEORY", "code": code, "title": f"Course {code}", "credits": 3},
         )
         assert resp.status_code == 201, resp.text
         courses[code] = resp.json()["id"]
@@ -340,12 +343,12 @@ async def test_list_prerequisites(client: AsyncClient, auth_headers):
     main_resp = await client.post(
         "/api/v1/courses",
         headers=auth_headers,
-        json={"course_type_id": ct_id, "code": "LIST-PREREQ-MAIN", "title": "Main Course", "credits": 3},
+        json={"course_category_id": ct_id, "course_type": "THEORY", "code": "LIST-PREREQ-MAIN", "title": "Main Course", "credits": 3},
     )
     pre_resp = await client.post(
         "/api/v1/courses",
         headers=auth_headers,
-        json={"course_type_id": ct_id, "code": "LIST-PREREQ-PRE", "title": "Pre Course", "credits": 3},
+        json={"course_category_id": ct_id, "course_type": "THEORY", "code": "LIST-PREREQ-PRE", "title": "Pre Course", "credits": 3},
     )
     main_id = main_resp.json()["id"]
     pre_id = pre_resp.json()["id"]
@@ -485,7 +488,7 @@ async def _setup_offering_data(client: AsyncClient, headers: dict) -> dict:
     course_resp = await client.post(
         "/api/v1/courses",
         headers=headers,
-        json={"course_type_id": ct_id, "code": f"OFF-CSE{suffix}", "title": "Off Course", "credits": 3},
+        json={"course_category_id": ct_id, "course_type": "THEORY", "code": f"OFF-CSE{suffix}", "title": "Off Course", "credits": 3},
     )
     course_id = course_resp.json()["id"]
 

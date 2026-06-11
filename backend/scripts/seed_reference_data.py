@@ -2,7 +2,7 @@
 Run: python -m scripts.seed_reference_data --org-id <uuid>
 
 Seeds default reference data for an organization:
-  - Bloom Cognitive domain with C1-C6 levels
+  - Bloom Cognitive, Affective, and Psychomotor domains with their levels
   - Delivery methods (Lecture, Lab, Tutorial, Online, Hybrid)
   - Course types (Core, Elective, Lab, Project, Thesis)
   - Assessment types (Quiz, Assignment, Mid-term, Final, Lab Report, Project)
@@ -26,18 +26,46 @@ from app.modules.ref_data.models import (
     AssessmentType,
     BloomDomain,
     BloomLevel,
-    CourseType,
+    CourseCategory,
     DeliveryMethod,
     MappingWeightLabel,
 )
 
-_BLOOM_COGNITIVE_LEVELS = [
-    ("C1", "Remember", 1),
-    ("C2", "Understand", 2),
-    ("C3", "Apply", 3),
-    ("C4", "Analyze", 4),
-    ("C5", "Evaluate", 5),
-    ("C6", "Create", 6),
+_BLOOM_DOMAINS = [
+    (
+        "Cognitive",
+        "Bloom's Taxonomy Cognitive Domain",
+        [
+            ("C1", "Remember", 1),
+            ("C2", "Understand", 2),
+            ("C3", "Apply", 3),
+            ("C4", "Analyze", 4),
+            ("C5", "Evaluate", 5),
+            ("C6", "Create", 6),
+        ],
+    ),
+    (
+        "Affective",
+        "Bloom's Taxonomy Affective Domain",
+        [
+            ("A1", "Receiving", 1),
+            ("A2", "Responding", 2),
+            ("A3", "Valuing", 3),
+            ("A4", "Organizing", 4),
+            ("A5", "Characterizing", 5),
+        ],
+    ),
+    (
+        "Psychomotor",
+        "Bloom's Taxonomy Psychomotor Domain",
+        [
+            ("P1", "Imitation", 1),
+            ("P2", "Manipulation", 2),
+            ("P3", "Precision", 3),
+            ("P4", "Articulation", 4),
+            ("P5", "Naturalization", 5),
+        ],
+    ),
 ]
 
 _DELIVERY_METHODS = [
@@ -48,7 +76,7 @@ _DELIVERY_METHODS = [
     ("Hybrid", "Mix of online and in-person delivery"),
 ]
 
-_COURSE_TYPES = [
+_COURSE_CATEGORIES = [
     ("Core", "Mandatory core course"),
     ("Elective", "Student-chosen elective course"),
     ("Lab", "Laboratory-based course"),
@@ -79,32 +107,32 @@ async def seed(org_id: UUID) -> None:
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     async with Session() as session:
-        # Bloom Cognitive domain
-        result = await session.execute(
-            select(BloomDomain).where(BloomDomain.organization_id == org_id, BloomDomain.name == "Cognitive")
-        )
-        domain = result.scalar_one_or_none()
-        if domain is None:
-            domain = BloomDomain(organization_id=org_id, name="Cognitive",
-                                 description="Bloom's Taxonomy Cognitive Domain")
-            session.add(domain)
-            await session.flush()
-            print(f"  Created Bloom domain: Cognitive ({domain.id})")
-        else:
-            print(f"  Bloom domain already exists: Cognitive ({domain.id})")
-
-        for code, name, order in _BLOOM_COGNITIVE_LEVELS:
-            r = await session.execute(
-                select(BloomLevel).where(
-                    BloomLevel.organization_id == org_id,
-                    BloomLevel.bloom_domain_id == domain.id,
-                    BloomLevel.code == code,
-                )
+        # Bloom domains
+        for domain_name, domain_desc, levels in _BLOOM_DOMAINS:
+            result = await session.execute(
+                select(BloomDomain).where(BloomDomain.organization_id == org_id, BloomDomain.name == domain_name)
             )
-            if r.scalar_one_or_none() is None:
-                session.add(BloomLevel(organization_id=org_id, bloom_domain_id=domain.id,
-                                       code=code, name=name, order_index=order))
-                print(f"    Created Bloom level: {code} - {name}")
+            domain = result.scalar_one_or_none()
+            if domain is None:
+                domain = BloomDomain(organization_id=org_id, name=domain_name, description=domain_desc)
+                session.add(domain)
+                await session.flush()
+                print(f"  Created Bloom domain: {domain_name} ({domain.id})")
+            else:
+                print(f"  Bloom domain already exists: {domain_name} ({domain.id})")
+
+            for code, name, order in levels:
+                r = await session.execute(
+                    select(BloomLevel).where(
+                        BloomLevel.organization_id == org_id,
+                        BloomLevel.bloom_domain_id == domain.id,
+                        BloomLevel.code == code,
+                    )
+                )
+                if r.scalar_one_or_none() is None:
+                    session.add(BloomLevel(organization_id=org_id, bloom_domain_id=domain.id,
+                                           code=code, name=name, order_index=order))
+                    print(f"    Created Bloom level: {code} - {name}")
 
         # Delivery methods
         for name, desc in _DELIVERY_METHODS:
@@ -115,14 +143,14 @@ async def seed(org_id: UUID) -> None:
                 session.add(DeliveryMethod(organization_id=org_id, name=name, description=desc))
                 print(f"  Created delivery method: {name}")
 
-        # Course types
-        for name, desc in _COURSE_TYPES:
+        # Course categories
+        for name, desc in _COURSE_CATEGORIES:
             r = await session.execute(
-                select(CourseType).where(CourseType.organization_id == org_id, CourseType.name == name)
+                select(CourseCategory).where(CourseCategory.organization_id == org_id, CourseCategory.name == name)
             )
             if r.scalar_one_or_none() is None:
-                session.add(CourseType(organization_id=org_id, name=name, description=desc))
-                print(f"  Created course type: {name}")
+                session.add(CourseCategory(organization_id=org_id, name=name, description=desc))
+                print(f"  Created course category: {name}")
 
         # Assessment types
         for name, is_sessional in _ASSESSMENT_TYPES:

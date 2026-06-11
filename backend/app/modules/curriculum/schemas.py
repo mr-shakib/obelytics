@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -60,7 +61,8 @@ class CurriculumTermDefinitionResponse(BaseModel):
 # ── Course ────────────────────────────────────────────────────────────────────
 
 class CourseCreate(BaseModel):
-    course_type_id: UUID
+    course_category_id: UUID
+    course_type: Literal["THEORY", "LAB", "THEORY_LAB", "THESIS_DEFENSE"]
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=255)
     credits: int = Field(ge=0, le=20)
@@ -80,7 +82,8 @@ class CourseUpdate(BaseModel):
 class CourseResponse(BaseModel):
     id: UUID
     organization_id: UUID
-    course_type_id: UUID
+    course_category_id: UUID
+    course_type: str
     code: str
     title: str
     credits: int
@@ -93,6 +96,12 @@ class CourseResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Course Bloom Domains ──────────────────────────────────────────────────────
+
+class CourseBloomDomainsUpdate(BaseModel):
+    bloom_domain_ids: list[UUID]
 
 
 # ── Course Slot ───────────────────────────────────────────────────────────────
@@ -322,6 +331,28 @@ class FacultyAssignmentResponse(BaseModel):
     section_offering_id: UUID
     user_id: UUID
     role_in_course: str
+    assigned_at: datetime
+    removed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+# ── Module Leader Assignment ─────────────────────────────────────────────────
+
+class ModuleLeaderAssignmentCreate(BaseModel):
+    batch_id: UUID
+    academic_term_id: UUID
+    course_id: UUID
+    user_id: UUID
+
+
+class ModuleLeaderAssignmentResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    batch_id: UUID
+    academic_term_id: UUID
+    course_id: UUID
+    user_id: UUID
     assigned_at: datetime
     removed_at: datetime | None
 

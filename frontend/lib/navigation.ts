@@ -10,10 +10,10 @@ import {
   BookCopy,
   Users2,
   CalendarDays,
-  Layers,
   Target,
   ListChecks,
   Grid3x3,
+  UserCog,
   ClipboardList,
   BarChart3,
   Bell,
@@ -50,10 +50,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Complex Attributes", href: "/complex-attributes", icon: Boxes, permission: "config.manage", group: "Configuration" },
 
   // Curriculum
-  { label: "Curricula", href: "/curricula", icon: BookCopy, permission: "curriculum.read", group: "Curriculum" },
+  { label: "Curricula", href: "/curricula", icon: BookCopy, permission: "curriculum.create", group: "Curriculum" },
   { label: "Courses", href: "/courses", icon: BookOpen, permission: "curriculum.read", group: "Curriculum" },
-  { label: "Academic Batches", href: "/batches", icon: Users2, permission: "curriculum.read", group: "Curriculum" },
-  { label: "Section Offerings", href: "/section-offerings", icon: Layers, permission: "curriculum.read", group: "Curriculum" },
+  { label: "Academic Batches", href: "/batches", icon: Users2, permission: "batch.create", group: "Curriculum" },
+  { label: "Module Leaders", href: "/module-leaders", icon: UserCog, permission: "faculty_assignment.create", group: "Curriculum" },
   { label: "Course Outcomes", href: "/course-outcomes", icon: ListChecks, permission: "co.read", group: "Curriculum" },
   { label: "CO-PO Mapping", href: "/mappings/co-po", icon: Grid3x3, permission: "mapping.co_po.read", group: "Curriculum" },
 

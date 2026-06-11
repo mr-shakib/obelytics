@@ -53,8 +53,11 @@ export const queryKeys = {
     list: (filters?: Record<string, unknown>) => ["courses", "list", filters] as const,
     detail: (id: string) => ["courses", id] as const,
   },
-  courseTypes: {
-    all: ["course-types"] as const,
+  courseCategories: {
+    all: ["course-categories"] as const,
+  },
+  courseBloomDomains: {
+    byCourse: (courseId: string) => ["courses", courseId, "bloom-domains"] as const,
   },
   batches: {
     all: ["batches"] as const,
@@ -70,11 +73,13 @@ export const queryKeys = {
   },
   sectionOfferings: {
     all: ["section-offerings"] as const,
-    list: (filters?: Record<string, unknown>) => ["section-offerings", "list", filters] as const,
-    detail: (id: string) => ["section-offerings", id] as const,
-    faculty: (id: string) => ["section-offerings", id, "faculty"] as const,
-    students: (id: string) => ["section-offerings", id, "students"] as const,
-    assessments: (id: string) => ["section-offerings", id, "assessments"] as const,
+  },
+  facultyAssignments: {
+    byOfferings: (offeringIds: string[]) => ["faculty-assignments", "by-offerings", offeringIds] as const,
+  },
+  moduleLeaderAssignments: {
+    byBatchTerm: (batchId: string, termId: string) => ["module-leader-assignments", batchId, termId] as const,
+    mine: ["module-leader-assignments", "mine"] as const,
   },
 
   // OBE
@@ -88,7 +93,6 @@ export const queryKeys = {
     list: (curriculumId?: string, courseId?: string) =>
       ["course-outcomes", "list", curriculumId, courseId] as const,
     detail: (id: string) => ["course-outcomes", id] as const,
-    mappings: (id: string) => ["course-outcomes", id, "mappings"] as const,
   },
   coPoMappings: {
     all: ["co-po-mappings"] as const,

@@ -8,7 +8,7 @@ from app.modules.ref_data.models import (
     BloomLevel,
     ComplexActivity,
     ComplexProblem,
-    CourseType,
+    CourseCategory,
     DeliveryMethod,
     KnowledgeProfile,
     MappingWeightLabel,
@@ -113,13 +113,13 @@ class DeliveryMethodRepository(_BaseRefRepo):
         return result.scalar_one_or_none()
 
 
-class CourseTypeRepository(_BaseRefRepo):
-    _model = CourseType
+class CourseCategoryRepository(_BaseRefRepo):
+    _model = CourseCategory
 
-    async def find_by_name(self, name: str, org_id: UUID) -> CourseType | None:
+    async def find_by_name(self, name: str, org_id: UUID) -> CourseCategory | None:
         result = await self._session.execute(
-            select(CourseType).where(
-                and_(CourseType.name == name, CourseType.organization_id == org_id)
+            select(CourseCategory).where(
+                and_(CourseCategory.name == name, CourseCategory.organization_id == org_id)
             )
         )
         return result.scalar_one_or_none()

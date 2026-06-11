@@ -10,7 +10,7 @@ from httpx import AsyncClient
 async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict:
     """
     Create a full scenario ready for attainment computation:
-    - Department, Program, CourseType, Course, Curriculum
+    - Department, Program, CourseCategory, Course, Curriculum
     - Batch, AcademicTerm, Section, SectionOffering
     - 2 students enrolled
     - 1 assessment (100% weightage) with 1 CO weight
@@ -52,9 +52,9 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
     assert prog_resp.status_code == 201, prog_resp.text
     program_id = prog_resp.json()["id"]
 
-    # Course type
+    # Course category
     ct_resp = await client.post(
-        "/api/v1/config/course-types",
+        "/api/v1/ref-data/course-categories",
         headers=headers,
         json={"name": f"Att Theory {suffix[:8]}"},
     )
@@ -66,7 +66,8 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
         "/api/v1/courses",
         headers=headers,
         json={
-            "course_type_id": ct_id,
+            "course_category_id": ct_id,
+            "course_type": "THEORY",
             "code": f"ATT{suffix[:6]}",
             "title": f"Att Course {suffix[:8]}",
             "credits": 3,
@@ -507,7 +508,7 @@ async def test_attainment_summary_not_found_before_publish(client: AsyncClient, 
     )
     prog_id = prog_resp.json()["id"]
     ct_resp = await client.post(
-        "/api/v1/config/course-types",
+        "/api/v1/ref-data/course-categories",
         headers=auth_headers,
         json={"name": f"NF CT {suffix}"},
     )
@@ -516,7 +517,8 @@ async def test_attainment_summary_not_found_before_publish(client: AsyncClient, 
         "/api/v1/courses",
         headers=auth_headers,
         json={
-            "course_type_id": ct_id,
+            "course_category_id": ct_id,
+            "course_type": "THEORY",
             "code": f"NF{suffix[:6]}",
             "title": f"NF Course {suffix}",
             "credits": 3,

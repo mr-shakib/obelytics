@@ -1,13 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Plus, Loader2, Pencil, Trash2 } from "lucide-react"
+import { Plus, Loader2, ListChecks } from "lucide-react"
+import type { ColumnDef } from "@tanstack/react-table"
+import { useResolveCourseLocation } from "@/hooks/use-course-location"
+import { usePermission } from "@/hooks/use-permission"
 import { PageHeader } from "@/components/shared/page-header"
+import { DataTable } from "@/components/shared/data-table"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { Button } from "@/components/ui/button"
@@ -24,7 +29,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -39,6 +46,7 @@ type TermDef    = { id: string; term_number: number; name: string }
 type CourseSlot = { id: string; curriculum_term_definition_id: string; course_id: string; is_elective: boolean }
 type Course     = { id: string; code: string; title: string }
 type BloomLevel = { id: string; code: string; name: string; bloom_domain_id: string; order_index: number }
+type BloomDomain = { id: string; name: string }
 type CourseOutcome = {
   id: string
   code: string
@@ -46,6 +54,7 @@ type CourseOutcome = {
   bloom_level_id: string | null
   status: string
 }
+type ModuleLeaderAssignment = { course_id: string }
 
 // ── Form schema ───────────────────────────────────────────────────────────────
 
@@ -56,72 +65,12 @@ const coSchema = z.object({
 })
 type COFormValues = z.infer<typeof coSchema>
 
-// ── CO row ────────────────────────────────────────────────────────────────────
-
-function CORow({
-  co,
-  bloomName,
-  onEdit,
-  onDelete,
-  canEdit,
-}: {
-  co: CourseOutcome
-  bloomName: string
-  onEdit: (co: CourseOutcome) => void
-  onDelete: (id: string) => void
-  canEdit: boolean
-}) {
-  const deletable = co.status === "DRAFT"
-
-  return (
-    <div className="flex items-start justify-between gap-4 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/30 transition-colors group">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono font-semibold text-sm">{co.code}</span>
-          <StatusBadge status={co.status} />
-          {bloomName && (
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-              {bloomName}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground leading-relaxed" title={co.statement}>
-          {truncate(co.statement, 120)}
-        </p>
-      </div>
-      {canEdit && (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 w-7 p-0"
-            onClick={() => onEdit(co)}
-            title="Edit"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-            onClick={() => onDelete(co.id)}
-            disabled={!deletable}
-            title={deletable ? "Delete" : "Cannot delete — not a draft"}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Add / Edit dialog ─────────────────────────────────────────────────────────
+// ── Add dialog ────────────────────────────────────────────────────────────────
 
 function CODialog({
   open,
   onOpenChange,
-  editing,
+  bloomDomains,
   bloomLevels,
   suggestedCode,
   onSubmit,
@@ -129,12 +78,13 @@ function CODialog({
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  editing: CourseOutcome | null
+  bloomDomains: BloomDomain[]
   bloomLevels: BloomLevel[]
   suggestedCode: string
   onSubmit: (values: COFormValues) => void
   isPending: boolean
 }) {
+  const bloomLevelById = Object.fromEntries(bloomLevels.map((l) => [l.id, l]))
   const {
     register,
     handleSubmit,
@@ -145,19 +95,15 @@ function CODialog({
 
   useEffect(() => {
     if (open) {
-      reset(
-        editing
-          ? { code: editing.code, statement: editing.statement, bloom_level_id: editing.bloom_level_id ?? "" }
-          : { code: suggestedCode, statement: "", bloom_level_id: "" }
-      )
+      reset({ code: suggestedCode, statement: "", bloom_level_id: "" })
     }
-  }, [open, editing, suggestedCode, reset])
+  }, [open, suggestedCode, reset])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? "Edit Course Outcome" : "Add Course Outcome"}</DialogTitle>
+          <DialogTitle>Add Course Outcome</DialogTitle>
         </DialogHeader>
         <form id="co-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
           <div className="space-y-2">
@@ -187,15 +133,26 @@ function CODialog({
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select bloom level">
                       {(v: string | null) => {
-                        const bl = bloomLevels.find((b) => b.id === v)
+                        const bl = bloomLevelById[v ?? ""]
                         return bl ? `${bl.code} — ${bl.name}` : null
                       }}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {bloomLevels.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>
-                    ))}
+                    {bloomDomains.map((domain) => {
+                      const levels = bloomLevels
+                        .filter((l) => l.bloom_domain_id === domain.id)
+                        .sort((a, b) => a.order_index - b.order_index)
+                      if (levels.length === 0) return null
+                      return (
+                        <SelectGroup key={domain.id}>
+                          <SelectLabel>{domain.name}</SelectLabel>
+                          {levels.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>{l.code} — {l.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
               )}
@@ -205,7 +162,7 @@ function CODialog({
         <DialogFooter showCloseButton>
           <Button type="submit" form="co-form" disabled={isPending}>
             {isPending && <Loader2 className="animate-spin" />}
-            {editing ? "Save Changes" : "Add CO"}
+            Add CO
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -217,12 +174,28 @@ function CODialog({
 
 export function CourseOutcomesClient() {
   const qc = useQueryClient()
+  const searchParams = useSearchParams()
+  const initialCourseId = searchParams.get("course_id") ?? ""
+
+  const router = useRouter()
 
   const [curriculumId, setCurriculumId] = useState("")
   const [termDefId,    setTermDefId]    = useState("")
   const [courseId,     setCourseId]     = useState("")
   const [dialogOpen,   setDialogOpen]   = useState(false)
-  const [editing,      setEditing]      = useState<CourseOutcome | null>(null)
+
+  // ── Deep-link from a course's "Design this course" link ──────────────────
+
+  const resolvedLocation = useResolveCourseLocation(initialCourseId)
+  const appliedInitialRef = useRef(false)
+
+  useEffect(() => {
+    if (appliedInitialRef.current || !resolvedLocation) return
+    appliedInitialRef.current = true
+    setCurriculumId(resolvedLocation.curriculumId)
+    setTermDefId(resolvedLocation.termDefId)
+    setCourseId(initialCourseId)
+  }, [resolvedLocation, initialCourseId])
 
   // ── Remote data ──────────────────────────────────────────────────────────
 
@@ -268,6 +241,24 @@ export function CourseOutcomesClient() {
     },
   })
 
+  const { data: bloomDomains = [] } = useQuery({
+    queryKey: queryKeys.refData.bloomDomains,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/ref-data/bloom-domains" as never)
+      return ((data as unknown) as { items?: BloomDomain[] })?.items ?? ((data as unknown) as BloomDomain[]) ?? []
+    },
+  })
+
+  const canManageCourses = usePermission("course.create")
+
+  const { data: myAssignments = [] } = useQuery({
+    queryKey: queryKeys.moduleLeaderAssignments.mine,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/module-leader-assignments/mine" as never)
+      return ((data as unknown) as ModuleLeaderAssignment[]) ?? []
+    },
+  })
+
   const { data: cos = [], isLoading: cosLoading } = useQuery({
     queryKey: queryKeys.courseOutcomes.list(curriculumId, courseId),
     queryFn: async () => {
@@ -287,61 +278,71 @@ export function CourseOutcomesClient() {
         .map((s) => s.course_id)
     : []
 
-  const coursesInTerm = allCourses.filter((c) => courseIdsInTerm.includes(c.id))
+  const myModuleLeaderCourseIds = new Set(myAssignments.map((a) => a.course_id))
+
+  const coursesInTerm = allCourses.filter((c) => {
+    if (!courseIdsInTerm.includes(c.id)) return false
+    if (!canManageCourses && myModuleLeaderCourseIds.size > 0) {
+      return myModuleLeaderCourseIds.has(c.id)
+    }
+    return true
+  })
 
   const bloomMap = new Map(bloomLevels.map((b) => [b.id, `${b.code} — ${b.name}`]))
   const suggestedCode = `CO${cos.length + 1}`
+
+  const columns: ColumnDef<CourseOutcome>[] = [
+    {
+      accessorKey: "code",
+      header: "Code",
+      cell: ({ row }) => <span className="font-mono font-semibold">{row.original.code}</span>,
+    },
+    {
+      accessorKey: "statement",
+      header: "Statement",
+      cell: ({ row }) => (
+        <span title={row.original.statement}>{truncate(row.original.statement, 80)}</span>
+      ),
+    },
+    {
+      id: "bloom_level",
+      header: "Bloom Level",
+      cell: ({ row }) =>
+        bloomMap.get(row.original.bloom_level_id ?? "") ?? (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+  ]
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const addMutation = useMutation({
     mutationFn: async (values: COFormValues) => {
       await apiClient.POST("/course-outcomes" as never, {
-        body: { curriculum_id: curriculumId, course_id: courseId, ...values },
+        body: {
+          curriculum_id: curriculumId,
+          course_id: courseId,
+          ...values,
+          bloom_level_id: values.bloom_level_id || undefined,
+        },
       } as never)
     },
     onSuccess: () => {
       toast.success("Course Outcome added")
       qc.invalidateQueries({ queryKey: queryKeys.courseOutcomes.list(curriculumId, courseId) })
       setDialogOpen(false)
-      setEditing(null)
     },
     onError: () => toast.error("Failed to add CO"),
-  })
-
-  const editMutation = useMutation({
-    mutationFn: async (values: COFormValues) => {
-      await apiClient.PATCH(`/course-outcomes/${editing!.id}` as never, { body: values } as never)
-    },
-    onSuccess: () => {
-      toast.success("Course Outcome updated")
-      qc.invalidateQueries({ queryKey: queryKeys.courseOutcomes.list(curriculumId, courseId) })
-      setDialogOpen(false)
-      setEditing(null)
-    },
-    onError: () => toast.error("Failed to update CO"),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiClient.DELETE(`/course-outcomes/${id}` as never)
-    },
-    onSuccess: () => {
-      toast.success("Course Outcome deleted")
-      qc.invalidateQueries({ queryKey: queryKeys.courseOutcomes.list(curriculumId, courseId) })
-    },
-    onError: () => toast.error("Cannot delete — only DRAFT outcomes can be removed"),
   })
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   function openAdd() {
-    setEditing(null)
-    setDialogOpen(true)
-  }
-
-  function openEdit(co: CourseOutcome) {
-    setEditing(co)
     setDialogOpen(true)
   }
 
@@ -376,116 +377,104 @@ export function CourseOutcomesClient() {
       />
 
       {/* Cascading selectors */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <div className="w-56">
-          <Select value={curriculumId} onValueChange={handleChangeCurriculum}>
-            <SelectTrigger>
-              <SelectValue placeholder="1. Select curriculum">
-                {(v: string | null) => v ? (curricula.find((c) => c.id === v)?.name ?? v) : null}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {curricula.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="rounded-xl border border-border bg-muted/30 p-4 mb-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Curriculum</Label>
+            <Select value={curriculumId} onValueChange={handleChangeCurriculum}>
+              <SelectTrigger className="h-11 w-full text-sm">
+                <SelectValue placeholder="Choose a curriculum">
+                  {(v: string | null) => v ? (curricula.find((c) => c.id === v)?.name ?? v) : null}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {curricula.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="w-48">
-          <Select value={termDefId} onValueChange={handleChangeTerm} disabled={!curriculumId}>
-            <SelectTrigger>
-              <SelectValue placeholder={curriculumId ? "2. Select semester" : "2. Curriculum first"}>
-                {(v: string | null) => {
-                  const t = termDefs.find((td) => td.id === v)
-                  return t ? `Sem ${t.term_number} — ${t.name}` : null
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {termDefs.map((t) => (
-                <SelectItem key={t.id} value={t.id}>Sem {t.term_number} — {t.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Semester</Label>
+            <Select value={termDefId} onValueChange={handleChangeTerm} disabled={!curriculumId}>
+              <SelectTrigger className="h-11 w-full text-sm">
+                <SelectValue placeholder={curriculumId ? "Choose a semester" : "Select a curriculum first"}>
+                  {(v: string | null) => {
+                    const t = termDefs.find((td) => td.id === v)
+                    return t ? `Sem ${t.term_number} — ${t.name}` : null
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {termDefs.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>Sem {t.term_number} — {t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="w-64">
-          <Select value={courseId} onValueChange={(v) => setCourseId(v ?? "")} disabled={!termDefId}>
-            <SelectTrigger>
-              <SelectValue placeholder={termDefId ? "3. Select course" : "3. Semester first"}>
-                {(v: string | null) => {
-                  const c = coursesInTerm.find((co) => co.id === v)
-                  return c ? `${c.code} — ${c.title}` : null
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {coursesInTerm.length === 0 && (
-                <SelectItem value="__none__" disabled>No courses in this semester</SelectItem>
-              )}
-              {coursesInTerm.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.code} — {c.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Course</Label>
+            <Select value={courseId} onValueChange={(v) => setCourseId(v ?? "")} disabled={!termDefId}>
+              <SelectTrigger className="h-11 w-full text-sm">
+                <SelectValue placeholder={termDefId ? "Choose a course" : "Select a semester first"}>
+                  {(v: string | null) => {
+                    const c = coursesInTerm.find((co) => co.id === v)
+                    return c ? `${c.code} — ${c.title}` : null
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {coursesInTerm.length === 0 && (
+                  <SelectItem value="__none__" disabled>No courses in this semester</SelectItem>
+                )}
+                {coursesInTerm.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.code} — {c.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
       {/* CO list */}
       {!courseId && (
-        <div className="border border-dashed border-border rounded-lg p-12 text-center text-sm text-muted-foreground">
-          Select a curriculum, semester, and course to see its outcomes.
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-12 text-center">
+          <ListChecks className="h-8 w-8 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            Select a curriculum, semester, and course above to see its outcomes.
+          </p>
         </div>
       )}
 
       {courseId && (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 bg-muted/40 border-b border-border flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
             <span className="text-sm font-medium">
               {selectedCourse ? `${selectedCourse.code} — ${selectedCourse.title}` : ""}
             </span>
             <span className="text-xs text-muted-foreground">{cos.length} outcome{cos.length !== 1 ? "s" : ""}</span>
           </div>
 
-          {cosLoading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div>
-          ) : cos.length === 0 ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              No outcomes yet.{" "}
-              <PermissionGate permission="co.create">
-                <button
-                  type="button"
-                  className="text-primary underline"
-                  onClick={openAdd}
-                >
-                  Add the first CO.
-                </button>
-              </PermissionGate>
-            </div>
-          ) : (
-            cos.map((co) => (
-              <CORow
-                key={co.id}
-                co={co}
-                bloomName={bloomMap.get(co.bloom_level_id ?? "") ?? ""}
-                onEdit={openEdit}
-                onDelete={(id) => deleteMutation.mutate(id)}
-                canEdit={true}
-              />
-            ))
-          )}
+          <DataTable
+            columns={columns}
+            data={cos}
+            loading={cosLoading}
+            onRowClick={(row) => router.push(`/course-outcomes/${row.id}`)}
+            emptyMessage="No outcomes yet."
+          />
         </div>
       )}
 
       <CODialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        editing={editing}
+        bloomDomains={bloomDomains}
         bloomLevels={bloomLevels}
         suggestedCode={suggestedCode}
-        onSubmit={(v) => (editing ? editMutation : addMutation).mutate(v)}
-        isPending={addMutation.isPending || editMutation.isPending}
+        onSubmit={(v) => addMutation.mutate(v)}
+        isPending={addMutation.isPending}
       />
     </div>
   )

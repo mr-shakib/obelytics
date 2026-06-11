@@ -1,17 +1,19 @@
 from uuid import UUID
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.curriculum.models import (
     AcademicTerm,
     Batch,
     Course,
+    CourseBloomDomain,
     CoursePrerequisite,
     Curriculum,
     CurriculumCourseSlot,
     CurriculumTermDefinition,
     FacultyAssignment,
+    ModuleLeaderAssignment,
     Section,
     SectionOffering,
 )
@@ -149,6 +151,31 @@ class CourseRepository:
         await self._session.flush()
         await self._session.refresh(course)
         return course
+
+
+class CourseBloomDomainRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_course(self, course_id: UUID) -> list[CourseBloomDomain]:
+        result = await self._session.execute(
+            select(CourseBloomDomain).where(CourseBloomDomain.course_id == course_id)
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_course(
+        self, course_id: UUID, bloom_domain_ids: list[UUID]
+    ) -> list[CourseBloomDomain]:
+        await self._session.execute(
+            delete(CourseBloomDomain).where(CourseBloomDomain.course_id == course_id)
+        )
+        records = [
+            CourseBloomDomain(course_id=course_id, bloom_domain_id=domain_id)
+            for domain_id in bloom_domain_ids
+        ]
+        self._session.add_all(records)
+        await self._session.flush()
+        return records
 
 
 class CourseSlotRepository:
@@ -491,6 +518,75 @@ class FacultyAssignmentRepository:
 
     async def remove(self, assignment: FacultyAssignment) -> FacultyAssignment:
         """Sets removed_at to now() by marking it dirty and flushing."""
+        from datetime import datetime, timezone
+        assignment.removed_at = datetime.now(timezone.utc)
+        self._session.add(assignment)
+        await self._session.flush()
+        await self._session.refresh(assignment)
+        return assignment
+
+
+class ModuleLeaderAssignmentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def find_active(
+        self, batch_id: UUID, academic_term_id: UUID, course_id: UUID
+    ) -> ModuleLeaderAssignment | None:
+        result = await self._session.execute(
+            select(ModuleLeaderAssignment).where(
+                and_(
+                    ModuleLeaderAssignment.batch_id == batch_id,
+                    ModuleLeaderAssignment.academic_term_id == academic_term_id,
+                    ModuleLeaderAssignment.course_id == course_id,
+                    ModuleLeaderAssignment.removed_at.is_(None),
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_for_user(
+        self, org_id: UUID, user_id: UUID
+    ) -> list[ModuleLeaderAssignment]:
+        result = await self._session.execute(
+            select(ModuleLeaderAssignment).where(
+                and_(
+                    ModuleLeaderAssignment.organization_id == org_id,
+                    ModuleLeaderAssignment.user_id == user_id,
+                    ModuleLeaderAssignment.removed_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def list_active(
+        self, org_id: UUID, batch_id: UUID, academic_term_id: UUID
+    ) -> list[ModuleLeaderAssignment]:
+        result = await self._session.execute(
+            select(ModuleLeaderAssignment).where(
+                and_(
+                    ModuleLeaderAssignment.organization_id == org_id,
+                    ModuleLeaderAssignment.batch_id == batch_id,
+                    ModuleLeaderAssignment.academic_term_id == academic_term_id,
+                    ModuleLeaderAssignment.removed_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_by_id(self, assignment_id: UUID) -> ModuleLeaderAssignment | None:
+        result = await self._session.execute(
+            select(ModuleLeaderAssignment).where(ModuleLeaderAssignment.id == assignment_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, assignment: ModuleLeaderAssignment) -> ModuleLeaderAssignment:
+        self._session.add(assignment)
+        await self._session.flush()
+        await self._session.refresh(assignment)
+        return assignment
+
+    async def remove(self, assignment: ModuleLeaderAssignment) -> ModuleLeaderAssignment:
         from datetime import datetime, timezone
         assignment.removed_at = datetime.now(timezone.utc)
         self._session.add(assignment)

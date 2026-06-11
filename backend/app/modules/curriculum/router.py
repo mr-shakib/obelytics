@@ -19,6 +19,7 @@ from app.modules.curriculum.schemas import (
     BatchTermCalendarEntry,
     BatchTermOfferingCourse,
     BatchUpdate,
+    CourseBloomDomainsUpdate,
     CourseCreate,
     CourseResponse,
     CourseSlotCreate,
@@ -31,6 +32,8 @@ from app.modules.curriculum.schemas import (
     CurriculumUpdate,
     FacultyAssignmentCreate,
     FacultyAssignmentResponse,
+    ModuleLeaderAssignmentCreate,
+    ModuleLeaderAssignmentResponse,
     PrerequisiteCreate,
     PrerequisiteResponse,
     SectionCreate,
@@ -42,11 +45,13 @@ from app.modules.curriculum.schemas import (
 from app.modules.curriculum.service import (
     AcademicTermService,
     BatchService,
+    CourseBloomDomainService,
     CourseService,
     CourseSlotService,
     CurriculumService,
     CurriculumTermService,
     FacultyAssignmentService,
+    ModuleLeaderAssignmentService,
     PrerequisiteService,
     SectionOfferingService,
     SectionService,
@@ -222,6 +227,29 @@ async def archive_course(
 ):
     svc = CourseService(db)
     return await svc.archive(course_id, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}/bloom-domains", response_model=list[UUID])
+async def list_course_bloom_domains(
+    course_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseBloomDomainService(db)
+    return await svc.list_for_course(course_id, current_user.organization_id)
+
+
+@router.put("/courses/{course_id}/bloom-domains", response_model=list[UUID])
+async def set_course_bloom_domains(
+    course_id: UUID,
+    body: CourseBloomDomainsUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseBloomDomainService(db)
+    return await svc.set_for_course(course_id, body, current_user.organization_id)
 
 
 @router.get("/courses/{course_id}/prerequisites", response_model=list[PrerequisiteResponse])
@@ -619,4 +647,58 @@ async def remove_faculty_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = FacultyAssignmentService(db)
+    return await svc.remove(assignment_id, current_user.organization_id)
+
+
+# ── Module Leader Assignments ────────────────────────────────────────────────
+
+@router.get("/module-leader-assignments/mine", response_model=list[ModuleLeaderAssignmentResponse])
+async def list_my_module_leader_assignments(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ModuleLeaderAssignmentService(db)
+    return await svc.list_mine(current_user.organization_id, current_user.id)
+
+
+@router.get("/module-leader-assignments", response_model=list[ModuleLeaderAssignmentResponse])
+async def list_module_leader_assignments(
+    batch_id: UUID,
+    academic_term_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ModuleLeaderAssignmentService(db)
+    return await svc.list_active(current_user.organization_id, batch_id, academic_term_id)
+
+
+@router.post(
+    "/module-leader-assignments",
+    response_model=ModuleLeaderAssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def assign_module_leader(
+    body: ModuleLeaderAssignmentCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("faculty_assignment.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ModuleLeaderAssignmentService(db)
+    return await svc.assign(body, current_user.organization_id)
+
+
+@router.delete(
+    "/module-leader-assignments/{assignment_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=ModuleLeaderAssignmentResponse,
+)
+async def remove_module_leader_assignment(
+    assignment_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("faculty_assignment.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ModuleLeaderAssignmentService(db)
     return await svc.remove(assignment_id, current_user.organization_id)

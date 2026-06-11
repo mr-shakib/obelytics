@@ -13,6 +13,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { PageHeader } from "@/components/shared/page-header"
 import { DataTable } from "@/components/shared/data-table"
 import { StatusBadge } from "@/components/shared/status-badge"
+import { Badge } from "@/components/ui/badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,26 +36,40 @@ import {
 } from "@/components/ui/select"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { usePermission } from "@/hooks/use-permission"
 
 type Course = {
   id: string
   code: string
   title: string
   credits: number
-  course_type_id: string
+  course_category_id: string
+  course_type: string
   theory_hours: number
   lab_hours: number
   description: string | null
   status: string
 }
 
-type CourseType = { id: string; name: string }
+type CourseCategory = { id: string; name: string }
+
+type ModuleLeaderAssignment = { course_id: string }
+
+const COURSE_TYPE_LABELS: Record<string, string> = {
+  THEORY: "Theory",
+  LAB: "Lab",
+  THEORY_LAB: "Theory + Lab",
+  THESIS_DEFENSE: "Final Year Thesis Defense",
+}
 
 const schema = z.object({
   code: z.string().min(1, "Code is required").max(30),
   title: z.string().min(1, "Title is required").max(255),
   credits: z.number().int().min(0, "Credits cannot be negative").max(20),
-  course_type_id: z.string().min(1, "Course type is required"),
+  course_category_id: z.string().min(1, "Course category is required"),
+  course_type: z.enum(["THEORY", "LAB", "THEORY_LAB", "THESIS_DEFENSE"], {
+    error: "Course type is required",
+  }),
   theory_hours: z.number().int().min(0),
   lab_hours: z.number().int().min(0),
   description: z.string().max(2000).optional(),
@@ -63,11 +78,14 @@ type FormValues = z.infer<typeof schema>
 
 export function CoursesClient() {
   const [open, setOpen] = useState(false)
-  const [selTypeId, setSelTypeId] = useState("")
+  const [selCategoryId, setSelCategoryId] = useState("")
+  const [selCourseType, setSelCourseType] = useState("")
   const qc = useQueryClient()
   const router = useRouter()
 
-  const { data: courses = [], isLoading } = useQuery({
+  const canManageCourses = usePermission("course.create")
+
+  const { data: allCourses = [], isLoading } = useQuery({
     queryKey: queryKeys.courses.all,
     queryFn: async () => {
       const { data } = await apiClient.GET("/courses" as never)
@@ -75,43 +93,76 @@ export function CoursesClient() {
     },
   })
 
-  const { data: courseTypes = [] } = useQuery({
-    queryKey: queryKeys.courseTypes.all,
+  const { data: courseCategories = [] } = useQuery({
+    queryKey: queryKeys.courseCategories.all,
     queryFn: async () => {
-      const { data } = await apiClient.GET("/ref-data/course-types" as never)
-      return ((data as unknown) as CourseType[]) ?? []
+      const { data } = await apiClient.GET("/ref-data/course-categories" as never)
+      return ((data as unknown) as CourseCategory[]) ?? []
     },
   })
 
-  const courseTypeById = Object.fromEntries(courseTypes.map((t) => [t.id, t]))
+  const { data: myAssignments = [] } = useQuery({
+    queryKey: queryKeys.moduleLeaderAssignments.mine,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/module-leader-assignments/mine" as never)
+      return ((data as unknown) as ModuleLeaderAssignment[]) ?? []
+    },
+  })
 
-  const [newTypeOpen, setNewTypeOpen] = useState(false)
-  const [newTypeName, setNewTypeName] = useState("")
+  const myModuleLeaderCourseIds = new Set(myAssignments.map((a) => a.course_id))
 
-  const createTypeMutation = useMutation({
+  // Module Leaders (and other non-managing roles with assignments) only see
+  // the courses they've been assigned to lead.
+  const courses =
+    !canManageCourses && myModuleLeaderCourseIds.size > 0
+      ? allCourses.filter((c) => myModuleLeaderCourseIds.has(c.id))
+      : allCourses
+
+  const courseCategoryById = Object.fromEntries(courseCategories.map((t) => [t.id, t]))
+
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
+
+  const createCategoryMutation = useMutation({
     mutationFn: async (name: string) => {
-      const { data } = await apiClient.POST("/ref-data/course-types" as never, { body: { name } } as never)
-      return (data as unknown) as CourseType
+      const { data } = await apiClient.POST("/ref-data/course-categories" as never, { body: { name } } as never)
+      return (data as unknown) as CourseCategory
     },
     onSuccess: (created) => {
-      toast.success("Course type created")
-      qc.invalidateQueries({ queryKey: queryKeys.courseTypes.all })
-      setSelTypeId(created.id)
-      setValue("course_type_id", created.id, { shouldValidate: true })
-      setNewTypeName("")
-      setNewTypeOpen(false)
+      toast.success("Course category created")
+      qc.invalidateQueries({ queryKey: queryKeys.courseCategories.all })
+      setSelCategoryId(created.id)
+      setValue("course_category_id", created.id, { shouldValidate: true })
+      setNewCategoryName("")
+      setNewCategoryOpen(false)
     },
-    onError: () => toast.error("Failed to create course type"),
+    onError: () => toast.error("Failed to create course category"),
   })
 
   const columns: ColumnDef<Course>[] = [
     { accessorKey: "code", header: "Code" },
-    { accessorKey: "title", header: "Title" },
+    {
+      accessorKey: "title",
+      header: "Title",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <span>{row.original.title}</span>
+          {canManageCourses && myModuleLeaderCourseIds.has(row.original.id) && (
+            <Badge variant="secondary">Module Leader</Badge>
+          )}
+        </div>
+      ),
+    },
     { accessorKey: "credits", header: "Credits" },
     {
-      id: "course_type",
+      id: "course_category",
+      header: "Category",
+      cell: ({ row }) => courseCategoryById[row.original.course_category_id]?.name ?? "—",
+    },
+    {
+      accessorKey: "course_type",
       header: "Type",
-      cell: ({ row }) => courseTypeById[row.original.course_type_id]?.name ?? "—",
+      cell: ({ row }) => COURSE_TYPE_LABELS[row.original.course_type] ?? row.original.course_type,
     },
     { accessorKey: "theory_hours", header: "Theory Hrs" },
     { accessorKey: "lab_hours", header: "Lab Hrs" },
@@ -140,7 +191,8 @@ export function CoursesClient() {
           code: values.code,
           title: values.title,
           credits: values.credits,
-          course_type_id: values.course_type_id,
+          course_category_id: values.course_category_id,
+          course_type: values.course_type,
           theory_hours: values.theory_hours,
           lab_hours: values.lab_hours,
           description: values.description || undefined,
@@ -151,7 +203,7 @@ export function CoursesClient() {
       toast.success("Course created")
       qc.invalidateQueries({ queryKey: queryKeys.courses.all })
       setOpen(false)
-      setSelTypeId("")
+      setSelCategoryId("")
       reset({ theory_hours: 0, lab_hours: 0 })
     },
     onError: () => toast.error("Failed to create course"),
@@ -169,9 +221,10 @@ export function CoursesClient() {
               onOpenChange={(v) => {
                 setOpen(v)
                 if (!v) {
-                  setSelTypeId("")
-                  setNewTypeOpen(false)
-                  setNewTypeName("")
+                  setSelCategoryId("")
+                  setSelCourseType("")
+                  setNewCategoryOpen(false)
+                  setNewCategoryName("")
                   reset({ theory_hours: 0, lab_hours: 0 })
                 }
               }}
@@ -220,62 +273,94 @@ export function CoursesClient() {
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label>Course Type</Label>
+                      <Label>Course Category</Label>
                       <PermissionGate permission="config.manage">
                         <button
                           type="button"
                           className="text-xs font-medium text-primary hover:underline"
                           onClick={() => {
-                            setNewTypeOpen((v) => !v)
-                            setNewTypeName("")
+                            setNewCategoryOpen((v) => !v)
+                            setNewCategoryName("")
                           }}
                         >
-                          {newTypeOpen ? "Cancel" : "+ New type"}
+                          {newCategoryOpen ? "Cancel" : "+ New category"}
                         </button>
                       </PermissionGate>
                     </div>
-                    {newTypeOpen && (
+                    {newCategoryOpen && (
                       <div className="flex gap-2 rounded-lg border bg-muted/30 p-2">
                         <Input
                           className="flex-1"
                           placeholder="e.g. Core, Elective, Lab"
-                          value={newTypeName}
-                          onChange={(e) => setNewTypeName(e.target.value)}
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
                         />
                         <Button
                           type="button"
                           size="sm"
-                          disabled={!newTypeName.trim() || createTypeMutation.isPending}
-                          onClick={() => createTypeMutation.mutate(newTypeName.trim())}
+                          disabled={!newCategoryName.trim() || createCategoryMutation.isPending}
+                          onClick={() => createCategoryMutation.mutate(newCategoryName.trim())}
                         >
-                          {createTypeMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                          {createCategoryMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                           Add
                         </Button>
                       </div>
                     )}
                     <Select
-                      value={selTypeId}
+                      value={selCategoryId}
                       onValueChange={(v) => {
                         if (v == null) return
-                        setSelTypeId(v as string)
-                        setValue("course_type_id", v as string, { shouldValidate: true })
+                        setSelCategoryId(v as string)
+                        setValue("course_category_id", v as string, { shouldValidate: true })
                       }}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select type">
-                          {selTypeId ? courseTypeById[selTypeId]?.name : undefined}
+                        <SelectValue placeholder="Select category">
+                          {selCategoryId ? courseCategoryById[selCategoryId]?.name : undefined}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {courseTypes.map((t) => (
+                        {courseCategories.map((t) => (
                           <SelectItem key={t.id} value={t.id}>
                             {t.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {errors.course_type_id && (
-                      <p className="text-sm text-destructive">{errors.course_type_id.message}</p>
+                    {errors.course_category_id && (
+                      <p className="text-sm text-destructive">{errors.course_category_id.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Course Type</Label>
+                    <Select
+                      value={selCourseType}
+                      onValueChange={(v) => {
+                        if (v == null) return
+                        setSelCourseType(v as string)
+                        setValue("course_type", v as FormValues["course_type"], { shouldValidate: true })
+                        if (v === "THEORY") {
+                          setValue("lab_hours", 0, { shouldValidate: true })
+                        } else if (v === "LAB") {
+                          setValue("theory_hours", 0, { shouldValidate: true })
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select course type">
+                          {selCourseType ? COURSE_TYPE_LABELS[selCourseType] : undefined}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(COURSE_TYPE_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.course_type && (
+                      <p className="text-sm text-destructive">{errors.course_type.message}</p>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -285,6 +370,7 @@ export function CoursesClient() {
                         id="theory_hours"
                         type="number"
                         min={0}
+                        disabled={selCourseType === "LAB"}
                         {...register("theory_hours", { valueAsNumber: true })}
                       />
                       {errors.theory_hours && (
@@ -297,6 +383,7 @@ export function CoursesClient() {
                         id="lab_hours"
                         type="number"
                         min={0}
+                        disabled={selCourseType === "THEORY"}
                         {...register("lab_hours", { valueAsNumber: true })}
                       />
                       {errors.lab_hours && (
@@ -346,7 +433,11 @@ export function CoursesClient() {
         data={courses}
         loading={isLoading}
         onRowClick={(row) => router.push(`/courses/${row.id}`)}
-        emptyMessage="No courses found."
+        emptyMessage={
+          !canManageCourses && myAssignments.length === 0
+            ? "You haven't been assigned as Module Leader for any course yet."
+            : "No courses found."
+        }
       />
     </div>
   )

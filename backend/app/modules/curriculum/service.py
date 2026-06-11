@@ -4,6 +4,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.curriculum.domain.prerequisite_graph import PrerequisiteGraphValidator
+from app.modules.ref_data.exceptions import RefDataNotFoundError
+from app.modules.ref_data.repository import BloomDomainRepository
 from app.modules.curriculum.exceptions import (
     AcademicTermConflictError,
     AcademicTermNotFoundError,
@@ -17,6 +19,7 @@ from app.modules.curriculum.exceptions import (
     CycleDetectedError,
     FacultyAssignmentConflictError,
     FacultyAssignmentNotFoundError,
+    ModuleLeaderAssignmentNotFoundError,
     PrerequisiteNotFoundError,
     SectionConflictError,
     SectionNotFoundError,
@@ -32,17 +35,20 @@ from app.modules.curriculum.models import (
     CurriculumCourseSlot,
     CurriculumTermDefinition,
     FacultyAssignment,
+    ModuleLeaderAssignment,
     Section,
     SectionOffering,
 )
 from app.modules.curriculum.repository import (
     AcademicTermRepository,
     BatchRepository,
+    CourseBloomDomainRepository,
     CourseRepository,
     CourseSlotRepository,
     CurriculumRepository,
     CurriculumTermRepository,
     FacultyAssignmentRepository,
+    ModuleLeaderAssignmentRepository,
     PrerequisiteRepository,
     SectionOfferingRepository,
     SectionRepository,
@@ -52,6 +58,7 @@ from app.modules.curriculum.schemas import (
     AcademicTermUpdate,
     BatchCreate,
     BatchUpdate,
+    CourseBloomDomainsUpdate,
     CourseCreate,
     CourseSlotCreate,
     CourseUpdate,
@@ -59,6 +66,7 @@ from app.modules.curriculum.schemas import (
     CurriculumTermDefinitionCreate,
     CurriculumUpdate,
     FacultyAssignmentCreate,
+    ModuleLeaderAssignmentCreate,
     PrerequisiteCreate,
     SectionCreate,
     SectionOfferingCreate,
@@ -205,7 +213,8 @@ class CourseService:
             raise CourseCodeConflictError()
         course = Course(
             organization_id=org_id,
-            course_type_id=body.course_type_id,
+            course_category_id=body.course_category_id,
+            course_type=body.course_type,
             code=body.code,
             title=body.title,
             credits=body.credits,
@@ -247,6 +256,35 @@ class CourseService:
         if course is None:
             raise CourseNotFoundError()
         return course
+
+
+class CourseBloomDomainService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CourseBloomDomainRepository(session)
+        self._course_repo = CourseRepository(session)
+        self._bloom_domain_repo = BloomDomainRepository(session)
+
+    async def list_for_course(self, course_id: UUID, org_id: UUID) -> list[UUID]:
+        course = await self._course_repo.get_by_id(course_id, org_id)
+        if course is None:
+            raise CourseNotFoundError()
+        records = await self._repo.list_by_course(course_id)
+        return [r.bloom_domain_id for r in records]
+
+    async def set_for_course(
+        self, course_id: UUID, body: CourseBloomDomainsUpdate, org_id: UUID
+    ) -> list[UUID]:
+        course = await self._course_repo.get_by_id(course_id, org_id)
+        if course is None:
+            raise CourseNotFoundError()
+        valid_ids = {d.id for d in await self._bloom_domain_repo.list_active(org_id)}
+        for domain_id in body.bloom_domain_ids:
+            if domain_id not in valid_ids:
+                raise RefDataNotFoundError("Bloom domain")
+        records = await self._repo.replace_for_course(course_id, body.bloom_domain_ids)
+        await self._session.commit()
+        return [r.bloom_domain_id for r in records]
 
 
 class CourseSlotService:
@@ -841,3 +879,44 @@ class FacultyAssignmentService:
         self, offering_id: UUID
     ) -> list[FacultyAssignment]:
         return await self._repo.list_active_by_offering(offering_id)
+
+
+class ModuleLeaderAssignmentService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = ModuleLeaderAssignmentRepository(session)
+
+    async def list_active(
+        self, org_id: UUID, batch_id: UUID, academic_term_id: UUID
+    ) -> list[ModuleLeaderAssignment]:
+        return await self._repo.list_active(org_id, batch_id, academic_term_id)
+
+    async def list_mine(self, org_id: UUID, user_id: UUID) -> list[ModuleLeaderAssignment]:
+        return await self._repo.list_for_user(org_id, user_id)
+
+    async def assign(
+        self, body: ModuleLeaderAssignmentCreate, org_id: UUID
+    ) -> ModuleLeaderAssignment:
+        existing = await self._repo.find_active(
+            body.batch_id, body.academic_term_id, body.course_id
+        )
+        if existing:
+            await self._repo.remove(existing)
+        assignment = ModuleLeaderAssignment(
+            organization_id=org_id,
+            batch_id=body.batch_id,
+            academic_term_id=body.academic_term_id,
+            course_id=body.course_id,
+            user_id=body.user_id,
+        )
+        result = await self._repo.create(assignment)
+        await self._session.commit()
+        return result
+
+    async def remove(self, assignment_id: UUID, org_id: UUID) -> ModuleLeaderAssignment:
+        assignment = await self._repo.get_by_id(assignment_id)
+        if assignment is None or assignment.organization_id != org_id:
+            raise ModuleLeaderAssignmentNotFoundError()
+        result = await self._repo.remove(assignment)
+        await self._session.commit()
+        return result

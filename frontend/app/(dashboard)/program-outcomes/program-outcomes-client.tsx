@@ -28,7 +28,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -47,6 +49,7 @@ type ProgramOutcome = {
 
 type Program = { id: string; name: string }
 type BloomDomain = { id: string; name: string }
+type BloomLevel = { id: string; code: string; name: string; bloom_domain_id: string; order_index: number }
 
 const schema = z.object({
   program_id: z.string().min(1, "Program is required"),
@@ -109,13 +112,23 @@ export function ProgramOutcomesClient() {
     },
   })
 
-  const { data: bloomDomains } = useQuery({
+  const { data: bloomDomains = [] } = useQuery({
     queryKey: queryKeys.refData.bloomDomains,
     queryFn: async () => {
       const { data } = await apiClient.GET("/ref-data/bloom-domains" as never)
       return ((data as unknown) as { items?: BloomDomain[] })?.items ?? ((data as unknown) as BloomDomain[]) ?? []
     },
   })
+
+  const { data: bloomLevels = [] } = useQuery({
+    queryKey: queryKeys.refData.bloomLevels,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/ref-data/bloom-levels" as never)
+      return ((data as unknown) as BloomLevel[]) ?? []
+    },
+  })
+
+  const bloomLevelById = Object.fromEntries(bloomLevels.map((l) => [l.id, l]))
 
   const {
     register,
@@ -218,14 +231,30 @@ export function ProgramOutcomesClient() {
                       render={({ field }) => (
                         <Select value={field.value ?? ""} onValueChange={field.onChange}>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select bloom level" />
+                            <SelectValue placeholder="Select bloom level">
+                              {(v: string | null) => {
+                                const bl = bloomLevelById[v ?? ""]
+                                return bl ? `${bl.code} — ${bl.name}` : null
+                              }}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            {(bloomDomains ?? []).map((b) => (
-                              <SelectItem key={b.id} value={b.id}>
-                                {b.name}
-                              </SelectItem>
-                            ))}
+                            {bloomDomains.map((domain) => {
+                              const levels = bloomLevels
+                                .filter((l) => l.bloom_domain_id === domain.id)
+                                .sort((a, b) => a.order_index - b.order_index)
+                              if (levels.length === 0) return null
+                              return (
+                                <SelectGroup key={domain.id}>
+                                  <SelectLabel>{domain.name}</SelectLabel>
+                                  {levels.map((l) => (
+                                    <SelectItem key={l.id} value={l.id}>
+                                      {l.code} — {l.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              )
+                            })}
                           </SelectContent>
                         </Select>
                       )}

@@ -10,7 +10,7 @@ from app.modules.ref_data.models import (
     BloomLevel,
     ComplexActivity,
     ComplexProblem,
-    CourseType,
+    CourseCategory,
     DeliveryMethod,
     KnowledgeProfile,
     MappingWeightLabel,
@@ -22,7 +22,7 @@ from app.modules.ref_data.repository import (
     BloomLevelRepository,
     ComplexActivityRepository,
     ComplexProblemRepository,
-    CourseTypeRepository,
+    CourseCategoryRepository,
     DeliveryMethodRepository,
     KnowledgeProfileRepository,
     MappingWeightLabelRepository,
@@ -39,8 +39,8 @@ from app.modules.ref_data.schemas import (
     ComplexActivityUpdate,
     ComplexProblemCreate,
     ComplexProblemUpdate,
-    CourseTypeCreate,
-    CourseTypeUpdate,
+    CourseCategoryCreate,
+    CourseCategoryUpdate,
     DeliveryMethodCreate,
     DeliveryMethodUpdate,
     KnowledgeProfileCreate,
@@ -174,37 +174,37 @@ class DeliveryMethodService:
         return result
 
 
-class CourseTypeService:
+class CourseCategoryService:
     def __init__(self, session: AsyncSession) -> None:
-        self._repo = CourseTypeRepository(session)
+        self._repo = CourseCategoryRepository(session)
 
-    async def list_active(self, org_id: UUID) -> list[CourseType]:
+    async def list_active(self, org_id: UUID) -> list[CourseCategory]:
         return await self._repo.list_active(org_id)
 
-    async def get(self, record_id: UUID, org_id: UUID) -> CourseType:
+    async def get(self, record_id: UUID, org_id: UUID) -> CourseCategory:
         obj = await self._repo.get_by_id(record_id, org_id)
         if obj is None:
-            raise RefDataNotFoundError("Course type")
+            raise RefDataNotFoundError("Course category")
         return obj
 
-    async def create(self, body: CourseTypeCreate, org_id: UUID) -> CourseType:
+    async def create(self, body: CourseCategoryCreate, org_id: UUID) -> CourseCategory:
         if await self._repo.find_by_name(body.name, org_id):
-            raise RefDataConflictError("A course type with this name already exists")
-        obj = CourseType(organization_id=org_id, name=body.name, description=body.description)
+            raise RefDataConflictError("A course category with this name already exists")
+        obj = CourseCategory(organization_id=org_id, name=body.name, description=body.description)
         result = await self._repo.create(obj)
-        await _invalidate(org_id, "course_types")
+        await _invalidate(org_id, "course_categories")
         return result
 
-    async def update(self, record_id: UUID, body: CourseTypeUpdate, org_id: UUID) -> CourseType:
+    async def update(self, record_id: UUID, body: CourseCategoryUpdate, org_id: UUID) -> CourseCategory:
         obj = await self._repo.get_by_id(record_id, org_id)
         if obj is None:
-            raise RefDataNotFoundError("Course type")
+            raise RefDataNotFoundError("Course category")
         data = body.model_dump(exclude_none=True)
         if "name" in data and data["name"] != obj.name:
             if await self._repo.find_by_name(data["name"], org_id):
-                raise RefDataConflictError("A course type with this name already exists")
+                raise RefDataConflictError("A course category with this name already exists")
         result = await self._repo.update(obj, data)
-        await _invalidate(org_id, "course_types")
+        await _invalidate(org_id, "course_categories")
         return result
 
 

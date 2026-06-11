@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Loader2, Save } from "lucide-react"
+import { Loader2, Save, Grid3x3 } from "lucide-react"
+import { useResolveCourseLocation } from "@/hooks/use-course-location"
 import { PageHeader } from "@/components/shared/page-header"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -58,10 +61,14 @@ function matrixKey(coId: string, poId: string) {
   return `${coId}:${poId}`
 }
 
+const EMPTY_ENTRIES: MappingEntry[] = []
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CoPoMappingClient() {
   const qc = useQueryClient()
+  const searchParams = useSearchParams()
+  const initialCourseId = searchParams.get("course_id") ?? ""
 
   const [curriculumId, setCurriculumId] = useState("")
   const [termDefId,    setTermDefId]    = useState("")
@@ -69,6 +76,19 @@ export function CoPoMappingClient() {
   const [setId,        setSetId]        = useState<string | null>(null)
   const [matrix,       setMatrix]       = useState<Map<string, Weight>>(new Map())
   const [dirty,        setDirty]        = useState(false)
+
+  // ── Deep-link from a course's "Design this course" link ──────────────────
+
+  const resolvedLocation = useResolveCourseLocation(initialCourseId)
+  const appliedInitialRef = useRef(false)
+
+  useEffect(() => {
+    if (appliedInitialRef.current || !resolvedLocation) return
+    appliedInitialRef.current = true
+    setCurriculumId(resolvedLocation.curriculumId)
+    setTermDefId(resolvedLocation.termDefId)
+    setCourseId(initialCourseId)
+  }, [resolvedLocation, initialCourseId])
 
   // ── Data fetching ────────────────────────────────────────────────────────
 
@@ -148,7 +168,7 @@ export function CoPoMappingClient() {
     retry: false,
   })
 
-  const { data: existingEntries = [] } = useQuery({
+  const { data: existingEntries = EMPTY_ENTRIES } = useQuery({
     queryKey: queryKeys.coPoMappings.entries(setId ?? ""),
     queryFn: async () => {
       const { data } = await apiClient.GET(`/mappings/co-po/${setId}/entries` as never)
@@ -275,64 +295,69 @@ export function CoPoMappingClient() {
       />
 
       {/* Selectors */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="w-56">
-          <Select value={curriculumId} onValueChange={handleChangeCurriculum}>
-            <SelectTrigger>
-              <SelectValue placeholder="1. Select curriculum">
-                {(v: string | null) => v ? (curricula.find((c) => c.id === v)?.name ?? v) : null}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {curricula.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="rounded-xl border border-border bg-muted/30 p-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Curriculum</Label>
+            <Select value={curriculumId} onValueChange={handleChangeCurriculum}>
+              <SelectTrigger className="h-11 w-full text-sm">
+                <SelectValue placeholder="Choose a curriculum">
+                  {(v: string | null) => v ? (curricula.find((c) => c.id === v)?.name ?? v) : null}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {curricula.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="w-48">
-          <Select value={termDefId} onValueChange={handleChangeTerm} disabled={!curriculumId}>
-            <SelectTrigger>
-              <SelectValue placeholder={curriculumId ? "2. Select semester" : "2. Curriculum first"}>
-                {(v: string | null) => {
-                  const t = termDefs.find((td) => td.id === v)
-                  return t ? `Sem ${t.term_number} — ${t.name}` : null
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {termDefs.map((t) => (
-                <SelectItem key={t.id} value={t.id}>Sem {t.term_number} — {t.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Semester</Label>
+            <Select value={termDefId} onValueChange={handleChangeTerm} disabled={!curriculumId}>
+              <SelectTrigger className="h-11 w-full text-sm">
+                <SelectValue placeholder={curriculumId ? "Choose a semester" : "Select a curriculum first"}>
+                  {(v: string | null) => {
+                    const t = termDefs.find((td) => td.id === v)
+                    return t ? `Sem ${t.term_number} — ${t.name}` : null
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {termDefs.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>Sem {t.term_number} — {t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="w-72">
-          <Select value={courseId} onValueChange={handleChangeCourse} disabled={!termDefId}>
-            <SelectTrigger>
-              <SelectValue placeholder={termDefId ? "3. Select course" : "3. Semester first"}>
-                {(v: string | null) => {
-                  const c = coursesInTerm.find((co) => co.id === v)
-                  return c ? `${c.code} — ${c.title}` : null
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {coursesInTerm.length === 0 && (
-                <SelectItem value="__none__" disabled>No courses in this semester</SelectItem>
-              )}
-              {coursesInTerm.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.code} — {c.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Course</Label>
+            <Select value={courseId} onValueChange={handleChangeCourse} disabled={!termDefId}>
+              <SelectTrigger className="h-11 w-full text-sm">
+                <SelectValue placeholder={termDefId ? "Choose a course" : "Select a semester first"}>
+                  {(v: string | null) => {
+                    const c = coursesInTerm.find((co) => co.id === v)
+                    return c ? `${c.code} — ${c.title}` : null
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {coursesInTerm.length === 0 && (
+                  <SelectItem value="__none__" disabled>No courses in this semester</SelectItem>
+                )}
+                {coursesInTerm.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.code} — {c.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Legend */}
         {hasMatrix && (
-          <div className="flex items-center gap-3 text-xs text-muted-foreground ml-2">
+          <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
             {([1, 2, 3] as Weight[]).map((w) => (
               <span key={w} className="flex items-center gap-1">
                 <span className={cn(
@@ -350,12 +375,15 @@ export function CoPoMappingClient() {
 
       {/* Empty states */}
       {!courseId && (
-        <div className="border border-dashed border-border rounded-lg p-12 text-center text-sm text-muted-foreground">
-          {!curriculumId
-            ? "Select a curriculum, semester, and course to view or edit its CO-PO mapping."
-            : !termDefId
-            ? "Now select a semester."
-            : "Now select a course."}
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-12 text-center">
+          <Grid3x3 className="h-8 w-8 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            {!curriculumId
+              ? "Select a curriculum, semester, and course above to view or edit its CO-PO mapping."
+              : !termDefId
+              ? "Now select a semester."
+              : "Now select a course."}
+          </p>
         </div>
       )}
 

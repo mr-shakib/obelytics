@@ -24,9 +24,9 @@ from app.modules.ref_data.schemas import (
     ComplexProblemCreate,
     ComplexProblemResponse,
     ComplexProblemUpdate,
-    CourseTypeCreate,
-    CourseTypeResponse,
-    CourseTypeUpdate,
+    CourseCategoryCreate,
+    CourseCategoryResponse,
+    CourseCategoryUpdate,
     DeliveryMethodCreate,
     DeliveryMethodResponse,
     DeliveryMethodUpdate,
@@ -46,7 +46,7 @@ from app.modules.ref_data.service import (
     BloomLevelService,
     ComplexActivityService,
     ComplexProblemService,
-    CourseTypeService,
+    CourseCategoryService,
     DeliveryMethodService,
     KnowledgeProfileService,
     MappingWeightLabelService,
@@ -62,7 +62,7 @@ _manage = require_permission("config.manage")
 
 @router.get("/bloom-domains", response_model=list[BloomDomainResponse])
 async def list_bloom_domains(
-    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -164,36 +164,36 @@ async def update_delivery_method(
     return await DeliveryMethodService(db).update(record_id, body, current_user.organization_id)
 
 
-# ── Course Types ──────────────────────────────────────────────────────────────
+# ── Course Categories ─────────────────────────────────────────────────────────
 
-@router.get("/course-types", response_model=list[CourseTypeResponse])
-async def list_course_types(
+@router.get("/course-categories", response_model=list[CourseCategoryResponse])
+async def list_course_categories(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await CourseCategoryService(db).list_active(current_user.organization_id)
+
+
+@router.post("/course-categories", response_model=CourseCategoryResponse, status_code=status.HTTP_201_CREATED)
+async def create_course_category(
+    body: CourseCategoryCreate,
     _: Annotated[PermissionManifestResponse, Depends(_manage)],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    return await CourseTypeService(db).list_active(current_user.organization_id)
+    return await CourseCategoryService(db).create(body, current_user.organization_id)
 
 
-@router.post("/course-types", response_model=CourseTypeResponse, status_code=status.HTTP_201_CREATED)
-async def create_course_type(
-    body: CourseTypeCreate,
-    _: Annotated[PermissionManifestResponse, Depends(_manage)],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    return await CourseTypeService(db).create(body, current_user.organization_id)
-
-
-@router.patch("/course-types/{record_id}", response_model=CourseTypeResponse)
-async def update_course_type(
+@router.patch("/course-categories/{record_id}", response_model=CourseCategoryResponse)
+async def update_course_category(
     record_id: UUID,
-    body: CourseTypeUpdate,
+    body: CourseCategoryUpdate,
     _: Annotated[PermissionManifestResponse, Depends(_manage)],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    return await CourseTypeService(db).update(record_id, body, current_user.organization_id)
+    return await CourseCategoryService(db).update(record_id, body, current_user.organization_id)
 
 
 # ── Assessment Types ──────────────────────────────────────────────────────────

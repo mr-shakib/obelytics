@@ -36,7 +36,7 @@ from app.modules.iam.models import (  # noqa: F401
 )
 from app.modules.org.models import Organization, Department, DepartmentHeadHistory, Program  # noqa: F401
 from app.modules.ref_data.models import (  # noqa: F401
-    BloomDomain, BloomLevel, DeliveryMethod, CourseType, AssessmentType,
+    BloomDomain, BloomLevel, DeliveryMethod, CourseCategory, AssessmentType,
     ComplexProblem, ComplexActivity, KnowledgeProfile, MappingWeightLabel,
 )
 from app.modules.curriculum.models import (  # noqa: F401

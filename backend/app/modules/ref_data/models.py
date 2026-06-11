@@ -74,10 +74,10 @@ class DeliveryMethod(Base):
     )
 
 
-class CourseType(Base):
-    __tablename__ = "course_types"
+class CourseCategory(Base):
+    __tablename__ = "course_categories"
     __table_args__ = (
-        UniqueConstraint("organization_id", "name", name="uq_config_course_type_org_name"),
+        UniqueConstraint("organization_id", "name", name="uq_config_course_category_org_name"),
         {"schema": "config"},
     )
 

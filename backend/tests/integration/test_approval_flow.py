@@ -44,9 +44,9 @@ async def _setup_submitted_result(client: AsyncClient, headers: dict) -> dict:
     assert prog_resp.status_code == 201, prog_resp.text
     program_id = prog_resp.json()["id"]
 
-    # Course type
+    # Course category
     ct_resp = await client.post(
-        "/api/v1/config/course-types",
+        "/api/v1/ref-data/course-categories",
         headers=headers,
         json={"name": f"Approval Theory {suffix}"},
     )
@@ -58,7 +58,8 @@ async def _setup_submitted_result(client: AsyncClient, headers: dict) -> dict:
         "/api/v1/courses",
         headers=headers,
         json={
-            "course_type_id": ct_id,
+            "course_category_id": ct_id,
+            "course_type": "THEORY",
             "code": f"APR{suffix[:6]}",
             "title": f"Approval Course {suffix}",
             "credits": 3,

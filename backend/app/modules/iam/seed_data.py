@@ -138,8 +138,8 @@ ROLES: list[dict] = [
         "description": "Reviews COs and marks for assigned courses",
         "permissions": [
             "curriculum.read", "po.read",
-            "co.read", "co.update", "co.approve", "co.reject",
-            "mapping.co_po.read",
+            "co.read", "co.create", "co.update", "co.approve", "co.reject",
+            "mapping.co_po.read", "mapping.co_po.create", "mapping.co_po.update",
             "mapping.co_cp.approve", "mapping.co_ca.approve", "mapping.co_kp.approve",
             "assessment.read",
             "marks.read.section",

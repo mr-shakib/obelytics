@@ -36,7 +36,7 @@ async def _setup_curriculum(client: AsyncClient, headers: dict) -> dict:
     program_id = prog_resp.json()["id"]
 
     ct_resp = await client.post(
-        "/api/v1/config/course-types",
+        "/api/v1/ref-data/course-categories",
         headers=headers,
         json={"name": f"OBE Theory {suffix}"},
     )
@@ -47,7 +47,8 @@ async def _setup_curriculum(client: AsyncClient, headers: dict) -> dict:
         "/api/v1/courses",
         headers=headers,
         json={
-            "course_type_id": ct_id,
+            "course_category_id": ct_id,
+            "course_type": "THEORY",
             "code": f"OBE{suffix}",
             "title": f"OBE Course {suffix}",
             "credits": 3,

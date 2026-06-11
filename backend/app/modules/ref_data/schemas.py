@@ -80,20 +80,20 @@ class DeliveryMethodResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Course Type ───────────────────────────────────────────────────────────────
+# ── Course Category ───────────────────────────────────────────────────────────
 
-class CourseTypeCreate(BaseModel):
+class CourseCategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = None
 
 
-class CourseTypeUpdate(BaseModel):
+class CourseCategoryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = None
     is_active: bool | None = None
 
 
-class CourseTypeResponse(BaseModel):
+class CourseCategoryResponse(BaseModel):
     id: UUID
     organization_id: UUID
     name: str

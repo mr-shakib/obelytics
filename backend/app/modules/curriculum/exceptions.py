@@ -111,3 +111,8 @@ class FacultyAssignmentConflictError(HTTPException):
             status_code=status.HTTP_409_CONFLICT,
             detail="This faculty member is already assigned to this offering with the same role",
         )
+
+
+class ModuleLeaderAssignmentNotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Module leader assignment not found")

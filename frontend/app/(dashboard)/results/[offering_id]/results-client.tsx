@@ -1,8 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, Download } from "lucide-react"
-import Link from "next/link"
+import { Download } from "lucide-react"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -65,9 +64,6 @@ export function ResultsClient({ offeringId }: Props) {
         description={`${data.batch_name} · ${data.term_name} · Section ${data.section}`}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" render={<Link href={`/section-offerings/${offeringId}`} />}>
-              <ArrowLeft /> Offering
-            </Button>
             <Button variant="outline" size="sm">
               <Download /> Export
             </Button>

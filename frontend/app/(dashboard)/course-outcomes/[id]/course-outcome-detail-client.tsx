@@ -15,7 +15,9 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -31,6 +33,7 @@ type CourseOutcome = {
   code: string
   statement: string
   status: string
+  course_id: string
   bloom_level_id?: string
   bloom_level_name?: string
   course_name?: string
@@ -38,6 +41,7 @@ type CourseOutcome = {
 }
 
 type BloomDomain = { id: string; name: string }
+type BloomLevel = { id: string; code: string; name: string; bloom_domain_id: string; order_index: number }
 
 const CO_STATUSES = [
   "DRAFT",
@@ -115,13 +119,23 @@ export function CourseOutcomeDetailClient({ id }: Props) {
     },
   })
 
-  const { data: bloomDomains } = useQuery({
+  const { data: bloomDomains = [] } = useQuery({
     queryKey: queryKeys.refData.bloomDomains,
     queryFn: async () => {
       const { data } = await apiClient.GET("/ref-data/bloom-domains" as never)
       return ((data as unknown) as { items?: BloomDomain[] })?.items ?? ((data as unknown) as BloomDomain[]) ?? []
     },
   })
+
+  const { data: bloomLevels = [] } = useQuery({
+    queryKey: queryKeys.refData.bloomLevels,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/ref-data/bloom-levels" as never)
+      return ((data as unknown) as BloomLevel[]) ?? []
+    },
+  })
+
+  const bloomLevelById = Object.fromEntries(bloomLevels.map((l) => [l.id, l]))
 
   const {
     register,
@@ -204,10 +218,11 @@ export function CourseOutcomeDetailClient({ id }: Props) {
             <Button
               variant="outline"
               size="sm"
-              render={<Link href={`/course-outcomes/${id}/mappings`} />}
+              nativeButton={false}
+              render={<Link href={`/mappings/co-po?course_id=${data.course_id}`} />}
             >
               <GitBranch />
-              Mappings
+              CO-PO Mapping
             </Button>
             <StatusBadge status={data.status} />
           </div>
@@ -333,14 +348,30 @@ export function CourseOutcomeDetailClient({ id }: Props) {
                     render={({ field }) => (
                       <Select value={field.value ?? ""} onValueChange={field.onChange}>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select bloom level" />
+                          <SelectValue placeholder="Select bloom level">
+                            {(v: string | null) => {
+                              const bl = bloomLevelById[v ?? ""]
+                              return bl ? `${bl.code} — ${bl.name}` : null
+                            }}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {(bloomDomains ?? []).map((b) => (
-                            <SelectItem key={b.id} value={b.id}>
-                              {b.name}
-                            </SelectItem>
-                          ))}
+                          {bloomDomains.map((domain) => {
+                            const levels = bloomLevels
+                              .filter((l) => l.bloom_domain_id === domain.id)
+                              .sort((a, b) => a.order_index - b.order_index)
+                            if (levels.length === 0) return null
+                            return (
+                              <SelectGroup key={domain.id}>
+                                <SelectLabel>{domain.name}</SelectLabel>
+                                {levels.map((l) => (
+                                  <SelectItem key={l.id} value={l.id}>
+                                    {l.code} — {l.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )
+                          })}
                         </SelectContent>
                       </Select>
                     )}
