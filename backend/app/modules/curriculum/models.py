@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index,
-    SmallInteger, String, Text, UniqueConstraint,
+    Numeric, SmallInteger, String, Text, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
@@ -130,6 +130,111 @@ class CourseObjective(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
+class CourseLearningMaterial(Base):
+    __tablename__ = "course_learning_materials"
+    __table_args__ = (
+        CheckConstraint(
+            "material_type IN ('TEXTBOOK', 'REFERENCE')",
+            name="ck_curriculum_course_learning_material_type",
+        ),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    material_type = Column(String(20), nullable=False)
+    order_index = Column(SmallInteger, nullable=False)
+    title = Column(String(500), nullable=False)
+    authors = Column(String(500), nullable=True)
+    publisher = Column(String(255), nullable=True)
+    edition_year = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
+class CourseLessonPlanItem(Base):
+    __tablename__ = "course_lesson_plan_items"
+    __table_args__ = (
+        Index("ix_curriculum_lesson_plan_items_curriculum_course", "curriculum_id", "course_id"),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    curriculum_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.curricula.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    week_number = Column(SmallInteger, nullable=False)
+    lesson_label = Column(String(100), nullable=True)
+    topic = Column(Text, nullable=False)
+    tla = Column(Text, nullable=True)
+    assessment_strategy = Column(Text, nullable=True)
+    order_index = Column(SmallInteger, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
+
+
+class CourseLessonPlanItemCO(Base):
+    __tablename__ = "course_lesson_plan_item_cos"
+    __table_args__ = (
+        UniqueConstraint("item_id", "course_outcome_id", name="uq_curriculum_lesson_plan_item_co"),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    item_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.course_lesson_plan_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    course_outcome_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.course_outcomes.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
+class CourseLessonPlanItemPO(Base):
+    __tablename__ = "course_lesson_plan_item_pos"
+    __table_args__ = (
+        UniqueConstraint("item_id", "program_outcome_id", name="uq_curriculum_lesson_plan_item_po"),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    item_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.course_lesson_plan_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    program_outcome_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.program_outcomes.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
 class CourseBloomDomain(Base):
     __tablename__ = "course_bloom_domains"
     __table_args__ = (
@@ -182,6 +287,88 @@ class CourseAssessmentTool(Base):
     )
     is_locked = Column(Boolean, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
+class CourseCOMarks(Base):
+    __tablename__ = "course_co_marks"
+    __table_args__ = (
+        Index("ix_curriculum_course_co_marks_curriculum_course", "curriculum_id", "course_id"),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    curriculum_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.curricula.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assessment_type_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("config.assessment_types.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    course_outcome_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.course_outcomes.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    marks = Column(Numeric(5, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
+
+
+class CourseBloomMarks(Base):
+    __tablename__ = "course_bloom_marks"
+    __table_args__ = (
+        CheckConstraint("component IN ('CIE', 'SEE')", name="ck_curriculum_course_bloom_marks_component"),
+        Index("ix_curriculum_course_bloom_marks_curriculum_course", "curriculum_id", "course_id"),
+        {"schema": "curriculum"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    curriculum_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.curricula.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    course_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assessment_type_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("config.assessment_types.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    bloom_level_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("config.bloom_levels.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    component = Column(String(10), nullable=False)
+    marks = Column(Numeric(5, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
 
 
 class CurriculumCourseSlot(Base):

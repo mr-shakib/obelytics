@@ -66,6 +66,21 @@ export const queryKeys = {
   courseObjectives: {
     byCourse: (courseId: string) => ["courses", courseId, "objectives"] as const,
   },
+  courseLearningMaterials: {
+    byCourse: (courseId: string) => ["courses", courseId, "learning-materials"] as const,
+  },
+  courseLessonPlan: {
+    byCourse: (courseId: string, curriculumId: string) =>
+      ["courses", courseId, "lesson-plan", curriculumId] as const,
+  },
+  courseAssessmentPattern: {
+    byCourse: (courseId: string, curriculumId: string) =>
+      ["courses", courseId, "assessment-pattern", curriculumId] as const,
+  },
+  courseBloomMarks: {
+    byCourse: (courseId: string, curriculumId: string) =>
+      ["courses", courseId, "bloom-marks", curriculumId] as const,
+  },
   coursePrerequisites: {
     byCourse: (courseId: string) => ["courses", courseId, "prerequisites"] as const,
   },
@@ -113,7 +128,7 @@ export const queryKeys = {
     validation: (id: string) => ["co-po-mappings", id, "validation"] as const,
   },
   complexMappings: {
-    byCo: (kind: "cp" | "ca", coId: string) => ["complex-mappings", kind, coId] as const,
+    byCo: (kind: "cp" | "ca" | "kp", coId: string) => ["complex-mappings", kind, coId] as const,
   },
 
   // Assessment

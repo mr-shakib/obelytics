@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ course.code }} Course Outline</title>
+<style>
+  @page {
+    size: letter;
+    margin: 1in 0.75in 0.75in 0.75in;
+    @top-right {
+      content: element(pageHeader);
+    }
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #666;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Liberation Serif", "Times New Roman", Georgia, serif;
+    font-size: 11pt;
+    color: #000;
+    line-height: 1.25;
+  }
+
+  h1, h2, h3 {
+    margin: 0;
+  }
+
+  .page-header {
+    position: running(pageHeader);
+    font-style: italic;
+    font-size: 11pt;
+    color: #000;
+  }
+
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2.25pt solid #9bbb59;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+  }
+
+  .doc-header .doc-title {
+    font-size: 20pt;
+    font-weight: bold;
+    line-height: 1.15;
+    text-transform: uppercase;
+  }
+
+  .doc-header .doc-logo img {
+    max-height: 60px;
+    max-width: 220px;
+  }
+
+  .doc-header .doc-logo-text {
+    font-size: 14pt;
+    font-weight: bold;
+    text-align: right;
+  }
+
+  .doc-header .doc-logo-text .org-short {
+    font-size: 9pt;
+    font-weight: normal;
+    color: #555;
+  }
+
+  .section {
+    margin-top: 10px;
+    margin-bottom: 4px;
+  }
+
+  .section-header {
+    background-color: #eeece1;
+    border: 1px solid #000;
+    font-weight: bold;
+    font-size: 11pt;
+    padding: 3px 6px;
+  }
+
+  .section-header.basic-info {
+    background-color: #d0cece;
+  }
+
+  .section-header + table.bordered {
+    margin-top: 0;
+  }
+
+  .section-header + table.bordered tr:first-child > th,
+  .section-header + table.bordered tr:first-child > td {
+    border-top: none;
+  }
+
+  .section-label {
+    font-weight: bold;
+    font-size: 11pt;
+    margin: 8px 0 2px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
+  }
+
+  table.bordered th, table.bordered td {
+    border: 1px solid #000;
+    padding: 3px 6px;
+    vertical-align: top;
+    text-align: left;
+  }
+
+  table.bordered th {
+    background-color: #ddd9c3;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  table.matrix th, table.matrix td {
+    text-align: center;
+  }
+
+  .info-table td {
+    padding: 3px 6px;
+    font-weight: bold;
+  }
+
+  .blank-cell {
+    min-width: 60px;
+    height: 18px;
+  }
+
+  .muted {
+    color: #777;
+    font-style: italic;
+  }
+
+  ol, ul {
+    margin: 4px 0 4px 18px;
+    padding: 0;
+  }
+
+  .legend-table {
+    break-inside: avoid;
+  }
+
+  .legend-table td {
+    vertical-align: top;
+    border: none;
+    padding: 0 8px;
+    width: 33.33%;
+  }
+
+  .legend-table .legend-title {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .legend-table .domain-title {
+    font-weight: bold;
+    display: block;
+    margin-top: 4px;
+  }
+
+  .legend-table .legend-entry {
+    font-style: italic;
+  }
+
+  .signature-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 30px;
+  }
+
+  .signature-block {
+    width: 45%;
+  }
+
+  .signature-line {
+    border-top: 1px solid #000;
+    margin-top: 36px;
+    padding-top: 4px;
+  }
+
+  .text-block {
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+  <div class="page-header">
+    {{ org.name }}-Version 2.0
+  </div>
+
+  <div class="doc-header">
+    <div class="doc-title">Course<br>Outline</div>
+    {% if org.logo_url %}
+    <div class="doc-logo"><img src="{{ org.logo_url }}" alt="{{ org.name }}"></div>
+    {% elif org.name %}
+    <div class="doc-logo-text">
+      {{ org.name }}
+      {% if org.short_name %}<span class="org-short"><br>{{ org.short_name }}</span>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Basic Information -->
+  <div class="section">
+    <div class="section-header basic-info">Basic Information:</div>
+    <table class="bordered info-table">
+      <tr><td colspan="3"><strong>Course Code:</strong> {{ course.code }}</td></tr>
+      <tr><td colspan="3"><strong>Course Title:</strong> {{ course.title }}</td></tr>
+      <tr>
+        <td style="width:33%"><strong>Credits:</strong> {{ course.credits }}</td>
+        <td style="width:33%"><strong>Weekly:</strong> {{ course.weekly_hours }} Hours</td>
+        <td style="width:34%"><strong>Total Week:</strong> {{ course.total_weeks }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Prerequisite -->
+  <div class="section">
+    <div class="section-header">Prerequisite:</div>
+    {% if prerequisites %}
+    {% for p in prerequisites %}
+    <p><strong>{{ p.title }} ({{ p.code }})</strong></p>
+    {% endfor %}
+    {% else %}
+    <p class="muted">None</p>
+    {% endif %}
+  </div>
+
+  <!-- Course Content -->
+  <div class="section">
+    <div class="section-header">Course Content (from syllabus):</div>
+    {% if course.syllabus_content %}
+    <p class="text-block">{{ course.syllabus_content }}</p>
+    {% else %}
+    <p class="muted">Not specified</p>
+    {% endif %}
+  </div>
+
+  <!-- Description -->
+  <div class="section">
+    <div class="section-header">Course Description/Rational:</div>
+    {% if course.description %}
+    <p class="text-block">{{ course.description }}</p>
+    {% else %}
+    <p class="muted">Not specified</p>
+    {% endif %}
+  </div>
+
+  <!-- Objectives -->
+  <div class="section">
+    <div class="section-header">Course Objective:</div>
+    {% if objectives %}
+    <ul>
+      {% for obj in objectives %}
+      <li>{{ obj }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Not specified</p>
+    {% endif %}
+  </div>
+
+  <!-- Course Outcomes with Mappings -->
+  <div class="section">
+    <div class="section-header">Course Outcomes (COs) with Mappings:</div>
+    {% if course_outcomes %}
+    <p>After completion of this course, students will be able to:</p>
+    <table class="bordered">
+      <thead>
+        <tr>
+          <th style="width:6%">COs</th>
+          <th>CO Statements</th>
+          <th style="width:7%">POs</th>
+          <th style="width:13%">Learning Domains</th>
+          <th style="width:11%">Knowledge Profile</th>
+          <th style="width:13%">Complex Engineering Problem</th>
+          <th style="width:13%">Complex Engineering Activities</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for co in course_outcomes %}
+        <tr>
+          <td>{{ co.code }}</td>
+          <td>{{ co.statement }}</td>
+          <td>{{ co.po_codes | join(", ") }}</td>
+          <td>{{ co.bloom_codes | join(", ") }}</td>
+          <td>{{ co.kp_codes | join(", ") }}</td>
+          <td>{{ co.ep_codes | join(", ") }}</td>
+          <td>{{ co.ea_codes | join(", ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No course outcomes defined</p>
+    {% endif %}
+  </div>
+
+  <!-- Legend -->
+  {% if bloom_legend or kp_legend or cp_legend %}
+  <div class="section">
+    <table class="legend-table">
+      <tr>
+        <td>
+          <span class="legend-title">Bloom's Taxonomy</span>
+          {% for domain in bloom_legend %}
+          <span class="domain-title">{{ domain.domain_name }}</span>
+          {% for level in domain.levels %}<span class="legend-entry">{{ level.code }}: {{ level.name }}</span><br>{% endfor %}
+          {% endfor %}
+        </td>
+        <td>
+          <span class="legend-title">Knowledge Profile</span>
+          {% for kp in kp_legend %}<span class="legend-entry">{{ kp.code }}: {{ kp.description }}</span><br>{% endfor %}
+        </td>
+        <td>
+          <span class="legend-title">CEP Attributes</span>
+          {% for cp in cp_legend %}<span class="legend-entry">{{ cp.code }}: {{ cp.description }}</span><br>{% endfor %}
+        </td>
+      </tr>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Justification of CO-PO Mapping -->
+  <div class="section">
+    <div class="section-label">Justification of CO-PO Mapping:</div>
+    {% if co_po_justifications %}
+    <table class="bordered">
+      <thead>
+        <tr><th style="width:8%">COs</th><th style="width:8%">POs</th><th>Justification of Mapping</th></tr>
+      </thead>
+      <tbody>
+        {% for row in co_po_justifications %}
+        <tr>
+          <td>{{ row.co_code }}</td>
+          <td>{{ row.codes | join("<br>") | safe }}</td>
+          <td class="blank-cell"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO-PO mappings defined</p>
+    {% endif %}
+  </div>
+
+  <!-- Justification of Knowledge Profile (KP) Mapping -->
+  <div class="section">
+    <div class="section-label">Justification of Knowledge Profile (KP) Mapping:</div>
+    {% if co_kp_justifications %}
+    <table class="bordered">
+      <thead>
+        <tr><th style="width:8%">COs</th><th style="width:10%">Knowledge Profile (K)</th><th>Justification of Mapping</th></tr>
+      </thead>
+      <tbody>
+        {% for row in co_kp_justifications %}
+        <tr>
+          <td>{{ row.co_code }}</td>
+          <td>{{ row.codes | join("<br>") | safe }}</td>
+          <td class="blank-cell"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO-KP mappings defined</p>
+    {% endif %}
+  </div>
+
+  <!-- Justification of Complex Engineering Problem (CEP) Attributes Mapping -->
+  <div class="section">
+    <div class="section-label">Justification of Complex Engineering Problem (CEP) Attributes Mapping:</div>
+    {% if co_ep_justifications %}
+    <table class="bordered">
+      <thead>
+        <tr><th style="width:8%">COs</th><th style="width:10%">CEP Attributes (EP)</th><th>Justification of Mapping</th></tr>
+      </thead>
+      <tbody>
+        {% for row in co_ep_justifications %}
+        <tr>
+          <td>{{ row.co_code }}</td>
+          <td>{{ row.codes | join("<br>") | safe }}</td>
+          <td class="blank-cell"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO-CEP mappings defined</p>
+    {% endif %}
+  </div>
+
+  <!-- Justification of Engineering Activities (EAs) Mapping -->
+  <div class="section">
+    <div class="section-label">Justification of Engineering Activities (EAs) Mapping:</div>
+    {% if co_ea_justifications %}
+    <table class="bordered">
+      <thead>
+        <tr><th style="width:8%">COs</th><th style="width:10%">CEP Activities (EA)</th><th>Justification of Mapping</th></tr>
+      </thead>
+      <tbody>
+        {% for row in co_ea_justifications %}
+        <tr>
+          <td>{{ row.co_code }}</td>
+          <td>{{ row.codes | join("<br>") | safe }}</td>
+          <td class="blank-cell"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO-EA mappings defined</p>
+    {% endif %}
+  </div>
+
+  <!-- Mapping of Assessment Tools with COs -->
+  <div class="section">
+    <div class="section-header">Mapping of Assessment Tools with Course Outcomes (COs):</div>
+    {% if tool_co_mapping %}
+    <table class="bordered">
+      <thead>
+        <tr><th style="width:20%">Assessment Tools</th><th style="width:20%">Course Outcomes (COs)</th><th>Explanation</th></tr>
+      </thead>
+      <tbody>
+        {% for row in tool_co_mapping %}
+        <tr>
+          <td>{{ row.tool_name }}</td>
+          <td>{{ row.co_codes | join(", ") }}</td>
+          <td class="blank-cell"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO-wise assessment marks configured</p>
+    {% endif %}
+  </div>
+
+  <!-- Course Delivery Plan -->
+  <div class="section">
+    <div class="section-header">Course Delivery Plan/Lesson Delivery Plan:</div>
+    {% if lesson_plan %}
+    <table class="bordered">
+      <thead>
+        <tr>
+          <th style="width:6%">Weeks</th>
+          <th style="width:20%">Experiment Name with Details</th>
+          <th style="width:8%">COs</th>
+          <th>Activities</th>
+          <th style="width:14%">Tools used</th>
+          <th style="width:14%">Assessment Strategies</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in lesson_plan %}
+        <tr>
+          <td>{{ item.week_number }}</td>
+          <td>{% if item.lesson_label %}<strong>{{ item.lesson_label }}</strong><br>{% endif %}{{ item.topic }}</td>
+          <td>{{ item.co_codes | join(", ") }}</td>
+          <td>{{ item.tla or "" }}</td>
+          <td class="blank-cell"></td>
+          <td>{{ item.assessment_strategy or "" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No lesson plan defined</p>
+    {% endif %}
+  </div>
+
+  <!-- PO Validation via Assessment -->
+  <div class="section">
+    <div class="section-header">PO Validation via Assessment:</div>
+    {% if po_validation %}
+    <table class="bordered">
+      <thead>
+        <tr>
+          <th style="width:18%">Assessment Type</th>
+          <th style="width:14%">Mapped COs</th>
+          <th style="width:14%">Mapped POs</th>
+          <th>Justification</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in po_validation %}
+        <tr>
+          <td>{{ row.assessment_type_name }}</td>
+          <td>{{ row.co_codes | join(", ") }}</td>
+          <td>{{ row.po_codes | join(", ") }}</td>
+          <td class="blank-cell"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO-wise assessment marks configured</p>
+    {% endif %}
+  </div>
+
+  <!-- Assessment Pattern -->
+  <div class="section">
+    <div class="section-header">Assessment Pattern:</div>
+    {% if assessment_rows %}
+    <table class="bordered">
+      <thead>
+        <tr><th>Assessment Tools</th><th style="width:20%">Marks (Total={{ grand_total }})</th></tr>
+      </thead>
+      <tbody>
+        {% for row in assessment_rows %}
+        {% if row.co_marks %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td style="padding:0">
+            <table class="matrix" style="width:100%;border-collapse:collapse;margin:0">
+              <tr>
+                <th style="border:1px solid #000;padding:2px 4px" colspan="{{ row.co_marks | length }}">CO-wise Marks</th>
+                <th style="border:1px solid #000;padding:2px 4px;vertical-align:middle;width:25%" rowspan="3">{{ row.total_marks }}</th>
+              </tr>
+              <tr>
+                {% for co_code in row.co_marks.keys() %}<th style="border:1px solid #000;padding:2px 4px">{{ co_code }}</th>{% endfor %}
+              </tr>
+              <tr>
+                {% for marks in row.co_marks.values() %}<td style="border:1px solid #000;padding:2px 4px">{{ marks }}</td>{% endfor %}
+              </tr>
+            </table>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{{ row.total_marks }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        <tr>
+          <td style="font-weight:bold">Total Marks</td>
+          <td style="font-weight:bold">{{ grand_total }}</td>
+        </tr>
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No assessment tools configured</p>
+    {% endif %}
+  </div>
+
+  <!-- Learning Materials -->
+  <div class="section">
+    <div class="section-header">Learning Materials:</div>
+    <p><strong>Textbook/Recommended Readings:</strong></p>
+    {% if textbooks %}
+    <table class="bordered">
+      <thead><tr><th style="width:6%">SL</th><th>Book Name</th><th style="width:25%">Author(s)</th><th style="width:20%">Publishers</th><th style="width:14%">Edition and year</th></tr></thead>
+      <tbody>
+        {% for b in textbooks %}
+        <tr><td>{{ loop.index }}</td><td>{{ b.title }}</td><td>{{ b.authors or "" }}</td><td>{{ b.publisher or "" }}</td><td>{{ b.edition_year or "" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">None specified</p>
+    {% endif %}
+    <p><strong>Reference Books/Supplementary Readings:</strong></p>
+    {% if references %}
+    <table class="bordered">
+      <thead><tr><th style="width:6%">SL</th><th>Book Name</th><th style="width:25%">Author(s)</th><th style="width:20%">Publishers</th><th style="width:14%">Edition and year</th></tr></thead>
+      <tbody>
+        {% for r in references %}
+        <tr><td>{{ loop.index }}</td><td>{{ r.title }}</td><td>{{ r.authors or "" }}</td><td>{{ r.publisher or "" }}</td><td>{{ r.edition_year or "" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">None specified</p>
+    {% endif %}
+  </div>
+
+  <!-- Signatures -->
+  <div class="signature-row">
+    <div class="signature-block">
+      <p><strong>Prepared by Module Leader</strong></p>
+      {% if module_leader %}
+      <p><strong>Name:</strong> {{ module_leader.full_name }}<br>{{ module_leader.designation or "" }}</p>
+      {% else %}
+      <p><strong>Name:</strong></p>
+      {% endif %}
+      <div class="signature-line">Signature</div>
+    </div>
+    <div class="signature-block">
+      <p><strong>Approved by OBE Committee</strong></p>
+      <div class="signature-line">&nbsp;</div>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -211,7 +211,7 @@ export function CourseOutcomeDetailClient({ id }: Props) {
               variant="outline"
               size="sm"
               nativeButton={false}
-              render={<Link href={`/mappings/co-po?course_id=${data.course_id}`} />}
+              render={<Link href={`/courses/${data.course_id}/mappings#co-po-mapping`} />}
             >
               <GitBranch />
               CO-PO Mapping

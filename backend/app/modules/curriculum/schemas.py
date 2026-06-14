@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -116,6 +117,68 @@ class CourseObjectivesUpdate(BaseModel):
     statements: list[str] = Field(default_factory=list)
 
 
+# ── Course Learning Materials ─────────────────────────────────────────────────
+
+class CourseLearningMaterialResponse(BaseModel):
+    id: UUID
+    course_id: UUID
+    material_type: Literal["TEXTBOOK", "REFERENCE"]
+    order_index: int
+    title: str
+    authors: str | None
+    publisher: str | None
+    edition_year: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CourseLearningMaterialInput(BaseModel):
+    material_type: Literal["TEXTBOOK", "REFERENCE"]
+    title: str = Field(min_length=1, max_length=500)
+    authors: str | None = Field(default=None, max_length=500)
+    publisher: str | None = Field(default=None, max_length=255)
+    edition_year: str | None = Field(default=None, max_length=100)
+
+
+class CourseLearningMaterialsUpdate(BaseModel):
+    materials: list[CourseLearningMaterialInput] = Field(default_factory=list)
+
+
+# ── Course Lesson Plan ────────────────────────────────────────────────────────
+
+class LessonPlanItemInput(BaseModel):
+    week_number: int = Field(ge=1, le=52)
+    lesson_label: str | None = Field(default=None, max_length=100)
+    topic: str = Field(min_length=1)
+    tla: str | None = None
+    assessment_strategy: str | None = None
+    co_ids: list[UUID] = Field(default_factory=list)
+    po_ids: list[UUID] = Field(default_factory=list)
+
+
+class LessonPlanItemResponse(BaseModel):
+    id: UUID
+    curriculum_id: UUID
+    course_id: UUID
+    week_number: int
+    lesson_label: str | None
+    topic: str
+    tla: str | None
+    assessment_strategy: str | None
+    order_index: int
+    co_ids: list[UUID] = Field(default_factory=list)
+    po_ids: list[UUID] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LessonPlanItemsUpdate(BaseModel):
+    items: list[LessonPlanItemInput] = Field(default_factory=list)
+
+
 # ── Course Bloom Domains ──────────────────────────────────────────────────────
 
 class CourseBloomDomainsUpdate(BaseModel):
@@ -139,6 +202,56 @@ class CourseAssessmentToolResponse(BaseModel):
 
 class CourseAssessmentToolsUpdate(BaseModel):
     assessment_type_ids: list[UUID]
+
+
+# ── Course Assessment Pattern (CO-wise marks) ─────────────────────────────────
+
+class CourseCOMarkInput(BaseModel):
+    assessment_type_id: UUID
+    course_outcome_id: UUID | None = None
+    marks: Decimal = Field(ge=0, le=999)
+
+
+class CourseCOMarkResponse(BaseModel):
+    id: UUID
+    curriculum_id: UUID
+    course_id: UUID
+    assessment_type_id: UUID
+    course_outcome_id: UUID | None
+    marks: Decimal
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CourseCOMarksUpdate(BaseModel):
+    marks: list[CourseCOMarkInput] = Field(default_factory=list)
+
+
+# ── Course Bloom Marks (CIE/SEE breakdown) ────────────────────────────────────
+
+class CourseBloomMarkInput(BaseModel):
+    assessment_type_id: UUID
+    bloom_level_id: UUID
+    component: Literal["CIE", "SEE"]
+    marks: Decimal = Field(ge=0, le=999)
+
+
+class CourseBloomMarkResponse(BaseModel):
+    id: UUID
+    curriculum_id: UUID
+    course_id: UUID
+    assessment_type_id: UUID
+    bloom_level_id: UUID
+    component: Literal["CIE", "SEE"]
+    marks: Decimal
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CourseBloomMarksUpdate(BaseModel):
+    marks: list[CourseBloomMarkInput] = Field(default_factory=list)
 
 
 # ── Course Slot ───────────────────────────────────────────────────────────────

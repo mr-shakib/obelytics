@@ -27,12 +27,12 @@ repository → service → router → `api.d.ts` regen → frontend).
 | Complex Engineering Problem (CEP) per CO | ⚠️ Model + API exist, no UI | `obe.co_cp_mappings` |
 | Complex Activity (CEA) per CO | ⚠️ Model + API exist, no UI | `obe.co_ca_mappings` |
 | CO-PO mapping + justification | ⚠️ Mapping exists, no justification field | `obe.co_po_mapping_entries` |
-| Course Delivery Plan (weekly topics/TLA/CO/PO/assessment) | ❌ Missing | **Phase 4** — new tables |
-| PO Validation via Assessment (tools → COs/POs description) | ❌ Missing | **Phase 4** (folded in) |
-| Assessment Pattern (CO-wise marks: Attendance/Quiz/.../Mid/Final) | ❌ Missing | **Phase 5** — new table |
-| CIE/SEE Bloom-criteria marks breakdown | ❌ Missing | **Phase 5** — new table |
+| Course Delivery Plan (weekly topics/TLA/CO/PO/assessment) | ✅ Exists (shipped in Phase 4) | `curriculum.course_lesson_plan_items` + CO/PO joins |
+| PO Validation via Assessment (tools → COs/POs description) | ✅ Exists (folded into Phase 4 via `assessment_strategy` + per-row CO/PO selects) | `curriculum.course_lesson_plan_items` |
+| Assessment Pattern (CO-wise marks: Attendance/Quiz/.../Mid/Final) | ✅ Exists (shipped in Phase 5) | `curriculum.course_co_marks` |
+| CIE/SEE Bloom-criteria marks breakdown | ✅ Exists (shipped in Phase 5) | `curriculum.course_bloom_marks` |
 | Assessment tools selection (Mid/Final checkboxes; Lab Final + Add New) | ❌ Missing | **Phase 2** — new table |
-| Learning Materials (textbooks/references) | ❌ Missing | **Phase 6** — new table |
+| Learning Materials (textbooks/references) | ✅ Exists (shipped in Phase 6) | `curriculum.course_learning_materials` |
 | Prepared/Approved by | Out of scope (handled by existing approval workflow) | — |
 
 ---
@@ -165,36 +165,43 @@ tool → mapped COs/POs → free-text description), by letting the
 the per-row CO/PO multi-selects.
 
 **Tasks**
-- [ ] Migration: create the three tables
-- [ ] `curriculum/models.py`: `CourseLessonPlanItem`, `CourseLessonPlanItemCO`, `CourseLessonPlanItemPO`
-- [ ] `curriculum/schemas.py`: `LessonPlanItemCreate/Update/Response` (with `co_ids: list[UUID]`, `po_ids: list[UUID]`)
-- [ ] `curriculum/repository.py` + `service.py`: CRUD + bulk reorder
-- [ ] `curriculum/router.py`: `GET/POST/PATCH/DELETE /courses/{id}/lesson-plan?curriculum_id=`
-- [ ] Frontend: regenerate `api.d.ts`
-- [ ] Frontend: "Delivery Plan" tab — editable table grouped by week, CO/PO columns use checkbox-multiselect (reuse pattern from `BloomLevelCheckboxGroup`)
+- [x] Migration `0023`: create the three tables
+- [x] `curriculum/models.py`: `CourseLessonPlanItem`, `CourseLessonPlanItemCO`, `CourseLessonPlanItemPO`
+- [x] `curriculum/schemas.py`: `LessonPlanItemInput/Response`, `LessonPlanItemsUpdate` (with `co_ids: list[UUID]`, `po_ids: list[UUID]`)
+- [x] `curriculum/repository.py` + `service.py`: `CourseLessonPlanRepository`/`CourseLessonPlanService` — list + replace-for-course (delete-all + bulk-insert, same pattern as Phase 1/6)
+- [x] `curriculum/router.py`: `GET/PUT /courses/{id}/lesson-plan?curriculum_id=`
+- [x] Frontend: regenerate `api.d.ts`
+- [x] Frontend: "Delivery Plan" card on `/courses/[id]` — editable weekly table (Week, Lesson, Topic, T-L-A, Assessment Strategy, CO/PO multi-selects via new `OutcomeCheckboxPopover`, reorder/remove/add) for editors, read-only table for viewers
+- [x] Backend integration test (`test_course_lesson_plan` in `test_curriculum_flow.py`)
+- [x] Browser verification (Playwright): added Week 1 row with CO mapping, saved, reloaded — persisted correctly, no console errors
 
 ---
 
-## Phase 5 — Assessment Pattern + CIE/SEE Bloom breakdown
+## Phase 5 — Assessment Pattern + CIE/SEE Bloom breakdown ✅ Done
 
 Scope: per **(curriculum_id, course_id)**.
 
-**New table `assessment.course_co_marks`** (the "Assessment Pattern" CO-wise
+**New table `curriculum.course_co_marks`** (the "Assessment Pattern" CO-wise
 marks table — Attendance/Quiz/Presentation/Assignment/Mid-Term/Final-Term ×
 CO1/CO2/CO3):
 - `id`, `curriculum_id`, `course_id`, `assessment_type_id` (FK `config.assessment_types`), `course_outcome_id` (nullable — null row = "Total marks" not tied to a CO, e.g. Attendance/Quiz totals), `marks` (numeric)
 
-**New table `assessment.course_bloom_marks`** (CIE/SEE breakdown — Bloom
+**New table `curriculum.course_bloom_marks`** (CIE/SEE breakdown — Bloom
 cognitive level × assessment component marks):
 - `id`, `curriculum_id`, `course_id`, `assessment_type_id` (FK), `bloom_level_id` (FK `config.bloom_levels`, Cognitive domain), `marks` (numeric)
-- `component` enum-ish string: `CIE` | `SEE` (since the PDF splits a 60/40 CIE/SEE breakdown)
+- `component` enum-ish string: `CIE` | `SEE` (since the PDF splits a 60/40 CIE/SEE breakdown). Derived automatically from `assessment_type.is_sessional` (sessional → CIE, non-sessional → SEE) — no separate UI selector.
+
+> Note: implemented in the `curriculum` schema/module (not a literal `assessment`
+> schema), following the `CourseAssessmentTool` (Phase 2) precedent which already
+> lives in `curriculum` with a cross-schema FK to `config.assessment_types.id`.
 
 **Tasks**
-- [ ] Migration: create both tables
-- [ ] `assessment/models.py`: `CourseCOMarks`, `CourseBloomMarks`
-- [ ] `assessment/schemas.py`, `repository.py`, `service.py`, `router.py`: `GET/PUT /courses/{id}/assessment-pattern?curriculum_id=`, `GET/PUT /courses/{id}/bloom-marks?curriculum_id=`
-- [ ] Frontend: regenerate `api.d.ts`
-- [ ] Frontend: "Assessment Pattern" tab — two editable matrices (CO-wise marks; CIE/SEE Bloom breakdown), with running totals/validation (rows/columns sum to expected totals, e.g. 100, 60, 40)
+- [x] Migration `0024`: create `curriculum.course_co_marks` + `curriculum.course_bloom_marks`
+- [x] `curriculum/models.py`: `CourseCOMarks`, `CourseBloomMarks`
+- [x] `curriculum/schemas.py`, `repository.py`, `service.py`, `router.py`: `GET/PUT /courses/{id}/assessment-pattern?curriculum_id=`, `GET/PUT /courses/{id}/bloom-marks?curriculum_id=`
+- [x] Frontend: regenerate `api.d.ts`
+- [x] Frontend: "Assessment Pattern" + "CIE/SEE Bloom-wise Marks Breakdown" cards on `/courses/[id]` — two editable matrices (CO-wise marks; CIE/SEE Bloom breakdown), with running totals/badges (per-CO column totals, grand total vs. 100, CIE/SEE subtotals)
+- [x] Backend integration tests: `test_course_assessment_pattern_and_bloom_marks`, `test_course_assessment_pattern_invalid_assessment_type`
 
 ---
 
@@ -204,11 +211,11 @@ cognitive level × assessment component marks):
 - `id`, `course_id` (FK CASCADE), `material_type` (`TEXTBOOK` | `REFERENCE`), `order_index`, `title`, `authors`, `publisher`, `edition_year` (string, e.g. "7th Edition, 2019")
 
 **Tasks**
-- [ ] Migration: create table
-- [ ] `curriculum/models.py`: `CourseLearningMaterial`
-- [ ] `curriculum/schemas.py`, `repository.py`, `service.py`, `router.py`: `GET/PUT /courses/{id}/learning-materials`
-- [ ] Frontend: regenerate `api.d.ts`
-- [ ] Frontend: "Resources" tab — two lists (Textbooks, References) with add/edit/delete rows
+- [x] Migration `0022`: create table
+- [x] `curriculum/models.py`: `CourseLearningMaterial`
+- [x] `curriculum/schemas.py`, `repository.py`, `service.py`, `router.py`: `GET/PUT /courses/{id}/learning-materials` (replace-for-course pattern, `order_index` computed per `material_type`)
+- [x] Frontend: regenerate `api.d.ts`
+- [x] Frontend: "Learning Materials" card on `/courses/[id]` — Textbooks/References field-array editors (title/authors/publisher/edition_year, reorder/remove/add) for editors, read-only grouped lists for viewers
 
 ---
 
@@ -239,17 +246,16 @@ cognitive level × assessment component marks):
 1. ✅ **Phase 2** (Assessment Tools) — done.
 2. ✅ **Phase 3** (CO-CP/CO-CA UI + CEP/CEA validation) — done (CO-KP deferred, see Open Question #3).
 3. ✅ **Phase 1** (narrative fields) — done.
-4. ▶️ **Phase 6** (Learning Materials) — **next up**. Small, isolated.
-5. **Phase 4** (Delivery Plan) — larger, standalone.
-6. **Phase 5** (Assessment Pattern / CIE-SEE) — largest, do last once the above stabilize the page layout.
+4. ✅ **Phase 6** (Learning Materials) — done.
+5. ✅ **Phase 4** (Delivery Plan) — done.
+6. ✅ **Phase 5** (Assessment Pattern / CIE-SEE) — done.
 
 ---
 
 ## Resume point
 
-Phases 1, 2, and 3 are complete and verified. Next session should start on
-**Phase 6** (Learning Materials — `course_learning_materials` table,
-Textbooks/References lists on the course detail page), following its task
-checklist above. All open questions are resolved or deferred (Q3: CO-KP
-deferred; Q1/Q2: resolved during Phases 1/2). Q4 (justification text on
-mapping rows) remains unscoped — flag to the user if it becomes relevant.
+Phases 1, 2, 3, 4, 5, and 6 are complete. All planned phases are done. All open
+questions are resolved or deferred (Q3: CO-KP deferred; Q1/Q2: resolved during
+Phases 1/2). Q4 (justification text on mapping rows) remains unscoped — flag
+to the user if it becomes relevant. Browser/Playwright verification of the
+Phase 5 UI has not yet been performed.

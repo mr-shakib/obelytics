@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.curriculum.domain.prerequisite_graph import PrerequisiteGraphValidator
 from app.modules.ref_data.exceptions import RefDataNotFoundError
-from app.modules.ref_data.repository import AssessmentTypeRepository, BloomDomainRepository
+from app.modules.ref_data.repository import AssessmentTypeRepository, BloomDomainRepository, BloomLevelRepository
 from app.modules.curriculum.exceptions import (
     AcademicTermConflictError,
     AcademicTermNotFoundError,
@@ -31,6 +31,10 @@ from app.modules.curriculum.models import (
     Batch,
     Course,
     CourseAssessmentTool,
+    CourseBloomMarks,
+    CourseCOMarks,
+    CourseLearningMaterial,
+    CourseLessonPlanItem,
     CourseObjective,
     CoursePrerequisite,
     Curriculum,
@@ -46,6 +50,10 @@ from app.modules.curriculum.repository import (
     BatchRepository,
     CourseAssessmentToolRepository,
     CourseBloomDomainRepository,
+    CourseBloomMarksRepository,
+    CourseCOMarksRepository,
+    CourseLearningMaterialRepository,
+    CourseLessonPlanRepository,
     CourseObjectiveRepository,
     CourseRepository,
     CourseSlotRepository,
@@ -65,7 +73,10 @@ from app.modules.curriculum.schemas import (
     CourseAssessmentToolResponse,
     CourseAssessmentToolsUpdate,
     CourseBloomDomainsUpdate,
+    CourseBloomMarksUpdate,
+    CourseCOMarksUpdate,
     CourseCreate,
+    CourseLearningMaterialsUpdate,
     CourseObjectivesUpdate,
     CourseSlotCreate,
     CourseUpdate,
@@ -73,6 +84,8 @@ from app.modules.curriculum.schemas import (
     CurriculumTermDefinitionCreate,
     CurriculumUpdate,
     FacultyAssignmentCreate,
+    LessonPlanItemResponse,
+    LessonPlanItemsUpdate,
     ModuleLeaderAssignmentCreate,
     PrerequisiteCreate,
     SectionCreate,
@@ -287,6 +300,83 @@ class CourseObjectiveService:
         return records
 
 
+class CourseLearningMaterialService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CourseLearningMaterialRepository(session)
+        self._course_repo = CourseRepository(session)
+
+    async def list_for_course(self, course_id: UUID, org_id: UUID) -> list[CourseLearningMaterial]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        return await self._repo.list_by_course(course_id)
+
+    async def set_for_course(
+        self, course_id: UUID, body: CourseLearningMaterialsUpdate, org_id: UUID
+    ) -> list[CourseLearningMaterial]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        materials = [item.model_dump() for item in body.materials]
+        records = await self._repo.replace_for_course(course_id, materials)
+        await self._session.commit()
+        return records
+
+
+class CourseLessonPlanService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CourseLessonPlanRepository(session)
+        self._course_repo = CourseRepository(session)
+        self._curriculum_repo = CurriculumRepository(session)
+
+    async def _to_response_list(
+        self, records: list[CourseLessonPlanItem]
+    ) -> list[LessonPlanItemResponse]:
+        item_ids = [r.id for r in records]
+        co_map = await self._repo.list_cos_for_items(item_ids)
+        po_map = await self._repo.list_pos_for_items(item_ids)
+        return [
+            LessonPlanItemResponse(
+                id=r.id,
+                curriculum_id=r.curriculum_id,
+                course_id=r.course_id,
+                week_number=r.week_number,
+                lesson_label=r.lesson_label,
+                topic=r.topic,
+                tla=r.tla,
+                assessment_strategy=r.assessment_strategy,
+                order_index=r.order_index,
+                co_ids=co_map.get(r.id, []),
+                po_ids=po_map.get(r.id, []),
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in records
+        ]
+
+    async def list_for_course(
+        self, course_id: UUID, curriculum_id: UUID, org_id: UUID
+    ) -> list[LessonPlanItemResponse]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+        records = await self._repo.list_by_course(curriculum_id, course_id)
+        return await self._to_response_list(records)
+
+    async def set_for_course(
+        self, course_id: UUID, curriculum_id: UUID, body: LessonPlanItemsUpdate, org_id: UUID
+    ) -> list[LessonPlanItemResponse]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+        items = [item.model_dump() for item in body.items]
+        records = await self._repo.replace_for_course(curriculum_id, course_id, items)
+        await self._session.commit()
+        return await self._to_response_list(records)
+
+
 class CourseBloomDomainService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -402,6 +492,82 @@ class CourseAssessmentToolService:
         records = await self._repo.replace_for_course(curriculum_id, course_id, entries)
         await self._session.commit()
         return await self._to_response_list(records, org_id)
+
+
+class CourseAssessmentPatternService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CourseCOMarksRepository(session)
+        self._course_repo = CourseRepository(session)
+        self._curriculum_repo = CurriculumRepository(session)
+        self._assessment_type_repo = AssessmentTypeRepository(session)
+
+    async def list_for_course(
+        self, course_id: UUID, curriculum_id: UUID, org_id: UUID
+    ) -> list[CourseCOMarks]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+        return await self._repo.list_for_course(curriculum_id, course_id)
+
+    async def set_for_course(
+        self, course_id: UUID, curriculum_id: UUID, body: CourseCOMarksUpdate, org_id: UUID
+    ) -> list[CourseCOMarks]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+
+        valid_types = {a.id for a in await self._assessment_type_repo.list_active(org_id)}
+        for entry in body.marks:
+            if entry.assessment_type_id not in valid_types:
+                raise RefDataNotFoundError("Assessment type")
+
+        entries = [item.model_dump() for item in body.marks]
+        records = await self._repo.replace_for_course(curriculum_id, course_id, entries)
+        await self._session.commit()
+        return records
+
+
+class CourseBloomMarksService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CourseBloomMarksRepository(session)
+        self._course_repo = CourseRepository(session)
+        self._curriculum_repo = CurriculumRepository(session)
+        self._assessment_type_repo = AssessmentTypeRepository(session)
+        self._bloom_level_repo = BloomLevelRepository(session)
+
+    async def list_for_course(
+        self, course_id: UUID, curriculum_id: UUID, org_id: UUID
+    ) -> list[CourseBloomMarks]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+        return await self._repo.list_for_course(curriculum_id, course_id)
+
+    async def set_for_course(
+        self, course_id: UUID, curriculum_id: UUID, body: CourseBloomMarksUpdate, org_id: UUID
+    ) -> list[CourseBloomMarks]:
+        if await self._course_repo.get_by_id(course_id, org_id) is None:
+            raise CourseNotFoundError()
+        if await self._curriculum_repo.get_by_id(curriculum_id, org_id) is None:
+            raise CurriculumNotFoundError()
+
+        valid_types = {a.id for a in await self._assessment_type_repo.list_active(org_id)}
+        valid_bloom_levels = {b.id for b in await self._bloom_level_repo.list_all_active(org_id)}
+        for entry in body.marks:
+            if entry.assessment_type_id not in valid_types:
+                raise RefDataNotFoundError("Assessment type")
+            if entry.bloom_level_id not in valid_bloom_levels:
+                raise RefDataNotFoundError("Bloom level")
+
+        entries = [item.model_dump() for item in body.marks]
+        records = await self._repo.replace_for_course(curriculum_id, course_id, entries)
+        await self._session.commit()
+        return records
 
 
 class CourseSlotService:

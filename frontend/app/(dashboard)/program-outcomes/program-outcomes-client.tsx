@@ -28,9 +28,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -42,54 +40,31 @@ type ProgramOutcome = {
   id: string
   code: string
   statement: string
-  bloom_level_name?: string
-  program_name?: string
+  program_id: string
+  bloom_domain_id?: string | null
+  po_type?: string | null
   status: string
 }
 
-type Program = { id: string; name: string }
+type Program = { id: string; title?: string; name?: string; acronym?: string }
 type BloomDomain = { id: string; name: string }
-type BloomLevel = { id: string; code: string; name: string; bloom_domain_id: string; order_index: number }
+type POType = { id: string; name: string; is_active: boolean }
+
+const NONE_PO_TYPE = "none"
 
 const schema = z.object({
   program_id: z.string().min(1, "Program is required"),
   code: z.string().min(1, "Code is required"),
   statement: z.string().min(1, "Statement is required").max(500, "Max 500 characters"),
-  bloom_level_id: z.string().min(1, "Bloom level is required"),
+  bloom_domain_id: z.string().min(1, "Bloom domain is required"),
+  po_type: z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
 
-const columns: ColumnDef<ProgramOutcome>[] = [
-  { accessorKey: "code", header: "Code" },
-  {
-    accessorKey: "statement",
-    header: "Statement",
-    cell: ({ row }) => (
-      <span title={row.original.statement}>{truncate(row.original.statement, 80)}</span>
-    ),
-  },
-  {
-    accessorKey: "bloom_level_name",
-    header: "Bloom Level",
-    cell: ({ row }) =>
-      row.original.bloom_level_name ?? (
-        <span className="text-muted-foreground">—</span>
-      ),
-  },
-  {
-    accessorKey: "program_name",
-    header: "Program",
-    cell: ({ row }) =>
-      row.original.program_name ?? (
-        <span className="text-muted-foreground">—</span>
-      ),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
-  },
-]
+function programLabel(p: Program): string {
+  const title = p.title ?? p.name ?? ""
+  return p.acronym ? `${p.acronym} — ${title}` : title
+}
 
 export function ProgramOutcomesClient() {
   const [open, setOpen] = useState(false)
@@ -120,15 +95,55 @@ export function ProgramOutcomesClient() {
     },
   })
 
-  const { data: bloomLevels = [] } = useQuery({
-    queryKey: queryKeys.refData.bloomLevels,
+  const { data: poTypes = [] } = useQuery({
+    queryKey: queryKeys.refData.poTypes,
     queryFn: async () => {
-      const { data } = await apiClient.GET("/ref-data/bloom-levels" as never)
-      return ((data as unknown) as BloomLevel[]) ?? []
+      const { data } = await apiClient.GET("/ref-data/po-types" as never)
+      return ((data as unknown) as { items?: POType[] })?.items ?? ((data as unknown) as POType[]) ?? []
     },
   })
 
-  const bloomLevelById = Object.fromEntries(bloomLevels.map((l) => [l.id, l]))
+  const programById = Object.fromEntries((programs ?? []).map((p) => [p.id, p]))
+  const bloomDomainById = Object.fromEntries(bloomDomains.map((d) => [d.id, d]))
+  const activePoTypes = poTypes.filter((t) => t.is_active)
+
+  const columns: ColumnDef<ProgramOutcome>[] = [
+    { accessorKey: "code", header: "Code" },
+    {
+      accessorKey: "statement",
+      header: "Statement",
+      cell: ({ row }) => (
+        <span title={row.original.statement}>{truncate(row.original.statement, 80)}</span>
+      ),
+    },
+    {
+      accessorKey: "bloom_domain_id",
+      header: "Bloom Domain",
+      cell: ({ row }) =>
+        bloomDomainById[row.original.bloom_domain_id ?? ""]?.name ?? (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      accessorKey: "program_id",
+      header: "Program",
+      cell: ({ row }) => {
+        const program = programById[row.original.program_id]
+        return program ? programLabel(program) : <span className="text-muted-foreground">—</span>
+      },
+    },
+    {
+      accessorKey: "po_type",
+      header: "PO Type",
+      cell: ({ row }) =>
+        row.original.po_type ?? <span className="text-muted-foreground">—</span>,
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+  ]
 
   const {
     register,
@@ -140,7 +155,17 @@ export function ProgramOutcomesClient() {
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      await apiClient.POST("/program-outcomes" as never, { body: values } as never)
+      const order_index = (data ?? []).filter((po) => po.program_id === values.program_id).length
+      await apiClient.POST("/program-outcomes" as never, {
+        body: {
+          program_id: values.program_id,
+          code: values.code,
+          statement: values.statement,
+          bloom_domain_id: values.bloom_domain_id,
+          po_type: values.po_type === NONE_PO_TYPE ? undefined : values.po_type,
+          order_index,
+        },
+      } as never)
     },
     onSuccess: () => {
       toast.success("Program Outcome created")
@@ -189,7 +214,7 @@ export function ProgramOutcomesClient() {
                           <SelectContent>
                             {(programs ?? []).map((p) => (
                               <SelectItem key={p.id} value={p.id}>
-                                {p.name}
+                                {programLabel(p)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -224,43 +249,53 @@ export function ProgramOutcomesClient() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="po-bloom">Bloom Level</Label>
+                    <Label htmlFor="po-bloom">Bloom Domain</Label>
                     <Controller
-                      name="bloom_level_id"
+                      name="bloom_domain_id"
                       control={control}
                       render={({ field }) => (
                         <Select value={field.value ?? ""} onValueChange={field.onChange}>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select bloom level">
-                              {(v: string | null) => {
-                                const bl = bloomLevelById[v ?? ""]
-                                return bl ? `${bl.code} — ${bl.name}` : null
-                              }}
-                            </SelectValue>
+                            <SelectValue placeholder="Select bloom domain" />
                           </SelectTrigger>
                           <SelectContent>
-                            {bloomDomains.map((domain) => {
-                              const levels = bloomLevels
-                                .filter((l) => l.bloom_domain_id === domain.id)
-                                .sort((a, b) => a.order_index - b.order_index)
-                              if (levels.length === 0) return null
-                              return (
-                                <SelectGroup key={domain.id}>
-                                  <SelectLabel>{domain.name}</SelectLabel>
-                                  {levels.map((l) => (
-                                    <SelectItem key={l.id} value={l.id}>
-                                      {l.code} — {l.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                              )
-                            })}
+                            {bloomDomains.map((domain) => (
+                              <SelectItem key={domain.id} value={domain.id}>
+                                {domain.name}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       )}
                     />
-                    {errors.bloom_level_id && (
-                      <p className="text-sm text-destructive">{errors.bloom_level_id.message}</p>
+                    {errors.bloom_domain_id && (
+                      <p className="text-sm text-destructive">{errors.bloom_domain_id.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="po-type">PO Type</Label>
+                    <Controller
+                      name="po_type"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? NONE_PO_TYPE} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select PO type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE_PO_TYPE}>— None —</SelectItem>
+                            {activePoTypes.map((t) => (
+                              <SelectItem key={t.id} value={t.name}>
+                                {t.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.po_type && (
+                      <p className="text-sm text-destructive">{errors.po_type.message}</p>
                     )}
                   </div>
                 </form>

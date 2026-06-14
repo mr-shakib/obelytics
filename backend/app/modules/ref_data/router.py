@@ -200,7 +200,7 @@ async def update_course_category(
 
 @router.get("/assessment-types", response_model=list[AssessmentTypeResponse])
 async def list_assessment_types(
-    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -296,7 +296,7 @@ async def update_complex_activity(
 
 @router.get("/knowledge-profiles", response_model=list[KnowledgeProfileResponse])
 async def list_knowledge_profiles(
-    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):

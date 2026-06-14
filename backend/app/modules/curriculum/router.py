@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -22,7 +22,13 @@ from app.modules.curriculum.schemas import (
     CourseAssessmentToolResponse,
     CourseAssessmentToolsUpdate,
     CourseBloomDomainsUpdate,
+    CourseBloomMarkResponse,
+    CourseBloomMarksUpdate,
+    CourseCOMarkResponse,
+    CourseCOMarksUpdate,
     CourseCreate,
+    CourseLearningMaterialResponse,
+    CourseLearningMaterialsUpdate,
     CourseObjectiveResponse,
     CourseObjectivesUpdate,
     CourseResponse,
@@ -36,6 +42,8 @@ from app.modules.curriculum.schemas import (
     CurriculumUpdate,
     FacultyAssignmentCreate,
     FacultyAssignmentResponse,
+    LessonPlanItemResponse,
+    LessonPlanItemsUpdate,
     ModuleLeaderAssignmentCreate,
     ModuleLeaderAssignmentResponse,
     PrerequisiteCreate,
@@ -49,8 +57,12 @@ from app.modules.curriculum.schemas import (
 from app.modules.curriculum.service import (
     AcademicTermService,
     BatchService,
+    CourseAssessmentPatternService,
     CourseAssessmentToolService,
     CourseBloomDomainService,
+    CourseBloomMarksService,
+    CourseLearningMaterialService,
+    CourseLessonPlanService,
     CourseObjectiveService,
     CourseService,
     CourseSlotService,
@@ -62,6 +74,7 @@ from app.modules.curriculum.service import (
     SectionOfferingService,
     SectionService,
 )
+from app.modules.curriculum.outline_service import CourseOutlineService, render_course_outline_pdf
 
 router = APIRouter(tags=["Curriculum"])
 
@@ -281,6 +294,54 @@ async def set_course_objectives(
     return await svc.set_for_course(course_id, body, current_user.organization_id)
 
 
+@router.get("/courses/{course_id}/learning-materials", response_model=list[CourseLearningMaterialResponse])
+async def list_course_learning_materials(
+    course_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseLearningMaterialService(db)
+    return await svc.list_for_course(course_id, current_user.organization_id)
+
+
+@router.put("/courses/{course_id}/learning-materials", response_model=list[CourseLearningMaterialResponse])
+async def set_course_learning_materials(
+    course_id: UUID,
+    body: CourseLearningMaterialsUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseLearningMaterialService(db)
+    return await svc.set_for_course(course_id, body, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}/lesson-plan", response_model=list[LessonPlanItemResponse])
+async def list_course_lesson_plan(
+    course_id: UUID,
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseLessonPlanService(db)
+    return await svc.list_for_course(course_id, curriculum_id, current_user.organization_id)
+
+
+@router.put("/courses/{course_id}/lesson-plan", response_model=list[LessonPlanItemResponse])
+async def set_course_lesson_plan(
+    course_id: UUID,
+    curriculum_id: UUID,
+    body: LessonPlanItemsUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseLessonPlanService(db)
+    return await svc.set_for_course(course_id, curriculum_id, body, current_user.organization_id)
+
+
 @router.get("/courses/{course_id}/assessment-tools", response_model=list[CourseAssessmentToolResponse])
 async def list_course_assessment_tools(
     course_id: UUID,
@@ -304,6 +365,75 @@ async def set_course_assessment_tools(
 ):
     svc = CourseAssessmentToolService(db)
     return await svc.set_tools(course_id, curriculum_id, body, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}/assessment-pattern", response_model=list[CourseCOMarkResponse])
+async def list_course_assessment_pattern(
+    course_id: UUID,
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseAssessmentPatternService(db)
+    return await svc.list_for_course(course_id, curriculum_id, current_user.organization_id)
+
+
+@router.put("/courses/{course_id}/assessment-pattern", response_model=list[CourseCOMarkResponse])
+async def set_course_assessment_pattern(
+    course_id: UUID,
+    curriculum_id: UUID,
+    body: CourseCOMarksUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseAssessmentPatternService(db)
+    return await svc.set_for_course(course_id, curriculum_id, body, current_user.organization_id)
+
+
+@router.get("/courses/{course_id}/outline-pdf")
+async def get_course_outline_pdf(
+    course_id: UUID,
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseOutlineService(db)
+    context = await svc.build_context(course_id, curriculum_id, current_user.organization_id)
+    pdf_bytes = render_course_outline_pdf(context)
+    filename = f"{context['course']['code']}_course_outline.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/courses/{course_id}/bloom-marks", response_model=list[CourseBloomMarkResponse])
+async def list_course_bloom_marks(
+    course_id: UUID,
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseBloomMarksService(db)
+    return await svc.list_for_course(course_id, curriculum_id, current_user.organization_id)
+
+
+@router.put("/courses/{course_id}/bloom-marks", response_model=list[CourseBloomMarkResponse])
+async def set_course_bloom_marks(
+    course_id: UUID,
+    curriculum_id: UUID,
+    body: CourseBloomMarksUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseBloomMarksService(db)
+    return await svc.set_for_course(course_id, curriculum_id, body, current_user.organization_id)
 
 
 @router.get("/courses/{course_id}/prerequisites", response_model=list[PrerequisiteResponse])

@@ -1102,6 +1102,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/courses/{course_id}/learning-materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Learning Materials */
+        get: operations["list_course_learning_materials_api_v1_courses__course_id__learning_materials_get"];
+        /** Set Course Learning Materials */
+        put: operations["set_course_learning_materials_api_v1_courses__course_id__learning_materials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/lesson-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Lesson Plan */
+        get: operations["list_course_lesson_plan_api_v1_courses__course_id__lesson_plan_get"];
+        /** Set Course Lesson Plan */
+        put: operations["set_course_lesson_plan_api_v1_courses__course_id__lesson_plan_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/courses/{course_id}/assessment-tools": {
         parameters: {
             query?: never;
@@ -1113,6 +1149,42 @@ export interface paths {
         get: operations["list_course_assessment_tools_api_v1_courses__course_id__assessment_tools_get"];
         /** Set Course Assessment Tools */
         put: operations["set_course_assessment_tools_api_v1_courses__course_id__assessment_tools_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/assessment-pattern": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Assessment Pattern */
+        get: operations["list_course_assessment_pattern_api_v1_courses__course_id__assessment_pattern_get"];
+        /** Set Course Assessment Pattern */
+        put: operations["set_course_assessment_pattern_api_v1_courses__course_id__assessment_pattern_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/bloom-marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Bloom Marks */
+        get: operations["list_course_bloom_marks_api_v1_courses__course_id__bloom_marks_get"];
+        /** Set Course Bloom Marks */
+        put: operations["set_course_bloom_marks_api_v1_courses__course_id__bloom_marks_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3935,6 +4007,120 @@ export interface components {
             /** Bloom Domain Ids */
             bloom_domain_ids: string[];
         };
+        /** CourseBloomMarkInput */
+        CourseBloomMarkInput: {
+            /**
+             * Assessment Type Id
+             * Format: uuid
+             */
+            assessment_type_id: string;
+            /**
+             * Bloom Level Id
+             * Format: uuid
+             */
+            bloom_level_id: string;
+            /**
+             * Component
+             * @enum {string}
+             */
+            component: "CIE" | "SEE";
+            /** Marks */
+            marks: number | string;
+        };
+        /** CourseBloomMarkResponse */
+        CourseBloomMarkResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Curriculum Id
+             * Format: uuid
+             */
+            curriculum_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Assessment Type Id
+             * Format: uuid
+             */
+            assessment_type_id: string;
+            /**
+             * Bloom Level Id
+             * Format: uuid
+             */
+            bloom_level_id: string;
+            /**
+             * Component
+             * @enum {string}
+             */
+            component: "CIE" | "SEE";
+            /** Marks */
+            marks: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CourseBloomMarksUpdate */
+        CourseBloomMarksUpdate: {
+            /** Marks */
+            marks?: components["schemas"]["CourseBloomMarkInput"][];
+        };
+        /** CourseCOMarkInput */
+        CourseCOMarkInput: {
+            /**
+             * Assessment Type Id
+             * Format: uuid
+             */
+            assessment_type_id: string;
+            /** Course Outcome Id */
+            course_outcome_id?: string | null;
+            /** Marks */
+            marks: number | string;
+        };
+        /** CourseCOMarkResponse */
+        CourseCOMarkResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Curriculum Id
+             * Format: uuid
+             */
+            curriculum_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Assessment Type Id
+             * Format: uuid
+             */
+            assessment_type_id: string;
+            /** Course Outcome Id */
+            course_outcome_id: string | null;
+            /** Marks */
+            marks: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CourseCOMarksUpdate */
+        CourseCOMarksUpdate: {
+            /** Marks */
+            marks?: components["schemas"]["CourseCOMarkInput"][];
+        };
         /** CourseCategoryCreate */
         CourseCategoryCreate: {
             /** Name */
@@ -4010,6 +4196,60 @@ export interface components {
             lab_hours: number;
             /** Description */
             description?: string | null;
+        };
+        /** CourseLearningMaterialInput */
+        CourseLearningMaterialInput: {
+            /**
+             * Material Type
+             * @enum {string}
+             */
+            material_type: "TEXTBOOK" | "REFERENCE";
+            /** Title */
+            title: string;
+            /** Authors */
+            authors?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            /** Edition Year */
+            edition_year?: string | null;
+        };
+        /** CourseLearningMaterialResponse */
+        CourseLearningMaterialResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Material Type
+             * @enum {string}
+             */
+            material_type: "TEXTBOOK" | "REFERENCE";
+            /** Order Index */
+            order_index: number;
+            /** Title */
+            title: string;
+            /** Authors */
+            authors: string | null;
+            /** Publisher */
+            publisher: string | null;
+            /** Edition Year */
+            edition_year: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CourseLearningMaterialsUpdate */
+        CourseLearningMaterialsUpdate: {
+            /** Materials */
+            materials?: components["schemas"]["CourseLearningMaterialInput"][];
         };
         /** CourseObjectiveResponse */
         CourseObjectiveResponse: {
@@ -4681,6 +4921,72 @@ export interface components {
             description?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /** LessonPlanItemInput */
+        LessonPlanItemInput: {
+            /** Week Number */
+            week_number: number;
+            /** Lesson Label */
+            lesson_label?: string | null;
+            /** Topic */
+            topic: string;
+            /** Tla */
+            tla?: string | null;
+            /** Assessment Strategy */
+            assessment_strategy?: string | null;
+            /** Co Ids */
+            co_ids?: string[];
+            /** Po Ids */
+            po_ids?: string[];
+        };
+        /** LessonPlanItemResponse */
+        LessonPlanItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Curriculum Id
+             * Format: uuid
+             */
+            curriculum_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Week Number */
+            week_number: number;
+            /** Lesson Label */
+            lesson_label: string | null;
+            /** Topic */
+            topic: string;
+            /** Tla */
+            tla: string | null;
+            /** Assessment Strategy */
+            assessment_strategy: string | null;
+            /** Order Index */
+            order_index: number;
+            /** Co Ids */
+            co_ids?: string[];
+            /** Po Ids */
+            po_ids?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** LessonPlanItemsUpdate */
+        LessonPlanItemsUpdate: {
+            /** Items */
+            items?: components["schemas"]["LessonPlanItemInput"][];
         };
         /** LoginRequest */
         LoginRequest: {
@@ -8594,6 +8900,142 @@ export interface operations {
             };
         };
     };
+    list_course_learning_materials_api_v1_courses__course_id__learning_materials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseLearningMaterialResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_course_learning_materials_api_v1_courses__course_id__learning_materials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseLearningMaterialsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseLearningMaterialResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_course_lesson_plan_api_v1_courses__course_id__lesson_plan_get: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LessonPlanItemResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_course_lesson_plan_api_v1_courses__course_id__lesson_plan_put: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonPlanItemsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LessonPlanItemResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_course_assessment_tools_api_v1_courses__course_id__assessment_tools_get: {
         parameters: {
             query: {
@@ -8651,6 +9093,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseAssessmentToolResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_course_assessment_pattern_api_v1_courses__course_id__assessment_pattern_get: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseCOMarkResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_course_assessment_pattern_api_v1_courses__course_id__assessment_pattern_put: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseCOMarksUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseCOMarkResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_course_bloom_marks_api_v1_courses__course_id__bloom_marks_get: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseBloomMarkResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_course_bloom_marks_api_v1_courses__course_id__bloom_marks_put: {
+        parameters: {
+            query: {
+                curriculum_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseBloomMarksUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseBloomMarkResponse"][];
                 };
             };
             /** @description Validation Error */

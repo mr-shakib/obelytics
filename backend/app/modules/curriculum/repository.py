@@ -9,6 +9,12 @@ from app.modules.curriculum.models import (
     Course,
     CourseAssessmentTool,
     CourseBloomDomain,
+    CourseBloomMarks,
+    CourseCOMarks,
+    CourseLearningMaterial,
+    CourseLessonPlanItem,
+    CourseLessonPlanItemCO,
+    CourseLessonPlanItemPO,
     CourseObjective,
     CoursePrerequisite,
     Curriculum,
@@ -182,6 +188,131 @@ class CourseObjectiveRepository:
         return records
 
 
+class CourseLearningMaterialRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_course(self, course_id: UUID) -> list[CourseLearningMaterial]:
+        result = await self._session.execute(
+            select(CourseLearningMaterial)
+            .where(CourseLearningMaterial.course_id == course_id)
+            .order_by(CourseLearningMaterial.material_type, CourseLearningMaterial.order_index)
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_course(
+        self, course_id: UUID, materials: list[dict]
+    ) -> list[CourseLearningMaterial]:
+        await self._session.execute(
+            delete(CourseLearningMaterial).where(CourseLearningMaterial.course_id == course_id)
+        )
+        counters: dict[str, int] = {}
+        records = []
+        for material in materials:
+            order_index = counters.get(material["material_type"], 0)
+            counters[material["material_type"]] = order_index + 1
+            records.append(
+                CourseLearningMaterial(course_id=course_id, order_index=order_index, **material)
+            )
+        self._session.add_all(records)
+        await self._session.flush()
+        return records
+
+
+class CourseLessonPlanRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_course(
+        self, curriculum_id: UUID, course_id: UUID
+    ) -> list[CourseLessonPlanItem]:
+        result = await self._session.execute(
+            select(CourseLessonPlanItem)
+            .where(
+                and_(
+                    CourseLessonPlanItem.curriculum_id == curriculum_id,
+                    CourseLessonPlanItem.course_id == course_id,
+                )
+            )
+            .order_by(CourseLessonPlanItem.order_index)
+        )
+        return list(result.scalars().all())
+
+    async def list_cos_for_items(self, item_ids: list[UUID]) -> dict[UUID, list[UUID]]:
+        if not item_ids:
+            return {}
+        result = await self._session.execute(
+            select(CourseLessonPlanItemCO).where(CourseLessonPlanItemCO.item_id.in_(item_ids))
+        )
+        mapping: dict[UUID, list[UUID]] = {}
+        for row in result.scalars().all():
+            mapping.setdefault(row.item_id, []).append(row.course_outcome_id)
+        return mapping
+
+    async def list_pos_for_items(self, item_ids: list[UUID]) -> dict[UUID, list[UUID]]:
+        if not item_ids:
+            return {}
+        result = await self._session.execute(
+            select(CourseLessonPlanItemPO).where(CourseLessonPlanItemPO.item_id.in_(item_ids))
+        )
+        mapping: dict[UUID, list[UUID]] = {}
+        for row in result.scalars().all():
+            mapping.setdefault(row.item_id, []).append(row.program_outcome_id)
+        return mapping
+
+    async def replace_for_course(
+        self, curriculum_id: UUID, course_id: UUID, items: list[dict]
+    ) -> list[CourseLessonPlanItem]:
+        existing_ids_result = await self._session.execute(
+            select(CourseLessonPlanItem.id).where(
+                and_(
+                    CourseLessonPlanItem.curriculum_id == curriculum_id,
+                    CourseLessonPlanItem.course_id == course_id,
+                )
+            )
+        )
+        existing_ids = [row[0] for row in existing_ids_result.all()]
+        if existing_ids:
+            await self._session.execute(
+                delete(CourseLessonPlanItemCO).where(CourseLessonPlanItemCO.item_id.in_(existing_ids))
+            )
+            await self._session.execute(
+                delete(CourseLessonPlanItemPO).where(CourseLessonPlanItemPO.item_id.in_(existing_ids))
+            )
+        await self._session.execute(
+            delete(CourseLessonPlanItem).where(
+                and_(
+                    CourseLessonPlanItem.curriculum_id == curriculum_id,
+                    CourseLessonPlanItem.course_id == course_id,
+                )
+            )
+        )
+
+        records: list[tuple[CourseLessonPlanItem, list[UUID], list[UUID]]] = []
+        for index, item in enumerate(items):
+            co_ids = item.pop("co_ids")
+            po_ids = item.pop("po_ids")
+            record = CourseLessonPlanItem(
+                curriculum_id=curriculum_id,
+                course_id=course_id,
+                order_index=index,
+                **item,
+            )
+            self._session.add(record)
+            records.append((record, co_ids, po_ids))
+
+        await self._session.flush()
+
+        for record, co_ids, po_ids in records:
+            for co_id in co_ids:
+                self._session.add(CourseLessonPlanItemCO(item_id=record.id, course_outcome_id=co_id))
+            for po_id in po_ids:
+                self._session.add(CourseLessonPlanItemPO(item_id=record.id, program_outcome_id=po_id))
+
+        await self._session.flush()
+        return [r for r, _, _ in records]
+
+
 class CourseBloomDomainRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -243,6 +374,76 @@ class CourseAssessmentToolRepository:
                 is_locked=is_locked,
             )
             for assessment_type_id, is_locked in entries
+        ]
+        self._session.add_all(records)
+        await self._session.flush()
+        return records
+
+
+class CourseCOMarksRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_for_course(self, curriculum_id: UUID, course_id: UUID) -> list[CourseCOMarks]:
+        result = await self._session.execute(
+            select(CourseCOMarks).where(
+                and_(
+                    CourseCOMarks.curriculum_id == curriculum_id,
+                    CourseCOMarks.course_id == course_id,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_course(
+        self, curriculum_id: UUID, course_id: UUID, entries: list[dict]
+    ) -> list[CourseCOMarks]:
+        await self._session.execute(
+            delete(CourseCOMarks).where(
+                and_(
+                    CourseCOMarks.curriculum_id == curriculum_id,
+                    CourseCOMarks.course_id == course_id,
+                )
+            )
+        )
+        records = [
+            CourseCOMarks(curriculum_id=curriculum_id, course_id=course_id, **entry)
+            for entry in entries
+        ]
+        self._session.add_all(records)
+        await self._session.flush()
+        return records
+
+
+class CourseBloomMarksRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_for_course(self, curriculum_id: UUID, course_id: UUID) -> list[CourseBloomMarks]:
+        result = await self._session.execute(
+            select(CourseBloomMarks).where(
+                and_(
+                    CourseBloomMarks.curriculum_id == curriculum_id,
+                    CourseBloomMarks.course_id == course_id,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_course(
+        self, curriculum_id: UUID, course_id: UUID, entries: list[dict]
+    ) -> list[CourseBloomMarks]:
+        await self._session.execute(
+            delete(CourseBloomMarks).where(
+                and_(
+                    CourseBloomMarks.curriculum_id == curriculum_id,
+                    CourseBloomMarks.course_id == course_id,
+                )
+            )
+        )
+        records = [
+            CourseBloomMarks(curriculum_id=curriculum_id, course_id=course_id, **entry)
+            for entry in entries
         ]
         self._session.add_all(records)
         await self._session.flush()
@@ -615,6 +816,22 @@ class ModuleLeaderAssignmentRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def list_by_course(
+        self, course_id: UUID, org_id: UUID
+    ) -> list[ModuleLeaderAssignment]:
+        result = await self._session.execute(
+            select(ModuleLeaderAssignment)
+            .where(
+                and_(
+                    ModuleLeaderAssignment.organization_id == org_id,
+                    ModuleLeaderAssignment.course_id == course_id,
+                    ModuleLeaderAssignment.removed_at.is_(None),
+                )
+            )
+            .order_by(ModuleLeaderAssignment.assigned_at.desc())
+        )
+        return list(result.scalars().all())
 
     async def list_for_user(
         self, org_id: UUID, user_id: UUID
