@@ -20,6 +20,7 @@ from app.modules.curriculum.exceptions import (
     FacultyAssignmentConflictError,
     FacultyAssignmentNotFoundError,
     ModuleLeaderAssignmentNotFoundError,
+    ModuleLeaderScopeError,
     PrerequisiteNotFoundError,
     SectionConflictError,
     SectionNotFoundError,
@@ -94,6 +95,20 @@ from app.modules.curriculum.schemas import (
 )
 
 _MODIFIABLE_STATUSES = {"DRAFT", "ACTIVE"}
+
+
+async def _assert_module_leader(
+    session: AsyncSession,
+    batch_id: UUID,
+    academic_term_id: UUID,
+    course_id: UUID,
+    user_id: UUID,
+) -> None:
+    """Restrict an action to the user currently leading this course in this batch/term."""
+    repo = ModuleLeaderAssignmentRepository(session)
+    assignment = await repo.find_active(batch_id, academic_term_id, course_id)
+    if assignment is None or assignment.user_id != user_id:
+        raise ModuleLeaderScopeError()
 
 
 class CurriculumService:
@@ -948,10 +963,14 @@ class BatchService:
         course_id: UUID,
         section_name: str,
         org_id: UUID,
+        acting_user_id: UUID | None = None,
     ) -> SectionOffering:
         batch = await self._repo.get_by_id(batch_id, org_id)
         if batch is None:
             raise BatchNotFoundError()
+
+        if acting_user_id is not None:
+            await _assert_module_leader(self._session, batch_id, academic_term_id, course_id, acting_user_id)
 
         section_svc = SectionService(self._session)
         section = await section_svc.get_or_create(section_name.strip().upper(), org_id)
@@ -1120,10 +1139,14 @@ class SectionOfferingService:
             raise SectionOfferingNotFoundError()
         return offering
 
-    async def delete(self, offering_id: UUID, org_id: UUID) -> None:
+    async def delete(self, offering_id: UUID, org_id: UUID, acting_user_id: UUID | None = None) -> None:
         offering = await self._repo.get_by_id(offering_id, org_id)
         if offering is None:
             raise SectionOfferingNotFoundError()
+        if acting_user_id is not None:
+            await _assert_module_leader(
+                self._session, offering.batch_id, offering.academic_term_id, offering.course_id, acting_user_id
+            )
         await self._repo.delete(offering)
         await self._session.commit()
 
@@ -1134,8 +1157,19 @@ class FacultyAssignmentService:
         self._repo = FacultyAssignmentRepository(session)
 
     async def assign(
-        self, body: FacultyAssignmentCreate, org_id: UUID
+        self, body: FacultyAssignmentCreate, org_id: UUID, acting_user_id: UUID | None = None
     ) -> FacultyAssignment:
+        if acting_user_id is not None:
+            if body.role_in_course != "SECTION_TEACHER":
+                raise ModuleLeaderScopeError()
+            offering_repo = SectionOfferingRepository(self._session)
+            offering = await offering_repo.get_by_id(body.section_offering_id, org_id)
+            if offering is None:
+                raise SectionOfferingNotFoundError()
+            await _assert_module_leader(
+                self._session, offering.batch_id, offering.academic_term_id, offering.course_id, acting_user_id
+            )
+
         existing = await self._repo.find_active(
             body.section_offering_id, body.user_id, body.role_in_course
         )
@@ -1150,10 +1184,20 @@ class FacultyAssignmentService:
         await self._session.commit()
         return result
 
-    async def remove(self, assignment_id: UUID, org_id: UUID) -> FacultyAssignment:
+    async def remove(self, assignment_id: UUID, org_id: UUID, acting_user_id: UUID | None = None) -> FacultyAssignment:
         assignment = await self._repo.get_by_id(assignment_id)
         if assignment is None:
             raise FacultyAssignmentNotFoundError()
+        if acting_user_id is not None:
+            if assignment.role_in_course != "SECTION_TEACHER":
+                raise ModuleLeaderScopeError()
+            offering_repo = SectionOfferingRepository(self._session)
+            offering = await offering_repo.get_by_id(assignment.section_offering_id, org_id)
+            if offering is None:
+                raise SectionOfferingNotFoundError()
+            await _assert_module_leader(
+                self._session, offering.batch_id, offering.academic_term_id, offering.course_id, acting_user_id
+            )
         result = await self._repo.remove(assignment)
         await self._session.commit()
         return result

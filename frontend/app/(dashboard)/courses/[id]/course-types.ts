@@ -1,4 +1,10 @@
-export type ModuleLeaderAssignment = { course_id: string }
+export type ModuleLeaderAssignment = {
+  id: string
+  batch_id: string
+  academic_term_id: string
+  course_id: string
+  user_id: string
+}
 
 export type Course = {
   id: string

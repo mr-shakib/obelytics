@@ -99,6 +99,14 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FacultyRosterEntry(BaseModel):
+    id: UUID
+    full_name: str
+    faculty_type: str | None
+
+    model_config = {"from_attributes": True}
+
+
 class UserRoleAssignmentResponse(BaseModel):
     id: UUID
     role_id: UUID

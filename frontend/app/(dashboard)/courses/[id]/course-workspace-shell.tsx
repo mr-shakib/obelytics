@@ -14,6 +14,7 @@ import {
   BookOpen,
   Download,
   Loader2,
+  Users,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -32,6 +33,7 @@ const SECTIONS: { slug: string; label: string; icon: LucideIcon }[] = [
   { slug: "assessment", label: "Assessment", icon: ClipboardList },
   { slug: "mappings", label: "Outcomes & Mappings", icon: Target },
   { slug: "materials", label: "Learning Materials", icon: BookOpen },
+  { slug: "sections", label: "Sections", icon: Users },
 ]
 
 interface Props {

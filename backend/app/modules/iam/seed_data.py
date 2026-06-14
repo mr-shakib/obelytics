@@ -31,7 +31,9 @@ ALL_PERMISSIONS: list[dict] = [
     {"code": "course.update",                 "module": "curriculum",   "description": "Update courses"},
     {"code": "batch.create",                  "module": "curriculum",   "description": "Create batches"},
     {"code": "section_offering.create",       "module": "curriculum",   "description": "Create section offerings"},
+    {"code": "section_offering.manage_own",   "module": "curriculum",   "description": "Create section offerings for courses you lead"},
     {"code": "faculty_assignment.create",     "module": "curriculum",   "description": "Assign faculty"},
+    {"code": "faculty_assignment.section_teacher", "module": "curriculum", "description": "Assign section teachers for courses you lead"},
     # ── OBE ───────────────────────────────────────────────────────────────────
     {"code": "po.create",                     "module": "obe",          "description": "Create program outcomes"},
     {"code": "po.update",                     "module": "obe",          "description": "Update program outcomes"},
@@ -139,6 +141,7 @@ ROLES: list[dict] = [
         "permissions": [
             "curriculum.read", "po.read",
             "course.update",
+            "section_offering.manage_own", "faculty_assignment.section_teacher",
             "co.read", "co.create", "co.update", "co.approve", "co.reject",
             "mapping.co_po.read", "mapping.co_po.create", "mapping.co_po.update",
             "mapping.co_cp.manage", "mapping.co_cp.approve",

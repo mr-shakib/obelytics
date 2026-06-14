@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_permission
+from app.core.dependencies import get_current_user, require_any_permission, require_permission
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
 from app.modules.curriculum.schemas import (
@@ -77,6 +77,16 @@ from app.modules.curriculum.service import (
 from app.modules.curriculum.outline_service import CourseOutlineService, render_course_outline_pdf
 
 router = APIRouter(tags=["Curriculum"])
+
+
+def _scoped_user_id(manifest: PermissionManifestResponse, current_user: User) -> UUID | None:
+    """
+    Returns None for users with org-wide section/faculty management rights (PC/SA),
+    or the acting user's id for module leaders, who are restricted to courses they lead.
+    """
+    if manifest.is_super_admin or "batch.create" in manifest.permissions:
+        return None
+    return current_user.id
 
 
 # ── Curricula ─────────────────────────────────────────────────────────────────
@@ -640,25 +650,26 @@ async def add_batch_term_offering(
     batch_id: UUID,
     academic_term_id: UUID,
     body: AddSectionOfferingBody,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("section_offering.create"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("section_offering.create", "section_offering.manage_own"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = BatchService(db)
     return await svc.add_section_offering(
-        batch_id, academic_term_id, body.course_id, body.section_name, current_user.organization_id
+        batch_id, academic_term_id, body.course_id, body.section_name, current_user.organization_id,
+        acting_user_id=_scoped_user_id(manifest, current_user),
     )
 
 
 @router.delete("/section-offerings/{offering_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_section_offering(
     offering_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("section_offering.create"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("section_offering.create", "section_offering.manage_own"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = SectionOfferingService(db)
-    await svc.delete(offering_id, current_user.organization_id)
+    await svc.delete(offering_id, current_user.organization_id, acting_user_id=_scoped_user_id(manifest, current_user))
 
 
 @router.patch("/batches/{batch_id}", response_model=BatchResponse)
@@ -815,23 +826,23 @@ async def list_faculty_assignments(
 )
 async def assign_faculty(
     body: FacultyAssignmentCreate,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("faculty_assignment.create"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("faculty_assignment.create", "faculty_assignment.section_teacher"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = FacultyAssignmentService(db)
-    return await svc.assign(body, current_user.organization_id)
+    return await svc.assign(body, current_user.organization_id, acting_user_id=_scoped_user_id(manifest, current_user))
 
 
 @router.delete("/faculty-assignments/{assignment_id}", status_code=status.HTTP_200_OK, response_model=FacultyAssignmentResponse)
 async def remove_faculty_assignment(
     assignment_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("faculty_assignment.create"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("faculty_assignment.create", "faculty_assignment.section_teacher"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = FacultyAssignmentService(db)
-    return await svc.remove(assignment_id, current_user.organization_id)
+    return await svc.remove(assignment_id, current_user.organization_id, acting_user_id=_scoped_user_id(manifest, current_user))
 
 
 # ── Module Leader Assignments ────────────────────────────────────────────────

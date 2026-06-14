@@ -33,6 +33,17 @@ class UserRepository(BaseRepository[User]):
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
+    async def list_active_faculty(self, organization_id: UUID):
+        stmt = select(User).where(
+            and_(
+                User.organization_id == organization_id,
+                User.status == "ACTIVE",
+                User.faculty_type.is_not(None),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
     async def get_active_role_assignments(self, user_id: UUID) -> list[UserRoleAssignment]:
         result = await self._session.execute(
             select(UserRoleAssignment)

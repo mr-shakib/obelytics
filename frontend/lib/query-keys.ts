@@ -21,6 +21,7 @@ export const queryKeys = {
     list: (filters?: Record<string, unknown>) => ["users", "list", filters] as const,
     detail: (id: string) => ["users", id] as const,
     roles: (id: string) => ["users", id, "roles"] as const,
+    facultyRoster: ["users", "faculty-roster"] as const,
   },
   roles: {
     all: ["roles"] as const,
@@ -101,6 +102,7 @@ export const queryKeys = {
   },
   facultyAssignments: {
     byOfferings: (offeringIds: string[]) => ["faculty-assignments", "by-offerings", offeringIds] as const,
+    byOffering: (offeringId: string) => ["faculty-assignments", "offering", offeringId] as const,
   },
   moduleLeaderAssignments: {
     byBatchTerm: (batchId: string, termId: string) => ["module-leader-assignments", batchId, termId] as const,

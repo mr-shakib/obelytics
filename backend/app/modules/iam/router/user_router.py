@@ -9,12 +9,14 @@ from app.core.database import get_db
 from app.core.dependencies import (
     get_current_user,
     get_permission_manifest,
+    require_any_permission,
     require_permission,
     require_super_admin,
 )
 from app.modules.iam.models import User
 from app.modules.iam.schemas import (
     BulkCreateResult,
+    FacultyRosterEntry,
     PermissionManifestResponse,
     ResetPasswordRequest,
     RoleAssignRequest,
@@ -55,6 +57,20 @@ async def list_users(
     from app.modules.iam.repository.user_repository import UserRepository
     repo = UserRepository(db)
     return await repo.list_by_org(current_user.organization_id)
+
+
+@router.get("/faculty-roster", response_model=list[FacultyRosterEntry])
+async def list_faculty_roster(
+    _: Annotated[
+        PermissionManifestResponse,
+        Depends(require_any_permission("user.read", "section_offering.manage_own", "faculty_assignment.section_teacher")),
+    ],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.modules.iam.repository.user_repository import UserRepository
+    repo = UserRepository(db)
+    return await repo.list_active_faculty(current_user.organization_id)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

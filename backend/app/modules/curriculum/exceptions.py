@@ -116,3 +116,11 @@ class FacultyAssignmentConflictError(HTTPException):
 class ModuleLeaderAssignmentNotFoundError(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Module leader assignment not found")
+
+
+class ModuleLeaderScopeError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage sections and section teachers for courses you lead",
+        )

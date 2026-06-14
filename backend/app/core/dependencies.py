@@ -66,6 +66,21 @@ def require_permission(code: str):
     return gate
 
 
+def require_any_permission(*codes: str):
+    async def gate(
+        manifest: Annotated[PermissionManifestResponse, Depends(get_permission_manifest)],
+    ) -> PermissionManifestResponse:
+        if manifest.is_super_admin:
+            return manifest
+        if not any(code in manifest.permissions for code in codes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"One of these permissions is required: {', '.join(codes)}",
+            )
+        return manifest
+    return gate
+
+
 def require_super_admin():
     async def gate(
         manifest: Annotated[PermissionManifestResponse, Depends(get_permission_manifest)],
