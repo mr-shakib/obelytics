@@ -1,12 +1,14 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.assessment.models import (
     Assessment,
     AssessmentCOWeight,
+    MarksheetMark,
+    MarksheetQuestion,
     ResultPublication,
     Student,
     StudentEnrollment,
@@ -26,12 +28,23 @@ class StudentRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_active(self, org_id: UUID, program_id: UUID | None = None) -> list[Student]:
+    async def list_active(
+        self, org_id: UUID, program_id: UUID | None = None, search: str | None = None
+    ) -> list[Student]:
         stmt = select(Student).where(
             and_(Student.organization_id == org_id, Student.status == "ACTIVE")
         )
         if program_id:
             stmt = stmt.where(Student.program_id == program_id)
+        if search:
+            pattern = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    Student.student_id_number.ilike(pattern),
+                    Student.full_name.ilike(pattern),
+                )
+            )
+        stmt = stmt.order_by(Student.student_id_number)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -86,6 +99,22 @@ class EnrollmentRepository:
         )
         return list(result.scalars().all())
 
+    async def list_with_students_by_offering(
+        self, offering_id: UUID
+    ) -> list[tuple[StudentEnrollment, Student]]:
+        result = await self._session.execute(
+            select(StudentEnrollment, Student)
+            .join(Student, Student.id == StudentEnrollment.student_id)
+            .where(
+                and_(
+                    StudentEnrollment.section_offering_id == offering_id,
+                    StudentEnrollment.status == "ACTIVE",
+                )
+            )
+            .order_by(Student.student_id_number)
+        )
+        return [(row.StudentEnrollment, row.Student) for row in result]
+
     async def list_by_student(self, student_id: UUID) -> list[StudentEnrollment]:
         result = await self._session.execute(
             select(StudentEnrollment).where(StudentEnrollment.student_id == student_id)
@@ -110,6 +139,10 @@ class EnrollmentRepository:
         await self._session.flush()
         await self._session.refresh(obj)
         return obj
+
+    async def delete(self, obj: StudentEnrollment) -> None:
+        await self._session.delete(obj)
+        await self._session.flush()
 
 
 class AssessmentRepository:
@@ -279,6 +312,101 @@ class ResultPublicationRepository:
         return obj
 
     async def update(self, obj: ResultPublication, data: dict) -> ResultPublication:
+        for key, value in data.items():
+            setattr(obj, key, value)
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+
+class MarksheetQuestionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, question_id: UUID) -> MarksheetQuestion | None:
+        result = await self._session.execute(
+            select(MarksheetQuestion).where(MarksheetQuestion.id == question_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_by_offering(
+        self, offering_id: UUID, exam_type: str | None = None
+    ) -> list[MarksheetQuestion]:
+        stmt = select(MarksheetQuestion).where(
+            MarksheetQuestion.section_offering_id == offering_id
+        )
+        if exam_type:
+            stmt = stmt.where(MarksheetQuestion.exam_type == exam_type)
+        stmt = stmt.order_by(MarksheetQuestion.exam_type, MarksheetQuestion.order_index)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def create(self, obj: MarksheetQuestion) -> MarksheetQuestion:
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+    async def update(self, obj: MarksheetQuestion, data: dict) -> MarksheetQuestion:
+        for key, value in data.items():
+            setattr(obj, key, value)
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+    async def delete(self, obj: MarksheetQuestion) -> None:
+        await self._session.delete(obj)
+        await self._session.flush()
+
+
+class MarksheetMarkRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_offering(
+        self, offering_id: UUID, exam_type: str | None = None
+    ) -> list[MarksheetMark]:
+        stmt = (
+            select(MarksheetMark)
+            .join(MarksheetQuestion, MarksheetMark.question_id == MarksheetQuestion.id)
+            .where(MarksheetQuestion.section_offering_id == offering_id)
+        )
+        if exam_type:
+            stmt = stmt.where(MarksheetQuestion.exam_type == exam_type)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_offering(self, offering_id: UUID) -> int:
+        """Count all marksheet marks entered for this offering (any exam type)."""
+        result = await self._session.execute(
+            select(func.count(MarksheetMark.id))
+            .join(MarksheetQuestion, MarksheetMark.question_id == MarksheetQuestion.id)
+            .where(MarksheetQuestion.section_offering_id == offering_id)
+        )
+        return result.scalar() or 0
+
+    async def find_by_question_enrollment(
+        self, question_id: UUID, enrollment_id: UUID
+    ) -> MarksheetMark | None:
+        result = await self._session.execute(
+            select(MarksheetMark).where(
+                and_(
+                    MarksheetMark.question_id == question_id,
+                    MarksheetMark.student_enrollment_id == enrollment_id,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, obj: MarksheetMark) -> MarksheetMark:
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+    async def update(self, obj: MarksheetMark, data: dict) -> MarksheetMark:
         for key, value in data.items():
             setattr(obj, key, value)
         self._session.add(obj)

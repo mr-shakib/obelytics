@@ -1,0 +1,163 @@
+  <!-- Roster -->
+  <div class="section">
+    <div class="section-header">Student Roster ({{ roster|length }})</div>
+    {% if roster %}
+    <table class="bordered">
+      <thead>
+        <tr><th style="width:8%">SL</th><th style="width:30%">Student ID</th><th>Name</th></tr>
+      </thead>
+      <tbody>
+        {% for s in roster %}
+        <tr><td style="text-align:center">{{ loop.index }}</td><td>{{ s.student_id_number }}</td><td>{{ s.full_name }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No students enrolled</p>
+    {% endif %}
+  </div>
+
+  {% for grid in [mid_grid, final_grid] %}
+  <!-- Marks Grid -->
+  <div class="section">
+    <div class="section-header">{{ grid.exam_type }} Marks</div>
+    {% if grid.questions %}
+    <table class="bordered matrix small">
+      <thead>
+        <tr>
+          <th style="width:6%">SL</th>
+          <th style="width:18%; text-align:left">Student ID</th>
+          {% for q in grid.questions %}
+          <th>{{ q.label }}<br>({{ q.max_marks }})</th>
+          {% endfor %}
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in grid.students %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td style="text-align:left">{{ row.student_id_number }}</td>
+          {% for q in grid.questions %}
+          {% set cell = row.marks[q.id|string] %}
+          <td>{% if cell.is_absent %}AB{% elif cell.marks_obtained is none %}-{% else %}{{ cell.marks_obtained }}{% endif %}</td>
+          {% endfor %}
+          <td><strong>{{ row.total }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No {{ grid.exam_type }} questions configured</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- Marks vs CO/PO -->
+  <div class="section">
+    <div class="section-header">Marks vs CO / PO Attainment (per student)</div>
+    {% if attainment.students %}
+    <table class="bordered matrix small">
+      <thead>
+        <tr>
+          <th style="width:6%">SL</th>
+          <th style="width:16%; text-align:left">Student ID</th>
+          {% for co in attainment.cos %}
+          <th>{{ co.co_code }}<br>%</th>
+          {% endfor %}
+          {% for po in attainment.pos %}
+          <th>{{ po.po_code }}<br>%</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in attainment.students %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td style="text-align:left">{{ row.student_id_number }}</td>
+          {% for co in attainment.cos %}
+          <td class="{{ 'attained' if row.co_results.get(co.co_code) else 'not-attained' }}">{{ row.co_pct.get(co.co_code, "-") }}</td>
+          {% endfor %}
+          {% for po in attainment.pos %}
+          <td class="{{ 'attained' if row.po_results.get(po.po_code) else 'not-attained' }}">{{ row.po_pct.get(po.po_code, "-") }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO/PO mapped marks available</p>
+    {% endif %}
+  </div>
+
+  <!-- CO Attainment Summary -->
+  <div class="section">
+    <div class="section-header">CO Attainment Summary</div>
+    {% if attainment.cos %}
+    <table class="bordered matrix">
+      <thead>
+        <tr>
+          <th>CO</th>
+          <th>Max Marks</th>
+          <th>Avg. Attainment %</th>
+          <th>Students &ge; Threshold</th>
+          <th>Total Students</th>
+          <th>Attained?</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for co in attainment.cos %}
+        <tr>
+          <td>{{ co.co_code }}</td>
+          <td>{{ co.max_marks }}</td>
+          <td>{{ co.average_attainment_pct }}</td>
+          <td>{{ co.students_above_threshold }}</td>
+          <td>{{ co.total_students }}</td>
+          <td class="{{ 'attained' if co.is_attained else 'not-attained' }}">{{ "Yes" if co.is_attained else "No" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No course outcomes mapped to questions</p>
+    {% endif %}
+  </div>
+
+  <!-- PO Attainment Summary -->
+  <div class="section">
+    <div class="section-header">PO Attainment Summary</div>
+    {% if attainment.pos %}
+    <table class="bordered matrix">
+      <thead>
+        <tr>
+          <th>PO</th>
+          <th>Max Marks</th>
+          <th>Attainment %</th>
+          <th>Contributing COs</th>
+          <th>Students &ge; Threshold</th>
+          <th>Total Students</th>
+          <th>Attained?</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for po in attainment.pos %}
+        <tr>
+          <td>{{ po.po_code }}</td>
+          <td>{{ po.max_marks }}</td>
+          <td>{{ po.attainment_pct }}</td>
+          <td>{{ po.contributing_co_count }}</td>
+          <td>{{ po.students_above_threshold }}</td>
+          <td>{{ po.total_students }}</td>
+          <td class="{{ 'attained' if po.is_attained else 'not-attained' }}">{{ "Yes" if po.is_attained else "No" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No program outcomes mapped</p>
+    {% endif %}
+  </div>
+
+  <p style="font-size:8pt; margin-top:4px;">
+    Attainment thresholds: CO score &ge; {{ attainment.threshold_co_score_pct }}%, students above threshold &ge; {{ attainment.threshold_student_pct }}%.
+  </p>

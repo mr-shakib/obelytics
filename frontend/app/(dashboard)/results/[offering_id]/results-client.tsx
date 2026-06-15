@@ -1,141 +1,186 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
-import { Download } from "lucide-react"
-import { PageHeader } from "@/components/shared/page-header"
+import { useState } from "react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import { ArrowLeft, Check, Download, Loader2, Undo2 } from "lucide-react"
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
+import { PageHeader } from "@/components/shared/page-header"
+import { StatusBadge } from "@/components/shared/status-badge"
+import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { AttainmentPanel } from "../../my-sections/[id]/attainment-panel"
+import { MarksCoPoPanel } from "../../my-sections/[id]/marks-co-po-panel"
 
-type StudentResult = {
-  enrollment_id: string
-  student_name: string
-  student_id: string
-  total_marks: number
-  max_marks: number
-  percentage: number
-  grade?: string
-  co_attainments?: Record<string, number>
-}
-
-type OfferingResults = {
-  offering_id: string
-  course_name: string
-  term_name: string
-  batch_name: string
-  section: string
-  class_avg: number
-  co_averages?: Record<string, number>
-  results: StudentResult[]
+type ResultPublication = {
+  id: string
+  section_offering_id: string
+  status: string
+  submitted_at: string | null
+  ml_approved_at: string | null
+  ml_rejection_comment: string | null
+  pc_approved_at: string | null
+  published_at: string | null
 }
 
 interface Props {
   offeringId: string
 }
 
-function GradeCell({ pct }: { pct: number }) {
-  const color =
-    pct >= 80 ? "default" :
-    pct >= 60 ? "secondary" :
-    "destructive"
-  return <Badge variant={color}>{pct.toFixed(1)}%</Badge>
-}
-
 export function ResultsClient({ offeringId }: Props) {
-  const { data, isLoading } = useQuery({
+  const qc = useQueryClient()
+  const searchParams = useSearchParams()
+  const label = searchParams.get("label")
+
+  const canApprove = useHasAnyPermission(["result.approve.ml"])
+  const canReject = useHasAnyPermission(["result.reject.ml"])
+
+  const [rejectComment, setRejectComment] = useState("")
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const { data: result, isLoading } = useQuery({
     queryKey: queryKeys.results.byOffering(offeringId),
     queryFn: async () => {
       const { data } = await apiClient.GET(`/results/${offeringId}` as never)
-      return (data as unknown) as OfferingResults
+      return (data as unknown) as ResultPublication
     },
   })
 
-  if (isLoading) return <div className="animate-pulse h-48 bg-muted rounded-md" />
-  if (!data) return <p className="text-muted-foreground">No results found.</p>
+  const invalidate = () => qc.invalidateQueries({ queryKey: queryKeys.results.byOffering(offeringId) })
 
-  const coKeys = data.co_averages ? Object.keys(data.co_averages) : []
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.POST(`/results/${offeringId}/approve-ml` as never, {} as never)
+    },
+    onSuccess: () => {
+      toast.success("Section report approved")
+      invalidate()
+    },
+    onError: () => toast.error("Failed to approve section report"),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.POST(`/results/${offeringId}/reject-ml` as never, {
+        body: { comment: rejectComment },
+      } as never)
+    },
+    onSuccess: () => {
+      toast.success("Sent back to section teacher")
+      setRejectComment("")
+      invalidate()
+    },
+    onError: () => toast.error("Failed to send section report back"),
+  })
+
+  async function handleDownloadPdf() {
+    setIsDownloading(true)
+    try {
+      const { data: blob, error } = await apiClient.GET(
+        `/marksheets/${offeringId}/report-pdf` as never,
+        { parseAs: "blob" } as never
+      )
+      if (error || !blob) {
+        toast.error("Failed to generate section report")
+        return
+      }
+      const url = URL.createObjectURL(blob as Blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "section_report.pdf"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error("Failed to generate section report")
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  if (isLoading) return <div className="animate-pulse h-48 bg-muted rounded-md" />
+  if (!result) return <p className="text-muted-foreground">Result not found.</p>
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={data.course_name}
-        description={`${data.batch_name} · ${data.term_name} · Section ${data.section}`}
+        title={label ?? "Section Result Review"}
+        description={result.submitted_at ? `Submitted ${new Date(result.submitted_at).toLocaleString()}` : undefined}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <Download /> Export
+            <StatusBadge status={result.status} />
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isDownloading}>
+              {isDownloading ? <Loader2 className="animate-spin" /> : <Download />} Download PDF
+            </Button>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/approvals" />}>
+              <ArrowLeft /> Back to Approvals
             </Button>
           </div>
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium">Students</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold">{data.results.length}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium">Class Average</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold">{data.class_avg.toFixed(1)}%</p></CardContent>
-        </Card>
-        {coKeys.slice(0, 2).map((co) => (
-          <Card key={co}>
-            <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium">{co} Attainment</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-bold">{(data.co_averages![co] ?? 0).toFixed(1)}%</p></CardContent>
-          </Card>
-        ))}
-      </div>
+      {result.status === "DRAFT" && (
+        <Alert>
+          <AlertTitle>Not yet submitted</AlertTitle>
+          <AlertDescription>
+            The section teacher has not submitted this section&apos;s results for review yet.
+          </AlertDescription>
+        </Alert>
+      )}
 
-      <Card>
-        <CardHeader><CardTitle className="text-sm">Student Results</CardTitle></CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50 text-left">
-                  <th className="px-4 py-2 font-medium">Student</th>
-                  <th className="px-4 py-2 font-medium text-right">Marks</th>
-                  <th className="px-4 py-2 font-medium text-right">%</th>
-                  {data.results[0]?.grade !== undefined && (
-                    <th className="px-4 py-2 font-medium text-right">Grade</th>
-                  )}
-                  {coKeys.map((co) => (
-                    <th key={co} className="px-4 py-2 font-medium text-right">{co}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.results.map((r) => (
-                  <tr key={r.enrollment_id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-2">
-                      <div>
-                        <p className="font-medium">{r.student_name}</p>
-                        <p className="text-xs text-muted-foreground">{r.student_id}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      {r.total_marks}/{r.max_marks}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <GradeCell pct={r.percentage} />
-                    </td>
-                    {r.grade !== undefined && (
-                      <td className="px-4 py-2 text-right font-medium">{r.grade}</td>
-                    )}
-                    {coKeys.map((co) => (
-                      <td key={co} className="px-4 py-2 text-right text-muted-foreground text-xs">
-                        {r.co_attainments?.[co]?.toFixed(1) ?? "—"}%
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {result.status === "DRAFT" && result.ml_rejection_comment && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+          <AlertTitle>Sent back for changes</AlertTitle>
+          <AlertDescription className="text-amber-800">{result.ml_rejection_comment}</AlertDescription>
+        </Alert>
+      )}
+
+      {result.status === "SUBMITTED" && (canApprove || canReject) && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Review this section&apos;s report</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Approve to accept the results as final, or send it back to the section teacher with a comment
+              describing what needs to change. Sending back will unlock the section for editing.
+            </p>
+            <div className="flex items-center gap-2">
+              {canApprove && (
+                <Button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}>
+                  {approveMutation.isPending ? <Loader2 className="animate-spin" /> : <Check />} Approve
+                </Button>
+              )}
+            </div>
+            {canReject && (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Explain what needs to change before this can be approved..."
+                  value={rejectComment}
+                  onChange={(e) => setRejectComment(e.target.value)}
+                  rows={3}
+                />
+                <Button
+                  variant="destructive"
+                  onClick={() => rejectMutation.mutate()}
+                  disabled={rejectMutation.isPending || rejectComment.trim().length === 0}
+                >
+                  {rejectMutation.isPending ? <Loader2 className="animate-spin" /> : <Undo2 />} Send Back
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <MarksCoPoPanel sectionOfferingId={offeringId} />
+      <AttainmentPanel sectionOfferingId={offeringId} />
     </div>
   )
 }

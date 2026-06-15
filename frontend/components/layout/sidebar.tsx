@@ -11,11 +11,11 @@ import { useAppStore } from "@/lib/stores/app-store"
 import { useAuthStore } from "@/lib/stores/auth-store"
 import { usePermissions } from "@/hooks/use-permission"
 import {
-  NAV_ITEMS,
   NAV_GROUP_META,
-  canViewNavItem,
   isNavItemActive,
+  isSectionTeacherView,
   getActiveNavGroup,
+  getVisibleNavItems,
 } from "@/lib/navigation"
 
 export function Sidebar() {
@@ -25,7 +25,8 @@ export function Sidebar() {
   const { user } = useAuthStore()
   const permissions = usePermissions()
 
-  const visibleItems = NAV_ITEMS.filter((item) => canViewNavItem(item, permissions))
+  const visibleItems = getVisibleNavItems(permissions)
+  const homeHref = isSectionTeacherView(permissions) ? "/my-sections" : "/overview"
   const activeGroup = getActiveNavGroup(pathname, visibleItems)
   const groupItems = visibleItems.filter((item) => item.group === activeGroup)
   const groupMeta = NAV_GROUP_META[activeGroup]
@@ -58,7 +59,7 @@ export function Sidebar() {
         )}
       >
         <Link
-          href="/overview"
+          href={homeHref}
           className="flex size-9 shrink-0 items-center justify-center rounded-xl border-2 border-sidebar-primary text-sidebar-primary transition-colors hover:bg-sidebar-primary/10"
         >
           <CircleDot className="size-4" />

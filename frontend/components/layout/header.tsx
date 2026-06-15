@@ -32,11 +32,10 @@ import { queryKeys } from "@/lib/query-keys"
 import { apiClient } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import {
-  NAV_ITEMS,
   NAV_GROUPS,
   NAV_GROUP_META,
-  canViewNavItem,
   getActiveNavGroup,
+  getVisibleNavItems,
 } from "@/lib/navigation"
 
 const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
@@ -44,7 +43,7 @@ const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 function GroupSwitcher() {
   const pathname = usePathname()
   const permissions = usePermissions()
-  const visibleItems = NAV_ITEMS.filter((item) => canViewNavItem(item, permissions))
+  const visibleItems = getVisibleNavItems(permissions)
   const activeGroup = getActiveNavGroup(pathname, visibleItems)
 
   return (

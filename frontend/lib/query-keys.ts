@@ -103,6 +103,7 @@ export const queryKeys = {
   facultyAssignments: {
     byOfferings: (offeringIds: string[]) => ["faculty-assignments", "by-offerings", offeringIds] as const,
     byOffering: (offeringId: string) => ["faculty-assignments", "offering", offeringId] as const,
+    mySections: ["faculty-assignments", "my-sections"] as const,
   },
   moduleLeaderAssignments: {
     byBatchTerm: (batchId: string, termId: string) => ["module-leader-assignments", batchId, termId] as const,
@@ -134,6 +135,13 @@ export const queryKeys = {
   },
 
   // Assessment
+  students: {
+    all: ["students"] as const,
+    list: (filters?: Record<string, unknown>) => ["students", "list", filters] as const,
+  },
+  enrollments: {
+    roster: (offeringId: string) => ["enrollments", "roster", offeringId] as const,
+  },
   assessments: {
     all: ["assessments"] as const,
     list: (filters?: Record<string, unknown>) => ["assessments", "list", filters] as const,
@@ -143,9 +151,15 @@ export const queryKeys = {
     byAssessment: (assessmentId: string) => ["marks", "assessment", assessmentId] as const,
     byEnrollment: (enrollmentId: string) => ["marks", "enrollment", enrollmentId] as const,
   },
+  marksheets: {
+    questions: (offeringId: string, examType: string) => ["marksheets", offeringId, "questions", examType] as const,
+    grid: (offeringId: string, examType: string) => ["marksheets", offeringId, "grid", examType] as const,
+    attainment: (offeringId: string) => ["marksheets", offeringId, "attainment"] as const,
+  },
   results: {
     all: ["results"] as const,
     byOffering: (offeringId: string) => ["results", "offering", offeringId] as const,
+    submissions: (filters?: Record<string, unknown>) => ["results", "submissions", filters] as const,
   },
 
   // Attainment

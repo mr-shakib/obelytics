@@ -38,6 +38,30 @@ class StudentResponse(BaseModel):
     updated_at: datetime
 
 
+class StudentBulkImportItem(BaseModel):
+    student_id_number: str
+    full_name: str
+    email: Optional[str] = None
+    program_id: Optional[UUID] = None
+    batch_id: Optional[UUID] = None
+
+
+class StudentBulkImportRequest(BaseModel):
+    students: list[StudentBulkImportItem]
+
+
+class StudentBulkImportError(BaseModel):
+    row: int
+    student_id_number: str
+    message: str
+
+
+class StudentBulkImportResponse(BaseModel):
+    created: int
+    updated: int
+    errors: list[StudentBulkImportError]
+
+
 # ── Enrollment ────────────────────────────────────────────────────────────────
 
 class EnrollmentCreate(BaseModel):
@@ -55,6 +79,27 @@ class EnrollmentResponse(BaseModel):
     status: str
     enrolled_at: datetime
     created_at: datetime
+
+
+class EnrollmentWithStudentResponse(BaseModel):
+    id: UUID
+    student_id: UUID
+    student_id_number: str
+    full_name: str
+    email: Optional[str]
+    status: str
+    enrolled_at: datetime
+
+
+class EnrollmentBulkCreate(BaseModel):
+    section_offering_id: UUID
+    student_ids: list[UUID]
+
+
+class EnrollmentBulkResponse(BaseModel):
+    enrolled: int
+    already_enrolled: int
+    not_found: int
 
 
 # ── Assessment ────────────────────────────────────────────────────────────────
@@ -157,3 +202,140 @@ class ResultPublicationResponse(BaseModel):
 
 class MLRejectRequest(BaseModel):
     comment: str
+
+
+class ResultSubmissionListItem(BaseModel):
+    model_config = {"from_attributes": True}
+
+    section_offering_id: UUID
+    course_id: UUID
+    course_code: str
+    course_title: str
+    batch_id: UUID
+    batch_name: str
+    academic_term_id: UUID
+    term_name: str
+    term_year: int
+    term_season: str
+    section_id: UUID
+    section_name: str
+    result_publication_id: Optional[UUID]
+    status: str
+    submitted_at: Optional[datetime]
+    ml_rejection_comment: Optional[str]
+    student_count: int
+
+
+class BulkApproveMLRequest(BaseModel):
+    course_id: UUID
+    batch_id: Optional[UUID] = None
+    academic_term_id: Optional[UUID] = None
+
+
+class BulkApproveMLResponse(BaseModel):
+    approved_count: int
+
+
+# ── Marksheet ─────────────────────────────────────────────────────────────────
+
+class MarksheetQuestionInput(BaseModel):
+    id: Optional[UUID] = None
+    label: str
+    max_marks: Decimal
+    course_outcome_id: Optional[UUID] = None
+    order_index: int
+
+
+class MarksheetQuestionResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    section_offering_id: UUID
+    exam_type: str
+    label: str
+    max_marks: Decimal
+    course_outcome_id: Optional[UUID]
+    order_index: int
+
+
+class MarksheetQuestionsUpdate(BaseModel):
+    questions: list[MarksheetQuestionInput]
+
+
+class MarksheetCellUpdate(BaseModel):
+    question_id: UUID
+    student_enrollment_id: UUID
+    marks_obtained: Optional[Decimal] = None
+    is_absent: bool = False
+
+
+class MarksheetMarkResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    question_id: UUID
+    student_enrollment_id: UUID
+    marks_obtained: Optional[Decimal]
+    is_absent: bool
+
+
+class MarksheetMarkCell(BaseModel):
+    mark_id: Optional[UUID] = None
+    marks_obtained: Optional[Decimal] = None
+    is_absent: bool = False
+
+
+class MarksheetStudentRow(BaseModel):
+    enrollment_id: UUID
+    student_id_number: str
+    full_name: str
+    marks: dict[str, MarksheetMarkCell]
+    total: Decimal
+
+
+class MarksheetGridResponse(BaseModel):
+    section_offering_id: UUID
+    exam_type: str
+    questions: list[MarksheetQuestionResponse]
+    students: list[MarksheetStudentRow]
+
+
+class COAttainmentPreview(BaseModel):
+    course_outcome_id: UUID
+    co_code: str
+    max_marks: Decimal
+    average_attainment_pct: Decimal
+    students_above_threshold: int
+    total_students: int
+    is_attained: bool
+
+
+class POAttainmentPreview(BaseModel):
+    program_outcome_id: UUID
+    po_code: str
+    max_marks: Decimal
+    attainment_pct: Decimal
+    contributing_co_count: int
+    students_above_threshold: int
+    total_students: int
+    is_attained: bool
+
+
+class StudentAttainmentRow(BaseModel):
+    enrollment_id: UUID
+    student_id_number: str
+    full_name: str
+    co_results: dict[str, bool]
+    po_results: dict[str, bool]
+    co_marks: dict[str, Decimal]
+    co_pct: dict[str, Decimal]
+    po_marks: dict[str, Decimal]
+    po_pct: dict[str, Decimal]
+
+
+class MarksheetAttainmentResponse(BaseModel):
+    threshold_co_score_pct: Decimal
+    threshold_student_pct: Decimal
+    cos: list[COAttainmentPreview]
+    pos: list[POAttainmentPreview]
+    students: list[StudentAttainmentRow]

@@ -1181,6 +1181,10 @@ class FacultyAssignmentService:
             role_in_course=body.role_in_course,
         )
         result = await self._repo.create(assignment)
+        if body.role_in_course == "SECTION_TEACHER":
+            await self._grant_section_teacher_role(
+                body.user_id, org_id, body.section_offering_id, acting_user_id
+            )
         await self._session.commit()
         return result
 
@@ -1199,13 +1203,134 @@ class FacultyAssignmentService:
                 self._session, offering.batch_id, offering.academic_term_id, offering.course_id, acting_user_id
             )
         result = await self._repo.remove(assignment)
+        if assignment.role_in_course == "SECTION_TEACHER":
+            await self._revoke_section_teacher_role(
+                assignment.user_id, org_id, assignment.section_offering_id
+            )
         await self._session.commit()
         return result
+
+    async def _grant_section_teacher_role(
+        self, user_id: UUID, org_id: UUID, section_offering_id: UUID, assigned_by: UUID | None
+    ) -> None:
+        """Auto-grant the Section Teacher permission set, scoped to this offering, so
+        anyone assigned as a section teacher (including a Module Leader) immediately
+        gets marks/result/enrollment access for that section without a separate RBAC step."""
+        from app.modules.iam.repository.role_repository import RoleRepository
+        from app.modules.iam.repository.user_repository import UserRepository
+        from app.modules.iam.service.permission_service import PermissionManifestBuilder
+        from app.modules.iam.models import UserRoleAssignment
+
+        role_repo = RoleRepository(self._session)
+        st_role = await role_repo.find_by_name("Section Teacher", org_id)
+        if st_role is None:
+            return
+
+        user = await UserRepository(self._session).find_by_id(user_id)
+        if user is None:
+            return
+
+        self._session.add(
+            UserRoleAssignment(
+                user_id=user_id,
+                role_id=st_role.id,
+                scope_type="SECTION_OFFERING",
+                scope_id=section_offering_id,
+                assigned_by=assigned_by,
+            )
+        )
+        await PermissionManifestBuilder(self._session).invalidate(user_id)
+
+    async def _revoke_section_teacher_role(
+        self, user_id: UUID, org_id: UUID, section_offering_id: UUID
+    ) -> None:
+        from sqlalchemy import and_, select
+        from app.modules.iam.repository.role_repository import RoleRepository
+        from app.modules.iam.service.permission_service import PermissionManifestBuilder
+        from app.modules.iam.models import UserRoleAssignment
+
+        role_repo = RoleRepository(self._session)
+        st_role = await role_repo.find_by_name("Section Teacher", org_id)
+        if st_role is None:
+            return
+
+        result = await self._session.execute(
+            select(UserRoleAssignment).where(
+                and_(
+                    UserRoleAssignment.user_id == user_id,
+                    UserRoleAssignment.role_id == st_role.id,
+                    UserRoleAssignment.scope_type == "SECTION_OFFERING",
+                    UserRoleAssignment.scope_id == section_offering_id,
+                    UserRoleAssignment.removed_at.is_(None),
+                )
+            )
+        )
+        grant = result.scalar_one_or_none()
+        if grant is not None:
+            grant.removed_at = datetime.now(timezone.utc)
+            await PermissionManifestBuilder(self._session).invalidate(user_id)
 
     async def list_active_by_offering(
         self, offering_id: UUID
     ) -> list[FacultyAssignment]:
         return await self._repo.list_active_by_offering(offering_id)
+
+    async def list_my_sections(self, org_id: UUID, user_id: UUID) -> list[dict]:
+        from sqlalchemy import and_, func, select
+        from app.modules.assessment.models import ResultPublication, StudentEnrollment
+
+        result = await self._session.execute(
+            select(
+                SectionOffering.id.label("section_offering_id"),
+                SectionOffering.course_id,
+                Course.code.label("course_code"),
+                Course.title.label("course_title"),
+                SectionOffering.batch_id,
+                Batch.name.label("batch_name"),
+                SectionOffering.academic_term_id,
+                AcademicTerm.name.label("term_name"),
+                AcademicTerm.year.label("term_year"),
+                AcademicTerm.season.label("term_season"),
+                SectionOffering.section_id,
+                Section.name.label("section_name"),
+                SectionOffering.status,
+                ResultPublication.status.label("result_status"),
+            )
+            .join(FacultyAssignment, FacultyAssignment.section_offering_id == SectionOffering.id)
+            .join(Course, Course.id == SectionOffering.course_id)
+            .join(Batch, Batch.id == SectionOffering.batch_id)
+            .join(AcademicTerm, AcademicTerm.id == SectionOffering.academic_term_id)
+            .join(Section, Section.id == SectionOffering.section_id)
+            .outerjoin(ResultPublication, ResultPublication.section_offering_id == SectionOffering.id)
+            .where(
+                and_(
+                    FacultyAssignment.user_id == user_id,
+                    FacultyAssignment.role_in_course == "SECTION_TEACHER",
+                    FacultyAssignment.removed_at.is_(None),
+                    SectionOffering.organization_id == org_id,
+                )
+            )
+        )
+        rows = result.all()
+
+        offering_ids = [row.section_offering_id for row in rows]
+        counts: dict[UUID, int] = {}
+        if offering_ids:
+            count_result = await self._session.execute(
+                select(StudentEnrollment.section_offering_id, func.count(StudentEnrollment.id))
+                .where(StudentEnrollment.section_offering_id.in_(offering_ids))
+                .group_by(StudentEnrollment.section_offering_id)
+            )
+            counts = dict(count_result.all())
+
+        return [
+            {
+                **row._mapping,
+                "result_status": row.result_status or "DRAFT",
+                "student_count": counts.get(row.section_offering_id, 0),
+            }
+            for row in rows
+        ]
 
 
 class ModuleLeaderAssignmentService:

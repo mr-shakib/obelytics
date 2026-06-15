@@ -385,7 +385,12 @@ interface Props {
 }
 
 export function CourseSectionsClient({ courseId }: Props) {
-  const { data: myAssignments = [], isLoading: loadingAssignments } = useQuery({
+  const {
+    data: myAssignments = [],
+    isLoading: loadingAssignments,
+    isError: assignmentsErrored,
+    refetch: refetchAssignments,
+  } = useQuery({
     queryKey: queryKeys.moduleLeaderAssignments.mine,
     queryFn: async () => {
       const { data } = await apiClient.GET("/module-leader-assignments/mine" as never)
@@ -393,7 +398,12 @@ export function CourseSectionsClient({ courseId }: Props) {
     },
   })
 
-  const { data: batches = [], isLoading: loadingBatches } = useQuery({
+  const {
+    data: batches = [],
+    isLoading: loadingBatches,
+    isError: batchesErrored,
+    refetch: refetchBatches,
+  } = useQuery({
     queryKey: queryKeys.batches.all,
     queryFn: async () => {
       const { data } = await apiClient.GET("/batches" as never)
@@ -422,6 +432,7 @@ export function CourseSectionsClient({ courseId }: Props) {
     .filter((g): g is { batch: Batch; term: TermCalendarEntry } => g !== null)
 
   const isLoading = loadingAssignments || loadingBatches
+  const hasError = assignmentsErrored || batchesErrored
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -436,6 +447,24 @@ export function CourseSectionsClient({ courseId }: Props) {
             <div key={i} className="h-24 animate-pulse bg-muted rounded-lg" />
           ))}
         </div>
+      ) : hasError ? (
+        <Card>
+          <CardContent className="py-12 text-center space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Couldn&apos;t load your module leader assignments. Please try again.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                refetchAssignments()
+                refetchBatches()
+              }}
+            >
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : groups.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">

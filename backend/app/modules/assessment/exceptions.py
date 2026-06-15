@@ -114,3 +114,24 @@ class NoMarksEnteredError(HTTPException):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Cannot submit results: no marks have been entered",
         )
+
+
+class MarksheetQuestionNotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Marksheet question not found")
+
+
+class MarksheetSectionTeacherScopeError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage marks for sections you are assigned to teach",
+        )
+
+
+class MarksheetLockedError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This section's results have been submitted and are locked. Ask your Module Leader to unlock the section to make changes.",
+        )

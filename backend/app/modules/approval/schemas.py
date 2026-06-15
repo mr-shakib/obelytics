@@ -31,6 +31,7 @@ class InboxItem(BaseModel):
     description: str       # human-readable label (e.g., CO code, offering identifier)
     status: str            # current status
     submitted_at: datetime | None  # when it entered the current review state
+    section_offering_id: UUID | None = None  # set for result_publication items
 
 
 class InboxResponse(BaseModel):

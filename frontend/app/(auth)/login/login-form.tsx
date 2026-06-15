@@ -14,6 +14,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginApi } from "@/lib/api/auth"
 import { useAuthStore } from "@/lib/stores/auth-store"
+import { isSectionTeacherView } from "@/lib/navigation"
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -45,8 +46,9 @@ export function LoginForm() {
       // Lightweight cookie so middleware knows we're logged in
       document.cookie = "auth-status=authenticated; path=/; SameSite=Lax"
 
-      const next = searchParams.get("next") ?? "/overview"
-      router.push(next)
+      const home = isSectionTeacherView(permissions) ? "/my-sections" : "/overview"
+      const next = searchParams.get("next")
+      router.push(!next || next === "/overview" || next === "/" ? home : next)
     } catch (err) {
       setServerError(err instanceof Error ? err.message : "Login failed")
     }

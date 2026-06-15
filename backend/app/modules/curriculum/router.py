@@ -46,6 +46,7 @@ from app.modules.curriculum.schemas import (
     LessonPlanItemsUpdate,
     ModuleLeaderAssignmentCreate,
     ModuleLeaderAssignmentResponse,
+    MySectionResponse,
     PrerequisiteCreate,
     PrerequisiteResponse,
     SectionCreate,
@@ -843,6 +844,16 @@ async def remove_faculty_assignment(
 ):
     svc = FacultyAssignmentService(db)
     return await svc.remove(assignment_id, current_user.organization_id, acting_user_id=_scoped_user_id(manifest, current_user))
+
+
+@router.get("/faculty-assignments/my-sections", response_model=list[MySectionResponse])
+async def list_my_sections(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("assessment.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = FacultyAssignmentService(db)
+    return await svc.list_my_sections(current_user.organization_id, current_user.id)
 
 
 # ── Module Leader Assignments ────────────────────────────────────────────────

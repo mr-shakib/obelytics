@@ -24,6 +24,9 @@ import {
   SlidersHorizontal,
   Tag,
   Boxes,
+  FileSpreadsheet,
+  IdCard,
+  FileCheck2,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -31,7 +34,7 @@ export interface NavItem {
   label: string
   href: string
   icon: LucideIcon
-  permission: string | null
+  permission: string | string[] | null
   group?: string
 }
 
@@ -59,6 +62,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Program Outcomes", href: "/program-outcomes", icon: Target, permission: "po.read", group: "OBE" },
 
   // Assessment
+  { label: "My Sections", href: "/my-sections", icon: FileSpreadsheet, permission: "marks.enter", group: "Assessment" },
+  { label: "Result Submissions", href: "/result-submissions", icon: FileCheck2, permission: ["result.approve.ml", "result.approve.pc", "result.publish"], group: "Assessment" },
+  { label: "Students", href: "/students", icon: IdCard, permission: "assessment.configure", group: "Assessment" },
   { label: "Assessments", href: "/assessments", icon: ClipboardList, permission: "assessment.read", group: "Assessment" },
   { label: "Attainment", href: "/attainment", icon: BarChart3, permission: "attainment.read", group: "Assessment" },
 
@@ -88,7 +94,29 @@ export const NAV_GROUP_META: Record<NavGroup, { icon: LucideIcon; label: string;
 }
 
 export function canViewNavItem(item: NavItem, permissions: string[]) {
-  return item.permission === null || permissions.includes(item.permission)
+  if (item.permission === null) return true
+  if (Array.isArray(item.permission)) return item.permission.some((p) => permissions.includes(p))
+  return permissions.includes(item.permission)
+}
+
+// Section Teachers get a focused workspace: their assigned sections (cards,
+// with marks entry + attainment) plus approvals/notifications — not the full
+// curriculum/assessment management nav that PCs and Module Leaders see.
+const SECTION_TEACHER_NAV_HREFS = ["/my-sections", "/students", "/approvals", "/notifications"]
+
+export function isSectionTeacherView(permissions: string[]) {
+  return (
+    permissions.includes("marks.enter") &&
+    !permissions.includes("curriculum.create") &&
+    !permissions.includes("co.approve")
+  )
+}
+
+export function getVisibleNavItems(permissions: string[]): NavItem[] {
+  if (isSectionTeacherView(permissions)) {
+    return NAV_ITEMS.filter((item) => SECTION_TEACHER_NAV_HREFS.includes(item.href))
+  }
+  return NAV_ITEMS.filter((item) => canViewNavItem(item, permissions))
 }
 
 export function isNavItemActive(item: NavItem, pathname: string) {

@@ -8,6 +8,7 @@ from app.modules.approval.models import ReviewComment
 from app.modules.approval.repository import ReviewCommentRepository
 from app.modules.approval.schemas import InboxItem, VALID_ENTITY_TYPES
 from app.modules.assessment.models import ResultPublication
+from app.modules.curriculum.models import AcademicTerm, Batch, Course, Section, SectionOffering
 from app.modules.obe.models import COPOMappingSet, CourseOutcome
 
 
@@ -62,23 +63,39 @@ class ApprovalInboxService:
         """
         # Result publications pending review (SUBMITTED = awaiting ML, ML_APPROVED = awaiting PC)
         rp_result = await self._session.execute(
-            select(ResultPublication).where(
+            select(
+                ResultPublication,
+                Course.code.label("course_code"),
+                Course.title.label("course_title"),
+                Batch.name.label("batch_name"),
+                AcademicTerm.name.label("term_name"),
+                Section.name.label("section_name"),
+            )
+            .join(SectionOffering, SectionOffering.id == ResultPublication.section_offering_id)
+            .join(Course, Course.id == SectionOffering.course_id)
+            .join(Batch, Batch.id == SectionOffering.batch_id)
+            .join(AcademicTerm, AcademicTerm.id == SectionOffering.academic_term_id)
+            .join(Section, Section.id == SectionOffering.section_id)
+            .where(
                 and_(
                     ResultPublication.organization_id == org_id,
                     ResultPublication.status.in_(["SUBMITTED", "ML_APPROVED"]),
                 )
             )
         )
-        result_pubs = rp_result.scalars().all()
         rp_items = [
             InboxItem(
                 entity_type="result_publication",
                 entity_id=rp.id,
-                description=f"Result Publication {rp.section_offering_id}",
+                description=(
+                    f"{course_code} {course_title} — {batch_name} Section {section_name} "
+                    f"({term_name})"
+                ),
                 status=rp.status,
                 submitted_at=rp.submitted_at,
+                section_offering_id=rp.section_offering_id,
             )
-            for rp in result_pubs
+            for rp, course_code, course_title, batch_name, term_name, section_name in rp_result.all()
         ]
 
         # COs pending review (SUBMITTED = awaiting approval)

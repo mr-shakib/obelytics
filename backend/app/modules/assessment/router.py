@@ -1,26 +1,40 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_permission
+from app.core.dependencies import get_current_user, require_any_permission, require_permission
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
 from app.modules.assessment.schemas import (
     AssessmentCOWeightCreate,
     AssessmentCOWeightResponse,
+    BulkApproveMLRequest,
+    BulkApproveMLResponse,
     AssessmentCreate,
     AssessmentResponse,
     AssessmentUpdate,
+    EnrollmentBulkCreate,
+    EnrollmentBulkResponse,
     EnrollmentCreate,
     EnrollmentResponse,
+    EnrollmentWithStudentResponse,
     MarkCreate,
     MarkResponse,
     MarkUpdate,
+    MarksheetAttainmentResponse,
+    MarksheetCellUpdate,
+    MarksheetGridResponse,
+    MarksheetMarkResponse,
+    MarksheetQuestionResponse,
+    MarksheetQuestionsUpdate,
     MLRejectRequest,
     ResultPublicationResponse,
+    ResultSubmissionListItem,
+    StudentBulkImportRequest,
+    StudentBulkImportResponse,
     StudentCreate,
     StudentResponse,
     StudentUpdate,
@@ -28,12 +42,35 @@ from app.modules.assessment.schemas import (
 from app.modules.assessment.service import (
     AssessmentService,
     EnrollmentService,
+    MarksheetService,
     MarksService,
     ResultPublicationService,
     StudentService,
+    render_marksheet_course_report_pdf,
+    render_marksheet_report_pdf,
 )
 
 router = APIRouter(tags=["Assessment"])
+
+
+def _marksheet_scoped_user_id(manifest: PermissionManifestResponse, current_user: User) -> UUID | None:
+    """
+    Returns None for users with org-wide assessment configuration rights (PC/SA),
+    or the acting user's id for section teachers, who are restricted to sections they teach.
+    """
+    if manifest.is_super_admin or "assessment.configure" in manifest.permissions:
+        return None
+    return current_user.id
+
+
+def _result_scoped_user_id(manifest: PermissionManifestResponse, current_user: User) -> UUID | None:
+    """
+    Returns None for users with org-wide result review rights (PC/SA),
+    or the acting user's id for Module Leaders, who are restricted to courses they lead.
+    """
+    if manifest.is_super_admin or "result.approve.pc" in manifest.permissions or "result.publish" in manifest.permissions:
+        return None
+    return current_user.id
 
 
 # ── Students ──────────────────────────────────────────────────────────────────
@@ -44,20 +81,32 @@ async def list_students(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     program_id: UUID | None = None,
+    search: str | None = None,
 ):
     svc = StudentService(db)
-    return await svc.list_active(current_user.organization_id, program_id)
+    return await svc.list_active(current_user.organization_id, program_id, search)
 
 
 @router.post("/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
 async def create_student(
     body: StudentCreate,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("assessment.configure"))],
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.configure", "enrollment.manage_own"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = StudentService(db)
     return await svc.create(body, current_user.organization_id)
+
+
+@router.post("/students/bulk-import", response_model=StudentBulkImportResponse)
+async def bulk_import_students(
+    body: StudentBulkImportRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.configure", "enrollment.manage_own"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = StudentService(db)
+    return await svc.bulk_import(body.students, current_user.organization_id)
 
 
 @router.get("/students/{student_id}", response_model=StudentResponse)
@@ -96,15 +145,66 @@ async def list_enrollments(
     return await svc.list_by_offering(section_offering_id, current_user.organization_id)
 
 
-@router.post("/enrollments", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
-async def create_enrollment(
-    body: EnrollmentCreate,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("assessment.configure"))],
+@router.get("/enrollments/roster", response_model=list[EnrollmentWithStudentResponse])
+async def get_enrollment_roster(
+    section_offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.read", "marks.read.section"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = EnrollmentService(db)
-    return await svc.enroll(body, current_user.organization_id)
+    rows = await svc.list_roster(section_offering_id, current_user.organization_id)
+    return [
+        EnrollmentWithStudentResponse(
+            id=enrollment.id,
+            student_id=student.id,
+            student_id_number=student.student_id_number,
+            full_name=student.full_name,
+            email=student.email,
+            status=enrollment.status,
+            enrolled_at=enrollment.enrolled_at,
+        )
+        for enrollment, student in rows
+    ]
+
+
+@router.post("/enrollments", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
+async def create_enrollment(
+    body: EnrollmentCreate,
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.configure", "enrollment.manage_own"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = EnrollmentService(db)
+    return await svc.enroll(
+        body, current_user.organization_id, acting_user_id=_marksheet_scoped_user_id(manifest, current_user)
+    )
+
+
+@router.post("/enrollments/bulk", response_model=EnrollmentBulkResponse, status_code=status.HTTP_201_CREATED)
+async def bulk_enroll(
+    body: EnrollmentBulkCreate,
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.configure", "enrollment.manage_own"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = EnrollmentService(db)
+    return await svc.bulk_enroll(
+        body, current_user.organization_id, acting_user_id=_marksheet_scoped_user_id(manifest, current_user)
+    )
+
+
+@router.delete("/enrollments/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unenroll_student(
+    enrollment_id: UUID,
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.configure", "enrollment.manage_own"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = EnrollmentService(db)
+    await svc.unenroll(
+        enrollment_id, current_user.organization_id, acting_user_id=_marksheet_scoped_user_id(manifest, current_user)
+    )
 
 
 # ── Assessments ───────────────────────────────────────────────────────────────
@@ -256,6 +356,45 @@ async def update_mark(
 
 # ── Results ───────────────────────────────────────────────────────────────────
 
+@router.get("/results", response_model=list[ResultSubmissionListItem])
+async def list_result_submissions(
+    manifest: Annotated[
+        PermissionManifestResponse,
+        Depends(require_any_permission("result.approve.ml", "result.approve.pc", "result.publish")),
+    ],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+    course_id: Annotated[UUID | None, Query()] = None,
+):
+    svc = ResultPublicationService(db)
+    return await svc.list_submissions(
+        current_user.organization_id,
+        acting_user_id=_result_scoped_user_id(manifest, current_user),
+        status=status_filter,
+        course_id=course_id,
+    )
+
+
+@router.post("/results/bulk-approve-ml", response_model=BulkApproveMLResponse)
+async def bulk_approve_ml(
+    body: BulkApproveMLRequest,
+    manifest: Annotated[PermissionManifestResponse, Depends(require_permission("result.approve.ml"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ResultPublicationService(db)
+    approved_count = await svc.bulk_approve_ml(
+        current_user.organization_id,
+        body.course_id,
+        current_user.id,
+        acting_user_id=_result_scoped_user_id(manifest, current_user),
+        batch_id=body.batch_id,
+        academic_term_id=body.academic_term_id,
+    )
+    return BulkApproveMLResponse(approved_count=approved_count)
+
+
 @router.get("/results/{section_offering_id}", response_model=ResultPublicationResponse)
 async def get_result_publication(
     section_offering_id: UUID,
@@ -270,36 +409,50 @@ async def get_result_publication(
 @router.post("/results/{section_offering_id}/submit", response_model=ResultPublicationResponse)
 async def submit_results(
     section_offering_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.submit"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_permission("result.submit"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ResultPublicationService(db)
-    return await svc.submit(section_offering_id, current_user.organization_id, current_user.id)
+    return await svc.submit(
+        section_offering_id,
+        current_user.organization_id,
+        current_user.id,
+        acting_user_id=_marksheet_scoped_user_id(manifest, current_user),
+    )
 
 
 @router.post("/results/{section_offering_id}/approve-ml", response_model=ResultPublicationResponse)
 async def approve_ml(
     section_offering_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.approve.ml"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_permission("result.approve.ml"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ResultPublicationService(db)
-    return await svc.approve_ml(section_offering_id, current_user.organization_id, current_user.id)
+    return await svc.approve_ml(
+        section_offering_id,
+        current_user.organization_id,
+        current_user.id,
+        acting_user_id=_result_scoped_user_id(manifest, current_user),
+    )
 
 
 @router.post("/results/{section_offering_id}/reject-ml", response_model=ResultPublicationResponse)
 async def reject_ml(
     section_offering_id: UUID,
     body: MLRejectRequest,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.reject.ml"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_permission("result.reject.ml"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ResultPublicationService(db)
     return await svc.reject_ml(
-        section_offering_id, current_user.organization_id, current_user.id, body.comment
+        section_offering_id,
+        current_user.organization_id,
+        current_user.id,
+        body.comment,
+        acting_user_id=_result_scoped_user_id(manifest, current_user),
     )
 
 
@@ -323,3 +476,117 @@ async def publish_results(
 ):
     svc = ResultPublicationService(db)
     return await svc.publish(section_offering_id, current_user.organization_id, current_user.id)
+
+
+# ── Marksheets ────────────────────────────────────────────────────────────────
+
+@router.get("/marksheets/{section_offering_id}/questions", response_model=list[MarksheetQuestionResponse])
+async def list_marksheet_questions(
+    section_offering_id: UUID,
+    exam_type: Literal["MID", "FINAL"],
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.read", "marks.read.section"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    return await svc.list_questions(section_offering_id, exam_type, current_user.organization_id)
+
+
+@router.put("/marksheets/{section_offering_id}/questions", response_model=list[MarksheetQuestionResponse])
+async def replace_marksheet_questions(
+    section_offering_id: UUID,
+    exam_type: Literal["MID", "FINAL"],
+    body: MarksheetQuestionsUpdate,
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.configure", "marks.enter"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    return await svc.replace_questions(
+        section_offering_id,
+        exam_type,
+        current_user.organization_id,
+        body.questions,
+        acting_user_id=_marksheet_scoped_user_id(manifest, current_user),
+    )
+
+
+@router.get("/marksheets/{section_offering_id}/grid", response_model=MarksheetGridResponse)
+async def get_marksheet_grid(
+    section_offering_id: UUID,
+    exam_type: Literal["MID", "FINAL"],
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.read", "marks.read.section"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    return await svc.get_grid(section_offering_id, exam_type, current_user.organization_id)
+
+
+@router.patch("/marksheets/{section_offering_id}/marks", response_model=MarksheetMarkResponse)
+async def update_marksheet_mark(
+    section_offering_id: UUID,
+    body: MarksheetCellUpdate,
+    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("marks.enter", "marks.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    return await svc.upsert_mark(
+        body,
+        current_user.organization_id,
+        current_user.id,
+        acting_user_id=_marksheet_scoped_user_id(manifest, current_user),
+    )
+
+
+@router.get("/marksheets/{section_offering_id}/attainment", response_model=MarksheetAttainmentResponse)
+async def get_marksheet_attainment(
+    section_offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.read", "attainment.read", "marks.read.section"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    return await svc.get_attainment(section_offering_id, current_user.organization_id)
+
+
+@router.get("/marksheets/{section_offering_id}/report-pdf")
+async def get_marksheet_report_pdf(
+    section_offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.read", "marks.read.section"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    context = await svc.build_report_context(section_offering_id, current_user.organization_id)
+    pdf_bytes = render_marksheet_report_pdf(context)
+    filename = f"{context['section']['course_code']}_{context['section']['section_name']}_section_report.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/marksheets/course-report-pdf")
+async def get_marksheet_course_report_pdf(
+    course_id: UUID,
+    batch_id: UUID,
+    academic_term_id: UUID,
+    _: Annotated[
+        PermissionManifestResponse,
+        Depends(require_any_permission("assessment.read", "result.approve.ml", "result.approve.pc", "result.publish")),
+    ],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    context = await svc.build_course_report_context(course_id, batch_id, academic_term_id, current_user.organization_id)
+    pdf_bytes = render_marksheet_course_report_pdf(context)
+    filename = f"{context['course']['course_code']}_combined_section_report.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

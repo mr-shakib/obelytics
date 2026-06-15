@@ -1,10 +1,13 @@
 "use client"
 
+import { useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { BookCopy, Target, BarChart3, CheckSquare, ClipboardList, Award } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuthStore } from "@/lib/stores/auth-store"
-import { usePermission } from "@/hooks/use-permission"
+import { usePermission, usePermissions } from "@/hooks/use-permission"
+import { isSectionTeacherView } from "@/lib/navigation"
 
 const QUICK_LINKS = [
   { label: "Curricula", href: "/curricula", icon: BookCopy, permission: "curriculum.read", description: "Manage curriculum versions" },
@@ -36,7 +39,17 @@ function QuickLinkCard({ item }: { item: typeof QUICK_LINKS[0] }) {
 }
 
 export default function OverviewPage() {
+  const router = useRouter()
   const user = useAuthStore((s) => s.user)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+  const permissions = usePermissions()
+
+  useEffect(() => {
+    if (isInitialized && isSectionTeacherView(permissions)) {
+      router.replace("/my-sections")
+    }
+  }, [isInitialized, permissions, router])
+
   return (
     <div className="space-y-6">
       <div>

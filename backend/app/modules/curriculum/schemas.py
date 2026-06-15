@@ -487,6 +487,26 @@ class FacultyAssignmentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MySectionResponse(BaseModel):
+    section_offering_id: UUID
+    course_id: UUID
+    course_code: str
+    course_title: str
+    batch_id: UUID
+    batch_name: str
+    academic_term_id: UUID
+    term_name: str
+    term_year: int
+    term_season: str
+    section_id: UUID
+    section_name: str
+    status: str
+    result_status: str
+    student_count: int
+
+    model_config = {"from_attributes": True}
+
+
 # ── Module Leader Assignment ─────────────────────────────────────────────────
 
 class ModuleLeaderAssignmentCreate(BaseModel):

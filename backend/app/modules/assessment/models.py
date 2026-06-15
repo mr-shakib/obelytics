@@ -182,6 +182,91 @@ class StudentMark(Base):
     )
 
 
+class MarksheetQuestion(Base):
+    __tablename__ = "marksheet_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "section_offering_id", "exam_type", "order_index",
+            name="uq_assessment_marksheet_question_order",
+        ),
+        CheckConstraint("exam_type IN ('MID', 'FINAL')", name="ck_assessment_marksheet_question_exam_type"),
+        {"schema": "assessment"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    section_offering_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.section_offerings.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    exam_type = Column(String(10), nullable=False)
+    label = Column(String(50), nullable=False)
+    max_marks = Column(Numeric(6, 2), nullable=False)
+    course_outcome_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.course_outcomes.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    order_index = Column(sa.Integer, nullable=False, server_default="0")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
+
+
+class MarksheetMark(Base):
+    __tablename__ = "marksheet_marks"
+    __table_args__ = (
+        UniqueConstraint("question_id", "student_enrollment_id", name="uq_assessment_marksheet_mark"),
+        CheckConstraint(
+            "(is_absent = TRUE AND marks_obtained IS NULL) OR (is_absent = FALSE AND marks_obtained IS NOT NULL)",
+            name="ck_assessment_marksheet_mark_absent_or_marks",
+        ),
+        {"schema": "assessment"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    question_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("assessment.marksheet_questions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    student_enrollment_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("assessment.student_enrollments.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    marks_obtained = Column(Numeric(6, 2), nullable=True)
+    is_absent = Column(Boolean, nullable=False, server_default=sa.text("FALSE"))
+    # Plain UUID — no FK constraint (cross-schema IAM)
+    entered_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
+
+
 class ResultPublication(Base):
     __tablename__ = "result_publications"
     __table_args__ = (

@@ -24,7 +24,6 @@ import type {
   BloomLevel,
   AssessmentType,
   CourseAssessmentTool,
-  CourseOutcome,
   CourseCOMark,
   CourseBloomMark,
 } from "../course-types"
@@ -132,18 +131,7 @@ export function CourseAssessmentClient({ id }: Props) {
     .filter((t) => !usedAssessmentTypeIds.has(t.id))
     .map((t) => ({ value: t.id, label: t.is_sessional ? `${t.name} (Sessional)` : t.name }))
 
-  // ── Assessment Pattern (CO-wise marks + CIE/SEE Bloom breakdown) ──────────
-
-  const { data: courseOutcomes = [] } = useQuery({
-    queryKey: queryKeys.courseOutcomes.list(curriculumId, id),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(
-        `/course-outcomes?curriculum_id=${curriculumId}&course_id=${id}` as never
-      )
-      return ((data as unknown) as CourseOutcome[]) ?? []
-    },
-    enabled: !!curriculumId,
-  })
+  // ── Assessment Pattern (total marks + CIE/SEE Bloom breakdown) ────────────
 
   const { data: bloomLevels = [] } = useQuery({
     queryKey: queryKeys.refData.bloomLevels,
@@ -192,10 +180,6 @@ export function CourseAssessmentClient({ id }: Props) {
 
   const coMarksDefaults: Record<string, number> = {}
   for (const tool of assessmentTools) {
-    for (const co of courseOutcomes) {
-      const key = coMarkCellKey(tool.assessment_type_id, co.id)
-      coMarksDefaults[key] = coMarkByKey[key] ?? 0
-    }
     const totalKey = coMarkCellKey(tool.assessment_type_id, TOTAL_COL)
     coMarksDefaults[totalKey] = coMarkByKey[totalKey] ?? 0
   }
@@ -271,24 +255,7 @@ export function CourseAssessmentClient({ id }: Props) {
   })
 
   const onSubmitCoMarks = coMarksForm.handleSubmit((values) => {
-    const { cells } = values
-    for (const tool of assessmentTools) {
-      const total = Number(cells[coMarkCellKey(tool.assessment_type_id, TOTAL_COL)] ?? 0)
-      const rowTotal = courseOutcomes.reduce(
-        (sum, co) => sum + Number(cells[coMarkCellKey(tool.assessment_type_id, co.id)] ?? 0),
-        0
-      )
-      // Skip tools the user hasn't started filling in yet, so e.g. entering Mid
-      // marks doesn't force Final's (still-empty) row to be complete too.
-      if (rowTotal === 0) continue
-      if (rowTotal !== total) {
-        toast.error(
-          `${tool.assessment_type_name}: CO-wise marks (${rowTotal}) must add up to its total marks (${total}).`
-        )
-        return
-      }
-    }
-    coMarksMutation.mutate(cells)
+    coMarksMutation.mutate(values.cells)
   })
 
   const onSubmitBloomMarks = bloomMarksForm.handleSubmit((values) => {
@@ -299,24 +266,6 @@ export function CourseAssessmentClient({ id }: Props) {
     const v = coMarksForm.watch(`cells.${coMarkCellKey(tool.assessment_type_id, TOTAL_COL)}`)
     return sum + (Number.isFinite(Number(v)) ? Number(v) : 0)
   }, 0)
-  const coMarksTotalByCO = courseOutcomes.map((co) => ({
-    co,
-    total: assessmentTools.reduce((sum, tool) => {
-      const v = coMarksForm.watch(`cells.${coMarkCellKey(tool.assessment_type_id, co.id)}`)
-      return sum + (Number.isFinite(v) ? Number(v) : 0)
-    }, 0),
-  }))
-  const coWiseGrandTotal = coMarksTotalByCO.reduce((sum, { total }) => sum + total, 0)
-
-  const toolTotalMarks = (tool: CourseAssessmentTool) => {
-    const v = coMarksForm.watch(`cells.${coMarkCellKey(tool.assessment_type_id, TOTAL_COL)}`)
-    return Number.isFinite(Number(v)) ? Number(v) : 0
-  }
-  const toolRowTotal = (tool: CourseAssessmentTool) =>
-    courseOutcomes.reduce((sum, co) => {
-      const v = coMarksForm.watch(`cells.${coMarkCellKey(tool.assessment_type_id, co.id)}`)
-      return sum + (Number.isFinite(Number(v)) ? Number(v) : 0)
-    }, 0)
 
   const bloomCells = bloomMarksForm.watch("cells") ?? {}
   let cieTotal = 0
@@ -438,8 +387,9 @@ export function CourseAssessmentClient({ id }: Props) {
           ) : canEditCourse ? (
             <form onSubmit={onSubmitCoMarks} className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Define the full marks for each assessment tool (e.g. Mid, Final). The CO-wise and
-                Bloom-wise breakdowns below should add up to these totals.
+                Define the full marks for each assessment tool (e.g. Mid, Final). The CO-wise
+                breakdown of these marks is configured by section teachers when entering marks,
+                and the Bloom-wise breakdown below should add up to these totals.
               </p>
               <div className="overflow-x-auto">
                 <Table>
@@ -519,117 +469,6 @@ export function CourseAssessmentClient({ id }: Props) {
                       </Badge>
                     </TableCell>
                   </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Assessment Pattern (CO-wise Marks)</CardTitle></CardHeader>
-        <CardContent>
-          {!curriculumId ? (
-            <p className="text-sm text-muted-foreground">
-              This course is not part of any curriculum yet.
-            </p>
-          ) : assessmentTools.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Configure assessment tools above before defining the marks distribution.
-            </p>
-          ) : canEditCourse ? (
-            <form onSubmit={onSubmitCoMarks} className="space-y-4">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-40">Assessment Type</TableHead>
-                      {courseOutcomes.map((co) => (
-                        <TableHead key={co.id} className="w-20 text-center">{co.code}</TableHead>
-                      ))}
-                      <TableHead className="w-28 text-center">Row Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assessmentTools.map((tool) => (
-                      <TableRow key={tool.id}>
-                        <TableCell className="align-top">
-                          {tool.assessment_type_name}{" "}
-                          <Badge variant="outline">{tool.is_sessional ? "CIE" : "SEE"}</Badge>
-                        </TableCell>
-                        {courseOutcomes.map((co) => (
-                          <TableCell key={co.id} className="align-top">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={999}
-                              step="0.01"
-                              className="w-20"
-                              {...coMarksForm.register(`cells.${coMarkCellKey(tool.assessment_type_id, co.id)}`)}
-                            />
-                          </TableCell>
-                        ))}
-                        <TableCell className="align-top text-center">
-                          <Badge variant={toolRowTotal(tool) === toolTotalMarks(tool) ? "default" : "destructive"}>
-                            {toolRowTotal(tool)} / {toolTotalMarks(tool)}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell className="font-medium">Column total</TableCell>
-                      {coMarksTotalByCO.map(({ co, total }) => (
-                        <TableCell key={co.id} className="text-center font-medium">{total}</TableCell>
-                      ))}
-                      <TableCell className="text-center">
-                        <Badge variant={coWiseGrandTotal === coMarksGrandTotal ? "default" : "destructive"}>
-                          {coWiseGrandTotal} / {coMarksGrandTotal}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={!coMarksForm.formState.isDirty || coMarksMutation.isPending}
-              >
-                {coMarksMutation.isPending && <Loader2 className="animate-spin" />}
-                Save Assessment Pattern
-              </Button>
-            </form>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Assessment Type</TableHead>
-                    {courseOutcomes.map((co) => (
-                      <TableHead key={co.id} className="text-center">{co.code}</TableHead>
-                    ))}
-                    <TableHead className="text-center">Row Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {assessmentTools.map((tool) => (
-                    <TableRow key={tool.id}>
-                      <TableCell>
-                        {tool.assessment_type_name}{" "}
-                        <Badge variant="outline">{tool.is_sessional ? "CIE" : "SEE"}</Badge>
-                      </TableCell>
-                      {courseOutcomes.map((co) => (
-                        <TableCell key={co.id} className="text-center">
-                          {coMarkByKey[coMarkCellKey(tool.assessment_type_id, co.id)] ?? 0}
-                        </TableCell>
-                      ))}
-                      <TableCell className="text-center">
-                        <Badge variant={toolRowTotal(tool) === toolTotalMarks(tool) ? "default" : "destructive"}>
-                          {toolRowTotal(tool)} / {toolTotalMarks(tool)}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
                 </TableBody>
               </Table>
             </div>
