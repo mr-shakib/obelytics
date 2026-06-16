@@ -116,7 +116,34 @@ export function ImportStudentsClient() {
           </Button>
         </div>
 
-        <div className="rounded-xl border bg-muted/30">
+        <div>
+          <p className="text-sm font-medium mb-2">2. Upload your filled-in spreadsheet</p>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="relative flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/20 px-6 py-10 text-center transition-colors hover:border-muted-foreground/50 hover:bg-muted/40 cursor-pointer"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file) handleFile(file) }}
+          >
+            <FileSpreadsheet className="h-10 w-10 text-muted-foreground/50" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Drop your file here or click to browse</p>
+              <p className="text-xs text-muted-foreground mt-1">Supports .xlsx, .xls, .csv</p>
+            </div>
+            {rows.length > 0 && (
+              <Badge variant="secondary" className="mt-1">{fileName} — {rows.length} row{rows.length === 1 ? "" : "s"} loaded</Badge>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="sr-only"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+            />
+          </button>
+        </div>
+
+        {rows.length === 0 && <div className="rounded-xl border bg-muted/30">
           <div className="flex items-center gap-2 px-4 py-3 text-sm font-medium">
             <Info className="h-4 w-4 text-muted-foreground" />
             How to fill in the spreadsheet
@@ -128,7 +155,7 @@ export function ImportStudentsClient() {
               <li><span className="font-mono text-foreground">student_id_number</span> and <span className="font-mono text-foreground">full_name</span> are required for every row.</li>
               <li><span className="font-mono text-foreground">email</span> is optional — leave it blank if a student doesn&apos;t have one.</li>
               <li>If a student ID already exists in the system, that student&apos;s name/email will be updated instead of creating a duplicate.</li>
-              <li>Save the file as .xlsx, .xls, or .csv and upload it below.</li>
+              <li>Save the file as .xlsx, .xls, or .csv and upload it above.</li>
             </ol>
             <div className="overflow-auto rounded-lg border">
               <table className="w-full text-left text-xs">
@@ -157,45 +184,18 @@ export function ImportStudentsClient() {
               </table>
             </div>
           </div>
-        </div>
-
-        <div>
-          <p className="text-sm font-medium mb-2">2. Upload your filled-in spreadsheet</p>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="relative flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/20 px-6 py-10 text-center transition-colors hover:border-muted-foreground/50 hover:bg-muted/40 cursor-pointer"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file) handleFile(file) }}
-          >
-            <FileSpreadsheet className="h-10 w-10 text-muted-foreground/50" />
-            <div>
-              <p className="text-sm font-medium text-foreground">Drop your file here or click to browse</p>
-              <p className="text-xs text-muted-foreground mt-1">Supports .xlsx, .xls, .csv</p>
-            </div>
-            {rows.length > 0 && (
-              <Badge variant="secondary" className="mt-1">{fileName} — {rows.length} row{rows.length === 1 ? "" : "s"} loaded</Badge>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="sr-only"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-            />
-          </button>
-        </div>
+        </div>}
 
         {rows.length > 0 && (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Preview — first 5 rows</p>
-            <div className="rounded-lg border overflow-auto max-h-48">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Preview</p>
+            <div className="rounded-lg border overflow-auto max-h-64">
               <table className="text-xs w-full">
                 <thead className="bg-muted/50">
                   <tr>{Object.keys(rows[0]).map((k) => <th key={k} className="px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{k}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 5).map((r, i) => (
+                  {rows.map((r, i) => (
                     <tr key={i} className="border-t">
                       {Object.values(r).map((v, j) => <td key={j} className="px-2 py-1.5 whitespace-nowrap max-w-[160px] truncate">{String(v)}</td>)}
                     </tr>

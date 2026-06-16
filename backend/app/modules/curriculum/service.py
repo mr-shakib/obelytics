@@ -1353,6 +1353,7 @@ class ModuleLeaderAssignmentService:
             body.batch_id, body.academic_term_id, body.course_id
         )
         if existing:
+            await self._revoke_module_leader_role(existing.user_id, org_id, existing.id)
             await self._repo.remove(existing)
         assignment = ModuleLeaderAssignment(
             organization_id=org_id,
@@ -1362,6 +1363,7 @@ class ModuleLeaderAssignmentService:
             user_id=body.user_id,
         )
         result = await self._repo.create(assignment)
+        await self._grant_module_leader_role(body.user_id, org_id, result.id)
         await self._session.commit()
         return result
 
@@ -1369,6 +1371,59 @@ class ModuleLeaderAssignmentService:
         assignment = await self._repo.get_by_id(assignment_id)
         if assignment is None or assignment.organization_id != org_id:
             raise ModuleLeaderAssignmentNotFoundError()
+        await self._revoke_module_leader_role(assignment.user_id, org_id, assignment.id)
         result = await self._repo.remove(assignment)
         await self._session.commit()
         return result
+
+    async def _grant_module_leader_role(
+        self, user_id: UUID, org_id: UUID, ml_assignment_id: UUID
+    ) -> None:
+        from app.modules.iam.repository.role_repository import RoleRepository
+        from app.modules.iam.service.permission_service import PermissionManifestBuilder
+        from app.modules.iam.models import UserRoleAssignment
+
+        role_repo = RoleRepository(self._session)
+        ml_role = await role_repo.find_by_name("Module Leader", org_id)
+        if ml_role is None:
+            return
+
+        self._session.add(
+            UserRoleAssignment(
+                user_id=user_id,
+                role_id=ml_role.id,
+                scope_type="MODULE_LEADER",
+                scope_id=ml_assignment_id,
+                assigned_by=None,
+            )
+        )
+        await PermissionManifestBuilder(self._session).invalidate(user_id)
+
+    async def _revoke_module_leader_role(
+        self, user_id: UUID, org_id: UUID, ml_assignment_id: UUID
+    ) -> None:
+        from sqlalchemy import and_, select
+        from app.modules.iam.repository.role_repository import RoleRepository
+        from app.modules.iam.service.permission_service import PermissionManifestBuilder
+        from app.modules.iam.models import UserRoleAssignment
+
+        role_repo = RoleRepository(self._session)
+        ml_role = await role_repo.find_by_name("Module Leader", org_id)
+        if ml_role is None:
+            return
+
+        result = await self._session.execute(
+            select(UserRoleAssignment).where(
+                and_(
+                    UserRoleAssignment.user_id == user_id,
+                    UserRoleAssignment.role_id == ml_role.id,
+                    UserRoleAssignment.scope_type == "MODULE_LEADER",
+                    UserRoleAssignment.scope_id == ml_assignment_id,
+                    UserRoleAssignment.removed_at.is_(None),
+                )
+            )
+        )
+        grant = result.scalar_one_or_none()
+        if grant is not None:
+            grant.removed_at = datetime.now(timezone.utc)
+            await PermissionManifestBuilder(self._session).invalidate(user_id)

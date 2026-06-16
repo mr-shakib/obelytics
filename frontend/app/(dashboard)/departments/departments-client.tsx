@@ -140,7 +140,7 @@ export function DepartmentsClient() {
                 <form
                   id="create-dept-form"
                   onSubmit={handleSubmit((v) => mutation.mutate(v))}
-                  className="space-y-4 py-2"
+                  className="space-y-4 py-2 overflow-y-auto flex-1 min-h-0 pr-1"
                 >
                   <div className="space-y-2">
                     <Label htmlFor="dept-name">Name</Label>
@@ -164,7 +164,11 @@ export function DepartmentsClient() {
                       render={({ field }) => (
                         <Select value={field.value ?? ""} onValueChange={field.onChange}>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a user (optional)" />
+                            <SelectValue placeholder="Select a user (optional)">
+                              {(value: string) => value
+                                ? ((users ?? []).find((u) => u.id === value)?.full_name ?? value)
+                                : null}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {(users ?? []).map((u) => (

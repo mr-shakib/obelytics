@@ -102,7 +102,7 @@ export function canViewNavItem(item: NavItem, permissions: string[]) {
 // Section Teachers get a focused workspace: their assigned sections (cards,
 // with marks entry + attainment) plus approvals/notifications — not the full
 // curriculum/assessment management nav that PCs and Module Leaders see.
-const SECTION_TEACHER_NAV_HREFS = ["/my-sections", "/students", "/approvals", "/notifications"]
+const SECTION_TEACHER_NAV_HREFS = ["/my-sections", "/students", "/notifications"]
 
 export function isSectionTeacherView(permissions: string[]) {
   return (

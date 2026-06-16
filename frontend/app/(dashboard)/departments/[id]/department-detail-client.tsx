@@ -205,7 +205,11 @@ export function DepartmentDetailClient({ id }: Props) {
                 <Label>Assign new Head of Department</Label>
                 <Select value={hodId} onValueChange={(v) => setHodId((v as string) ?? "")}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a user" />
+                    <SelectValue placeholder="Select a user">
+                      {(value: string) => value
+                        ? ((users ?? []).find((u) => u.id === value)?.full_name ?? value)
+                        : null}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(users ?? []).map((u) => (

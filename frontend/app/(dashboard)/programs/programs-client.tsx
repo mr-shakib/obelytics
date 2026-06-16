@@ -175,7 +175,7 @@ export function ProgramsClient() {
                 <form
                   id="create-prog-form"
                   onSubmit={handleSubmit((v) => mutation.mutate(v))}
-                  className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-1"
+                  className="space-y-4 py-2 overflow-y-auto flex-1 min-h-0 pr-1"
                 >
                   <div className="space-y-2">
                     <Label htmlFor="prog-title">Title</Label>

@@ -30,8 +30,10 @@ class PORepository:
         return result.scalar_one_or_none()
 
     async def list_active(self, org_id: UUID, program_id: UUID | None = None) -> list[ProgramOutcome]:
-        stmt = select(ProgramOutcome).where(
-            and_(ProgramOutcome.organization_id == org_id, ProgramOutcome.status == "ACTIVE")
+        stmt = (
+            select(ProgramOutcome)
+            .where(and_(ProgramOutcome.organization_id == org_id, ProgramOutcome.status == "ACTIVE"))
+            .order_by(ProgramOutcome.order_index)
         )
         if program_id:
             stmt = stmt.where(ProgramOutcome.program_id == program_id)

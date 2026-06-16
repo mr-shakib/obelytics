@@ -447,7 +447,49 @@ pytest tests/integration/test_auth_flow.py::test_login_success -v
 
 ---
 
-## 8. MinIO File Storage (Optional)
+## 8. Resetting Application Data (Clean DB)
+
+Wipes all user-created data while keeping the org record, system permissions/roles, and config reference tables. Use this to start fresh without re-running migrations.
+
+> **Note:** The CASCADE from org tables also removes users, so the super admin must be re-seeded afterward.
+
+**Step 1 — find your org ID:**
+
+```powershell
+docker exec backend-postgres-1 psql -U obelytics -d obelytics -c "SELECT id, name, short_name FROM org.organizations;"
+```
+
+**Step 2 — truncate all operational data:**
+
+```powershell
+docker exec backend-postgres-1 psql -U obelytics -d obelytics -c "
+BEGIN;
+TRUNCATE org.department_head_history, org.departments, org.programs CASCADE;
+TRUNCATE curriculum.course_lesson_plan_item_cos, curriculum.course_lesson_plan_item_pos, curriculum.course_lesson_plan_items, curriculum.course_co_marks, curriculum.course_bloom_marks, curriculum.course_bloom_domains, curriculum.course_assessment_tools, curriculum.course_learning_materials, curriculum.course_objectives, curriculum.course_prerequisites, curriculum.faculty_assignments, curriculum.module_leader_assignments, curriculum.section_offerings, curriculum.sections, curriculum.curriculum_course_slots, curriculum.curriculum_term_definitions, curriculum.batch_term_calendar, curriculum.batches, curriculum.courses, curriculum.curricula, curriculum.academic_terms CASCADE;
+TRUNCATE obe.co_ca_mappings, obe.co_cp_mappings, obe.co_delivery_methods, obe.co_kp_mappings, obe.co_po_mapping_entries, obe.co_po_mapping_sets, obe.course_outcome_bloom_levels, obe.course_outcomes, obe.po_knowledge_profiles, obe.program_outcomes CASCADE;
+TRUNCATE assessment.student_marks, assessment.marksheet_marks, assessment.marksheet_questions, assessment.result_publications, assessment.assessment_co_weights, assessment.assessments, assessment.student_enrollments, assessment.students CASCADE;
+TRUNCATE attainment.co_attainment_results, attainment.po_attainment_results, attainment.attainment_configs CASCADE;
+TRUNCATE accreditation.criterion_po_mappings, accreditation.accreditation_criteria, accreditation.accreditation_cycles CASCADE;
+TRUNCATE approval.review_comments CASCADE;
+TRUNCATE audit.audit_logs, events.domain_events, notification.notifications CASCADE;
+TRUNCATE iam.refresh_tokens CASCADE;
+COMMIT;
+"
+```
+
+**Step 3 — re-seed the super admin** (replace `<org-id>` with the ID from Step 1):
+
+```powershell
+cd backend
+.venv\Scripts\activate
+python -m scripts.seed_superadmin --org-id <org-id>
+```
+
+Login credentials are unchanged: `admin@obelytics.local` / `Admin@123`.
+
+---
+
+## 9. MinIO File Storage (Optional)
 
 MinIO runs locally and mimics AWS S3. To manage buckets:
 

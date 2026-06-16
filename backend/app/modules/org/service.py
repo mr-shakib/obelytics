@@ -95,6 +95,7 @@ class DepartmentService:
 
 class ProgramService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = ProgramRepository(session)
 
     async def list_active(self, organization_id: UUID, department_id: UUID | None = None) -> list[Program]:
@@ -121,7 +122,34 @@ class ProgramService:
             study_mode=body.study_mode,
             description=body.description,
         )
-        return await self._repo.create(program)
+        result = await self._repo.create(program)
+        await self._seed_pos_from_types(result.id, organization_id)
+        return result
+
+    async def _seed_pos_from_types(self, program_id: UUID, organization_id: UUID) -> None:
+        from sqlalchemy import and_, select
+        from app.modules.ref_data.models import POType
+        from app.modules.obe.models import ProgramOutcome
+
+        po_types_result = await self._session.execute(
+            select(POType)
+            .where(and_(POType.organization_id == organization_id, POType.is_active.is_(True)))
+            .order_by(POType.created_at)
+        )
+        po_types = list(po_types_result.scalars().all())
+
+        for i, pt in enumerate(po_types, start=1):
+            statement = pt.description or pt.name
+            self._session.add(ProgramOutcome(
+                organization_id=organization_id,
+                program_id=program_id,
+                code=f"PO{i}",
+                statement=statement,
+                po_type=pt.name,
+                order_index=i - 1,
+            ))
+        if po_types:
+            await self._session.flush()
 
     async def update(self, program_id: UUID, body: ProgramUpdate, organization_id: UUID) -> Program:
         program = await self._repo.get_by_id(program_id, organization_id)
