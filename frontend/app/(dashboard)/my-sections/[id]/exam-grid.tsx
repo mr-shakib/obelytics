@@ -3,23 +3,14 @@
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Loader2, Settings, Plus, Trash2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select"
-import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
-import {
-  Tabs, TabsList, TabsTrigger, TabsContent,
-} from "@/components/ui/tabs"
 import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
@@ -65,13 +56,6 @@ type GridResponse = {
   students: StudentRow[]
 }
 
-type DraftQuestion = {
-  id?: string
-  label: string
-  max_marks: string
-  course_outcome_id: string
-}
-
 type CellState = {
   value: number | ""
 }
@@ -85,252 +69,11 @@ interface Props {
 
 const EXAM_LABEL: Record<string, string> = { MID: "Mid Term", FINAL: "Final Exam" }
 
-const EMPTY_QUESTION: DraftQuestion = { label: "", max_marks: "", course_outcome_id: "" }
-
-// ── Configure Questions dialog ───────────────────────────────────────────────
-// Section teachers define the actual questions on the exam paper (e.g. Q1, Q2a,
-// Q2b), set how many marks each is worth, and map each one to a course outcome.
-// Multiple questions can map to the same CO — PO attainment is then computed
-// automatically from the CO-PO mapping.
-
-function ConfigureQuestionsDialog({
-  questions,
-  courseOutcomes,
-  examType,
-  onSave,
-  saving,
-}: {
-  questions: MarksheetQuestion[]
-  courseOutcomes: CourseOutcome[]
-  examType: string
-  onSave: (questions: DraftQuestion[]) => void
-  saving: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [step, setStep] = useState<"co-marks" | "questions">("co-marks")
-  const [draft, setDraft] = useState<DraftQuestion[]>([])
-  const [coTargets, setCoTargets] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (!open) return
-    setStep("co-marks")
-    if (questions.length > 0) {
-      setDraft(
-        [...questions]
-          .sort((a, b) => a.order_index - b.order_index)
-          .map((q) => ({
-            id: q.id,
-            label: q.label,
-            max_marks: String(q.max_marks),
-            course_outcome_id: q.course_outcome_id ?? "",
-          }))
-      )
-    } else {
-      setDraft([{ ...EMPTY_QUESTION }])
-    }
-    const targets: Record<string, string> = {}
-    for (const co of courseOutcomes) {
-      const sum = questions
-        .filter((q) => q.course_outcome_id === co.id)
-        .reduce((s, q) => s + Number(q.max_marks), 0)
-      targets[co.id] = sum > 0 ? String(sum) : ""
-    }
-    setCoTargets(targets)
-  }, [open, questions, courseOutcomes])
-
-  const updateRow = (index: number, patch: Partial<DraftQuestion>) => {
-    setDraft((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)))
-  }
-
-  const addRow = () => setDraft((prev) => [...prev, { ...EMPTY_QUESTION }])
-
-  const removeRow = (index: number) => setDraft((prev) => prev.filter((_, i) => i !== index))
-
-  const total = draft.reduce((sum, row) => sum + (Number(row.max_marks) || 0), 0)
-
-  const mappedByCo = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const row of draft) {
-      if (!row.course_outcome_id) continue
-      map.set(row.course_outcome_id, (map.get(row.course_outcome_id) ?? 0) + (Number(row.max_marks) || 0))
-    }
-    return map
-  }, [draft])
-
-  const coTargetTotal = Object.values(coTargets).reduce((sum, v) => sum + (Number(v) || 0), 0)
-
-  const cosWithTargetsOrMappings = courseOutcomes.filter(
-    (co) => (Number(coTargets[co.id]) || 0) > 0 || (mappedByCo.get(co.id) ?? 0) > 0
-  )
-
-  const handleSave = () => {
-    const rows = draft.filter((row) => row.label.trim().length > 0)
-    for (const row of rows) {
-      const max = Number(row.max_marks)
-      if (!Number.isFinite(max) || max <= 0) {
-        toast.error(`"${row.label}" needs a valid marks value greater than 0`)
-        return
-      }
-    }
-    onSave(rows)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>
-        <Settings className="h-3.5 w-3.5" />
-        Configure Questions
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{EXAM_LABEL[examType] ?? examType} — Questions</DialogTitle>
-        </DialogHeader>
-
-        <Tabs value={step} onValueChange={(v) => setStep(v as "co-marks" | "questions")} className="min-w-0">
-          <TabsList className="w-full">
-            <TabsTrigger value="co-marks" className="flex-1">1. CO Marks</TabsTrigger>
-            <TabsTrigger value="questions" className="flex-1">2. Map Questions</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="co-marks" className="space-y-3 pt-3">
-            <p className="text-sm text-muted-foreground">
-              Decide how many marks each course outcome is worth in this{" "}
-              {EXAM_LABEL[examType]?.toLowerCase() ?? "exam"}. You&apos;ll map individual
-              questions to these COs next.
-            </p>
-            {courseOutcomes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No course outcomes defined for this course yet.</p>
-            ) : (
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {courseOutcomes.map((co) => (
-                  <div key={co.id} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{co.code}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{co.statement}</p>
-                    </div>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.5"
-                      placeholder="0"
-                      value={coTargets[co.id] ?? ""}
-                      onChange={(e) => setCoTargets((prev) => ({ ...prev, [co.id]: e.target.value }))}
-                      className="w-20"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-sm font-medium">Total allocated: {coTargetTotal}</p>
-          </TabsContent>
-
-          <TabsContent value="questions" className="space-y-3 pt-3">
-            <p className="text-sm text-muted-foreground">
-              Add one row per question on the exam paper, set how many marks it&apos;s worth, and
-              choose the course outcome it assesses. Multiple questions can map to the same CO —
-              PO attainment is calculated automatically from these mappings.
-            </p>
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {draft.map((row, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    placeholder={`Q${i + 1}`}
-                    value={row.label}
-                    onChange={(e) => updateRow(i, { label: e.target.value })}
-                    className="flex-1"
-                  />
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    placeholder="Marks"
-                    value={row.max_marks}
-                    onChange={(e) => updateRow(i, { max_marks: e.target.value })}
-                    className="w-20"
-                  />
-                  <Select
-                    value={row.course_outcome_id || "none"}
-                    onValueChange={(v) => updateRow(i, { course_outcome_id: v === "none" ? "" : (v as string) })}
-                  >
-                    <SelectTrigger className="w-28">
-                      <SelectValue placeholder="CO">
-                        {row.course_outcome_id
-                          ? courseOutcomes.find((co) => co.id === row.course_outcome_id)?.code
-                          : "—"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">—</SelectItem>
-                      {courseOutcomes.map((co) => (
-                        <SelectItem key={co.id} value={co.id}>{co.code}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeRow(i)}
-                    disabled={draft.length === 1}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={addRow} className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" />
-              Add Question
-            </Button>
-            <p className="text-sm font-medium">Total: {total}</p>
-
-            {cosWithTargetsOrMappings.length > 0 && (
-              <div className="rounded-md border p-2 space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">CO mark check</p>
-                {cosWithTargetsOrMappings.map((co) => {
-                  const target = Number(coTargets[co.id]) || 0
-                  const mapped = mappedByCo.get(co.id) ?? 0
-                  const match = mapped === target
-                  return (
-                    <div key={co.id} className="flex items-center justify-between text-sm">
-                      <span>{co.code}</span>
-                      <span className={match ? "text-green-600" : "text-amber-600"}>
-                        {mapped} / {target} marks mapped
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-
-        <DialogFooter>
-          {step === "co-marks" ? (
-            <>
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={() => setStep("questions")}>Next: Map Questions</Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => setStep("co-marks")}>Back</Button>
-              <Button disabled={saving} onClick={handleSave}>
-                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Save
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 // ── Main exam grid ────────────────────────────────────────────────────────────
 
 export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }: Props) {
   const qc = useQueryClient()
-  const canManage = useHasAnyPermission(["marks.enter", "assessment.configure"]) && !locked
+  const canEnterMarks = useHasAnyPermission(["marks.enter"]) && !locked
 
   const [cells, setCells] = useState<Map<string, CellState>>(new Map())
   const [absent, setAbsent] = useState<Map<string, boolean>>(new Map())
@@ -391,29 +134,6 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
     qc.invalidateQueries({ queryKey: queryKeys.marksheets.grid(sectionOfferingId, examType) })
     qc.invalidateQueries({ queryKey: queryKeys.marksheets.attainment(sectionOfferingId) })
   }, [qc, sectionOfferingId, examType])
-
-  const saveQuestionsMutation = useMutation({
-    mutationFn: async (draft: DraftQuestion[]) => {
-      await apiClient.PUT(`/marksheets/${sectionOfferingId}/questions` as never, {
-        params: { query: { exam_type: examType } },
-        body: {
-          questions: draft.map((row, i) => ({
-            id: row.id,
-            label: row.label,
-            max_marks: Number(row.max_marks),
-            course_outcome_id: row.course_outcome_id || null,
-            order_index: i,
-          })),
-        },
-      } as never)
-    },
-    onSuccess: () => {
-      toast.success("Questions updated")
-      qc.invalidateQueries({ queryKey: queryKeys.marksheets.questions(sectionOfferingId, examType) })
-      invalidateAll()
-    },
-    onError: () => toast.error("Failed to update questions"),
-  })
 
   const handleCellChange = (enrollmentId: string, questionId: string, raw: string) => {
     const value = raw === "" ? "" : Number(raw)
@@ -509,7 +229,7 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
             ? `${questions.length} question${questions.length === 1 ? "" : "s"} · ${totalMaxMarks} total marks · ${mappedCoCount} CO${mappedCoCount === 1 ? "" : "s"} mapped`
             : "No questions configured for this exam yet."}
         </p>
-        {canManage ? (
+        {canEnterMarks ? (
           <div className="flex items-center gap-3">
             {hasUnsavedChanges && (
               <span className="text-sm text-amber-600">Unsaved changes</span>
@@ -522,13 +242,6 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
               {saveMarksMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Save Marks
             </Button>
-            <ConfigureQuestionsDialog
-              questions={questions}
-              courseOutcomes={courseOutcomes}
-              examType={examType}
-              onSave={(draft) => saveQuestionsMutation.mutate(draft)}
-              saving={saveQuestionsMutation.isPending}
-            />
           </div>
         ) : (
           locked && <span className="text-sm text-muted-foreground">Locked</span>
@@ -538,9 +251,8 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
       {questions.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            {canManage
-              ? `Configure the questions for the ${EXAM_LABEL[examType]?.toLowerCase() ?? "exam"} to start entering marks.`
-              : `${EXAM_LABEL[examType] ?? examType} marks have not been configured yet.`}
+            {EXAM_LABEL[examType] ?? examType} questions have not been configured yet.
+            Use the Question Configuration section to set them up.
           </CardContent>
         </Card>
       ) : !grid || grid.students.length === 0 ? (
@@ -587,7 +299,7 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
                         const dirty = dirtyCells.has(key) || dirtyRows.has(student.enrollment_id)
                         return (
                           <TableCell key={q.id} className="text-center">
-                            {canManage ? (
+                            {canEnterMarks ? (
                               <Input
                                 type="number"
                                 min={0}
@@ -612,7 +324,7 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
                         {rowAbsent ? "AB" : rowTotal(student.enrollment_id)}
                       </TableCell>
                       <TableCell className="text-center">
-                        {canManage ? (
+                        {canEnterMarks ? (
                           <input
                             type="checkbox"
                             checked={rowAbsent}

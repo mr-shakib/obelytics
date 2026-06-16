@@ -353,3 +353,143 @@ class COKPMapping(Base):
         server_default=sa.text("now()"),
         onupdate=sa.text("now()"),
     )
+
+
+# ── Program Missions ──────────────────────────────────────────────────────────
+
+class ProgramMission(Base):
+    __tablename__ = "program_missions"
+    __table_args__ = (
+        Index(
+            "uq_obe_mission_program_code_active",
+            "program_id", "code",
+            unique=True,
+            postgresql_where=sa.text("status = 'ACTIVE'"),
+        ),
+        {"schema": "obe"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    program_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.programs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    code = Column(String(20), nullable=False)
+    statement = Column(Text, nullable=False)
+    order_index = Column(SmallInteger, nullable=False)
+    status = Column(String(20), nullable=False, server_default="ACTIVE")
+    archived_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
+
+
+# ── Program Educational Objectives (PEO) ─────────────────────────────────────
+
+class ProgramEducationalObjective(Base):
+    __tablename__ = "program_educational_objectives"
+    __table_args__ = (
+        Index(
+            "uq_obe_peo_program_code_active",
+            "program_id", "code",
+            unique=True,
+            postgresql_where=sa.text("status = 'ACTIVE'"),
+        ),
+        {"schema": "obe"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    program_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.programs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    code = Column(String(20), nullable=False)
+    statement = Column(Text, nullable=False)
+    order_index = Column(SmallInteger, nullable=False)
+    status = Column(String(20), nullable=False, server_default="ACTIVE")
+    archived_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
+
+
+# ── PEO-PO Mapping ────────────────────────────────────────────────────────────
+
+class PEOPOMapping(Base):
+    __tablename__ = "peo_po_mappings"
+    __table_args__ = (
+        UniqueConstraint("peo_id", "program_outcome_id", name="uq_obe_peo_po"),
+        {"schema": "obe"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    peo_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.program_educational_objectives.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    program_outcome_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.program_outcomes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
+# ── PEO-Mission Mapping ───────────────────────────────────────────────────────
+
+class PEOMissionMapping(Base):
+    __tablename__ = "peo_mission_mappings"
+    __table_args__ = (
+        UniqueConstraint("peo_id", "mission_id", name="uq_obe_peo_mission"),
+        {"schema": "obe"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    peo_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.program_educational_objectives.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    mission_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.program_missions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))

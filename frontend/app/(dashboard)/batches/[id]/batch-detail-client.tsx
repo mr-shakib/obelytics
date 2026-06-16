@@ -7,7 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 import Link from "next/link"
-import { Loader2, ChevronDown, ChevronRight, BookOpen, Play, CheckCircle, Settings2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Loader2, ChevronDown, ChevronRight, BookOpen, Play, CheckCircle, Settings2, Plus, Upload, Users, Pencil, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,9 +18,258 @@ import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { usePermission } from "@/hooks/use-permission"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { formatDate } from "@/lib/utils"
+
+type Student = {
+  id: string
+  student_id_number: string
+  full_name: string
+  email: string | null
+  batch_id: string
+  status: string
+}
+
+const studentFormSchema = z.object({
+  student_id_number: z.string().min(1, "Student ID is required"),
+  full_name: z.string().min(1, "Name is required"),
+  email: z.union([z.string().email("Enter a valid email"), z.literal("")]).optional(),
+})
+type StudentFormValues = z.infer<typeof studentFormSchema>
+
+function BatchStudentsCard({ batchId }: { batchId: string }) {
+  const qc = useQueryClient()
+  const router = useRouter()
+  const canManage = usePermission("assessment.configure")
+  const [addOpen, setAddOpen] = useState(false)
+  const [editStudent, setEditStudent] = useState<Student | null>(null)
+  const [deleteStudent, setDeleteStudent] = useState<Student | null>(null)
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: queryKeys.students.list({ batch_id: batchId }) })
+    qc.invalidateQueries({ queryKey: queryKeys.students.all })
+  }
+
+  const { data: students = [], isLoading } = useQuery({
+    queryKey: queryKeys.students.list({ batch_id: batchId }),
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/students" as never, {
+        params: { query: { batch_id: batchId } },
+      } as never)
+      return ((data as unknown) as Student[]) ?? []
+    },
+  })
+
+  // ── Add form ──
+  const addForm = useForm<StudentFormValues>({ resolver: zodResolver(studentFormSchema) })
+  const addMutation = useMutation({
+    mutationFn: async (values: StudentFormValues) => {
+      await apiClient.POST("/students" as never, {
+        body: { student_id_number: values.student_id_number, full_name: values.full_name, email: values.email || null, batch_id: batchId },
+      } as never)
+    },
+    onSuccess: () => { toast.success("Student added"); invalidate(); addForm.reset(); setAddOpen(false) },
+    onError: () => toast.error("Failed to add student"),
+  })
+
+  // ── Edit form ──
+  const editForm = useForm<StudentFormValues>({ resolver: zodResolver(studentFormSchema) })
+  const editMutation = useMutation({
+    mutationFn: async (values: StudentFormValues) => {
+      await apiClient.PATCH(`/students/${editStudent!.id}` as never, {
+        body: { student_id_number: values.student_id_number, full_name: values.full_name, email: values.email || null },
+      } as never)
+    },
+    onSuccess: () => { toast.success("Student updated"); invalidate(); setEditStudent(null) },
+    onError: () => toast.error("Failed to update student"),
+  })
+
+  // ── Delete ──
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.DELETE(`/students/${deleteStudent!.id}` as never, {} as never)
+    },
+    onSuccess: () => { toast.success("Student removed"); invalidate(); setDeleteStudent(null) },
+    onError: () => toast.error("Failed to remove student"),
+  })
+
+  return (
+    <>
+    {/* Edit dialog */}
+    <Dialog open={!!editStudent} onOpenChange={(v) => { if (!v) setEditStudent(null) }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
+        <form id="edit-student-form" onSubmit={editForm.handleSubmit((v) => editMutation.mutate(v))} className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="es-id">Student ID</Label>
+            <Input id="es-id" {...editForm.register("student_id_number")} />
+            {editForm.formState.errors.student_id_number && <p className="text-sm text-destructive">{editForm.formState.errors.student_id_number.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="es-name">Full Name</Label>
+            <Input id="es-name" {...editForm.register("full_name")} />
+            {editForm.formState.errors.full_name && <p className="text-sm text-destructive">{editForm.formState.errors.full_name.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="es-email">Email (optional)</Label>
+            <Input id="es-email" type="email" {...editForm.register("email")} />
+            {editForm.formState.errors.email && <p className="text-sm text-destructive">{editForm.formState.errors.email.message}</p>}
+          </div>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditStudent(null)} disabled={editMutation.isPending}>Cancel</Button>
+          <Button type="submit" form="edit-student-form" disabled={editMutation.isPending}>
+            {editMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Delete confirmation dialog */}
+    <Dialog open={!!deleteStudent} onOpenChange={(v) => { if (!v) setDeleteStudent(null) }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>Remove Student</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">
+          Remove <span className="font-medium text-foreground">{deleteStudent?.full_name}</span> ({deleteStudent?.student_id_number}) from this batch? This cannot be undone.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setDeleteStudent(null)} disabled={deleteMutation.isPending}>Cancel</Button>
+          <Button variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+            {deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            Remove
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Students
+            {students.length > 0 && (
+              <Badge variant="secondary" className="text-xs">{students.length}</Badge>
+            )}
+          </span>
+          <PermissionGate permission="assessment.configure">
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => router.push(`/students/import?batch_id=${batchId}`)}>
+                <Upload className="h-3.5 w-3.5" />
+                Bulk Import
+              </Button>
+              <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); if (!v) addForm.reset() }}>
+                <DialogTrigger render={<Button size="sm" />}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Student
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader><DialogTitle>Add Student to Batch</DialogTitle></DialogHeader>
+                  <form id="add-batch-student-form" onSubmit={addForm.handleSubmit((v) => addMutation.mutate(v))} className="space-y-4 py-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="bs-student-id">Student ID</Label>
+                      <Input id="bs-student-id" {...addForm.register("student_id_number")} placeholder="221-15-1234" />
+                      {addForm.formState.errors.student_id_number && <p className="text-sm text-destructive">{addForm.formState.errors.student_id_number.message}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bs-full-name">Full Name</Label>
+                      <Input id="bs-full-name" {...addForm.register("full_name")} placeholder="Jane Doe" />
+                      {addForm.formState.errors.full_name && <p className="text-sm text-destructive">{addForm.formState.errors.full_name.message}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bs-email">Email (optional)</Label>
+                      <Input id="bs-email" type="email" {...addForm.register("email")} placeholder="jane@example.com" />
+                      {addForm.formState.errors.email && <p className="text-sm text-destructive">{addForm.formState.errors.email.message}</p>}
+                    </div>
+                  </form>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setAddOpen(false)} disabled={addMutation.isPending}>Cancel</Button>
+                    <Button type="submit" form="add-batch-student-form" disabled={addMutation.isPending}>
+                      {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Add
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </PermissionGate>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-9 animate-pulse bg-muted rounded" />
+            ))}
+          </div>
+        ) : students.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2 text-center">
+            No students in this batch yet.
+          </p>
+        ) : (
+          <div className="overflow-auto max-h-[520px]">
+            <table className="w-full text-sm table-fixed">
+              <thead className="sticky top-0 bg-card z-10">
+                <tr className="border-b border-border text-muted-foreground text-xs uppercase">
+                  <th className="w-[26%] py-2 pr-2 text-left font-medium">ID</th>
+                  <th className="w-[28%] py-2 pr-2 text-left font-medium">Name</th>
+                  <th className="py-2 pr-2 text-left font-medium">Email</th>
+                  {canManage && <th className="w-[52px] py-2 text-right font-medium" />}
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((s) => (
+                  <tr key={s.id} className="border-b border-border/50 last:border-0 hover:bg-muted/40 group">
+                    <td className="py-2.5 pr-2 font-mono text-xs max-w-0">
+                      <span className="block truncate">{s.student_id_number}</span>
+                    </td>
+                    <td className="py-2.5 pr-2 max-w-0">
+                      <span className="block truncate">{s.full_name}</span>
+                    </td>
+                    <td className="py-2.5 pr-2 text-muted-foreground max-w-0">
+                      <span className="block truncate">{s.email ?? "—"}</span>
+                    </td>
+                    {canManage && (
+                      <td className="py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => { editForm.reset({ student_id_number: s.student_id_number, full_name: s.full_name, email: s.email ?? "" }); setEditStudent(s) }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            onClick={() => setDeleteStudent(s)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+    </>
+  )
+}
 
 type SemesterCourse = {
   course_id: string
@@ -270,7 +520,7 @@ export function BatchDetailClient({ id }: Props) {
   const totalCreditsAll = semesterPlan.reduce((s, t) => s + t.total_credits, 0)
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title={data.name}
         description={[
@@ -297,60 +547,72 @@ export function BatchDetailClient({ id }: Props) {
         ))}
       </div>
 
-      {/* Semester plan accordion */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Semester Plan</span>
-            <span className="text-sm font-normal text-muted-foreground">
-              Click a semester to see its courses
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {planLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-12 animate-pulse bg-muted rounded-lg" />
-              ))}
-            </div>
-          ) : semesterPlan.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No semester calendar generated yet.
-            </p>
-          ) : (
-            semesterPlan.map((item) => (
-              <SemesterRow
-                key={item.term_number}
-                item={item}
-                batchId={id}
-                canManage={canManage}
-                onStatusChange={(termId, status) => statusMutation.mutate({ termId, status })}
-                changingId={changingTermId}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
+      {/* Main 2-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-      <PermissionGate permission="batch.create">
-        <Card>
-          <CardHeader><CardTitle>Edit Batch</CardTitle></CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit((v) => batchMutation.mutate(v))} className="space-y-4 max-w-sm">
-              <div className="space-y-2">
-                <Label htmlFor="name">Batch Name</Label>
-                <Input id="name" {...register("name")} />
-                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-              </div>
-              <Button type="submit" disabled={!isDirty || isSubmitting || batchMutation.isPending}>
-                {(isSubmitting || batchMutation.isPending) && <Loader2 className="animate-spin" />}
-                Save Changes
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </PermissionGate>
+        {/* Left — Semester plan */}
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Semester Plan</span>
+                <span className="text-sm font-normal text-muted-foreground">
+                  Click a semester to see its courses
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {planLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-12 animate-pulse bg-muted rounded-lg" />
+                  ))}
+                </div>
+              ) : semesterPlan.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  No semester calendar generated yet.
+                </p>
+              ) : (
+                semesterPlan.map((item) => (
+                  <SemesterRow
+                    key={item.term_number}
+                    item={item}
+                    batchId={id}
+                    canManage={canManage}
+                    onStatusChange={(termId, status) => statusMutation.mutate({ termId, status })}
+                    changingId={changingTermId}
+                  />
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right — Edit batch name + Students */}
+        <div className="space-y-4">
+          <PermissionGate permission="batch.create">
+            <Card>
+              <CardHeader><CardTitle>Edit Batch</CardTitle></CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit((v) => batchMutation.mutate(v))} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Batch Name</Label>
+                    <Input id="name" {...register("name")} />
+                    {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                  </div>
+                  <Button type="submit" disabled={!isDirty || isSubmitting || batchMutation.isPending}>
+                    {(isSubmitting || batchMutation.isPending) && <Loader2 className="animate-spin" />}
+                    Save Changes
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </PermissionGate>
+
+          <BatchStudentsCard batchId={id} />
+        </div>
+
+      </div>
     </div>
   )
 }

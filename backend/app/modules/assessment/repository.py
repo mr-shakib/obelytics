@@ -29,13 +29,15 @@ class StudentRepository:
         return result.scalar_one_or_none()
 
     async def list_active(
-        self, org_id: UUID, program_id: UUID | None = None, search: str | None = None
+        self, org_id: UUID, program_id: UUID | None = None, batch_id: UUID | None = None, search: str | None = None
     ) -> list[Student]:
         stmt = select(Student).where(
             and_(Student.organization_id == org_id, Student.status == "ACTIVE")
         )
         if program_id:
             stmt = stmt.where(Student.program_id == program_id)
+        if batch_id:
+            stmt = stmt.where(Student.batch_id == batch_id)
         if search:
             pattern = f"%{search}%"
             stmt = stmt.where(
@@ -74,6 +76,10 @@ class StudentRepository:
         await self._session.flush()
         await self._session.refresh(obj)
         return obj
+
+    async def delete(self, obj: Student) -> None:
+        await self._session.delete(obj)
+        await self._session.flush()
 
 
 class EnrollmentRepository:

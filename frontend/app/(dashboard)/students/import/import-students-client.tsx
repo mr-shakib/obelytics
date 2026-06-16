@@ -3,7 +3,7 @@
 import { useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft, Download, Upload, FileSpreadsheet, Loader2,
   CheckCircle2, AlertCircle, Info,
@@ -41,6 +41,8 @@ function downloadTemplate() {
 
 export function ImportStudentsClient() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const batchId = searchParams.get("batch_id") ?? undefined
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -69,6 +71,7 @@ export function ImportStudentsClient() {
           student_id_number: String(r["student_id_number"] ?? "").trim(),
           full_name: String(r["full_name"] ?? "").trim(),
           email: String(r["email"] ?? "").trim() || null,
+          batch_id: batchId ?? null,
         })),
       }
       const { data } = await apiClient.POST("/students/bulk-import" as never, { body } as never)
@@ -77,6 +80,7 @@ export function ImportStudentsClient() {
     onSuccess: (res) => {
       setResult(res)
       qc.invalidateQueries({ queryKey: queryKeys.students.all })
+      if (batchId) qc.invalidateQueries({ queryKey: queryKeys.students.list({ batch_id: batchId }) })
       if (res.errors.length === 0) {
         toast.success(`${res.created} created, ${res.updated} updated`)
       } else {
@@ -90,15 +94,17 @@ export function ImportStudentsClient() {
     <div className="max-w-3xl mx-auto px-6 py-8">
       <div className="mb-8">
         <button
-          onClick={() => router.push("/students")}
+          onClick={() => router.push(batchId ? `/batches/${batchId}` : "/students")}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Students
+          {batchId ? "Back to Batch" : "Back to Students"}
         </button>
         <h1 className="text-2xl font-semibold">Bulk Import Students</h1>
         <p className="text-muted-foreground mt-1">
-          Add many students to the registry at once by uploading a filled-in spreadsheet.
+          {batchId
+            ? "Add many students to this batch at once by uploading a filled-in spreadsheet."
+            : "Add many students to the registry at once by uploading a filled-in spreadsheet."}
         </p>
       </div>
 

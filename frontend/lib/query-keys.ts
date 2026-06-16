@@ -99,6 +99,7 @@ export const queryKeys = {
   },
   sectionOfferings: {
     all: ["section-offerings"] as const,
+    byCourse: (courseId: string) => ["section-offerings", "course", courseId] as const,
   },
   facultyAssignments: {
     byOfferings: (offeringIds: string[]) => ["faculty-assignments", "by-offerings", offeringIds] as const,
@@ -111,6 +112,16 @@ export const queryKeys = {
   },
 
   // OBE
+  programMissions: {
+    all: ["program-missions"] as const,
+    byProgram: (programId: string) => ["program-missions", "program", programId] as const,
+  },
+  peos: {
+    all: ["peos"] as const,
+    byProgram: (programId: string) => ["peos", "program", programId] as const,
+    poMappings: (peoId: string) => ["peos", peoId, "po-mappings"] as const,
+    missionMappings: (peoId: string) => ["peos", peoId, "mission-mappings"] as const,
+  },
   programOutcomes: {
     all: ["program-outcomes"] as const,
     list: (filters?: Record<string, unknown>) => ["program-outcomes", "list", filters] as const,

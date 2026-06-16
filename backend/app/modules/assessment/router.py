@@ -81,10 +81,11 @@ async def list_students(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     program_id: UUID | None = None,
+    batch_id: UUID | None = None,
     search: str | None = None,
 ):
     svc = StudentService(db)
-    return await svc.list_active(current_user.organization_id, program_id, search)
+    return await svc.list_active(current_user.organization_id, program_id, batch_id, search)
 
 
 @router.post("/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
@@ -130,6 +131,17 @@ async def update_student(
 ):
     svc = StudentService(db)
     return await svc.update(student_id, body, current_user.organization_id)
+
+
+@router.delete("/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student(
+    student_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("assessment.configure"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = StudentService(db)
+    await svc.delete(student_id, current_user.organization_id)
 
 
 # ── Enrollments ───────────────────────────────────────────────────────────────
@@ -497,7 +509,7 @@ async def replace_marksheet_questions(
     section_offering_id: UUID,
     exam_type: Literal["MID", "FINAL"],
     body: MarksheetQuestionsUpdate,
-    manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.configure", "marks.enter"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_permission("assessment.configure"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):

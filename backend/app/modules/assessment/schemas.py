@@ -11,9 +11,9 @@ from pydantic import BaseModel
 class StudentCreate(BaseModel):
     student_id_number: str
     full_name: str
+    batch_id: UUID
     email: Optional[str] = None
     program_id: Optional[UUID] = None
-    batch_id: Optional[UUID] = None
 
 
 class StudentUpdate(BaseModel):
@@ -32,7 +32,7 @@ class StudentResponse(BaseModel):
     full_name: str
     email: Optional[str]
     program_id: Optional[UUID]
-    batch_id: Optional[UUID]
+    batch_id: UUID
     status: str
     created_at: datetime
     updated_at: datetime
@@ -41,9 +41,9 @@ class StudentResponse(BaseModel):
 class StudentBulkImportItem(BaseModel):
     student_id_number: str
     full_name: str
+    batch_id: UUID
     email: Optional[str] = None
     program_id: Optional[UUID] = None
-    batch_id: Optional[UUID] = None
 
 
 class StudentBulkImportRequest(BaseModel):

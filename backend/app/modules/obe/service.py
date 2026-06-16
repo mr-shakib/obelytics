@@ -13,6 +13,12 @@ from app.modules.obe.exceptions import (
     MappingSetNotFoundError,
     MappingSetPublishedError,
     MappingSetValidationError,
+    MissionArchivedError,
+    MissionCodeConflictError,
+    MissionNotFoundError,
+    PEOArchivedError,
+    PEOCodeConflictError,
+    PEONotFoundError,
     POArchivedError,
     POCodeConflictError,
     POHasActiveMappingsError,
@@ -28,7 +34,11 @@ from app.modules.obe.models import (
     COKPMapping,
     COPOMappingSet,
     CourseOutcome,
+    PEOMissionMapping,
+    PEOPOMapping,
     POKnowledgeProfile,
+    ProgramEducationalObjective,
+    ProgramMission,
     ProgramOutcome,
 )
 from app.modules.obe.repository import (
@@ -39,8 +49,12 @@ from app.modules.obe.repository import (
     CORepository,
     MappingEntryRepository,
     MappingSetRepository,
+    PEOMissionMappingRepository,
+    PEOPOMappingRepository,
+    PEORepository,
     POKnowledgeProfileRepository,
     PORepository,
+    ProgramMissionRepository,
 )
 from app.modules.obe.schemas import (
     COCAMappingCreate,
@@ -54,6 +68,12 @@ from app.modules.obe.schemas import (
     CourseOutcomeCreate,
     CourseOutcomeResponse,
     CourseOutcomeUpdate,
+    PEOCreate,
+    PEOMappingSet,
+    PEOMissionMappingSet,
+    PEOUpdate,
+    ProgramMissionCreate,
+    ProgramMissionUpdate,
     ProgramOutcomeCreate,
     ProgramOutcomeUpdate,
 )
@@ -727,3 +747,149 @@ class COKPMappingService:
             raise CONotEditableError()
         await self._session.delete(obj)
         await self._session.commit()
+
+
+class ProgramMissionService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = ProgramMissionRepository(session)
+
+    async def list_active(self, org_id: UUID, program_id: UUID) -> list[ProgramMission]:
+        return await self._repo.list_active(org_id, program_id)
+
+    async def get(self, mission_id: UUID, org_id: UUID) -> ProgramMission:
+        obj = await self._repo.get_by_id(mission_id, org_id)
+        if obj is None:
+            raise MissionNotFoundError()
+        return obj
+
+    async def create(self, body: ProgramMissionCreate, org_id: UUID) -> ProgramMission:
+        existing = await self._repo.find_by_code(body.code, body.program_id)
+        if existing:
+            raise MissionCodeConflictError()
+        obj = ProgramMission(
+            organization_id=org_id,
+            program_id=body.program_id,
+            code=body.code,
+            statement=body.statement,
+            order_index=body.order_index,
+            status="ACTIVE",
+        )
+        result = await self._repo.create(obj)
+        await self._session.commit()
+        return result
+
+    async def update(
+        self, mission_id: UUID, body: ProgramMissionUpdate, org_id: UUID
+    ) -> ProgramMission:
+        obj = await self._repo.get_by_id(mission_id, org_id)
+        if obj is None:
+            raise MissionNotFoundError()
+        data = body.model_dump(exclude_none=True)
+        result = await self._repo.update(obj, data)
+        await self._session.commit()
+        return result
+
+    async def archive(self, mission_id: UUID, org_id: UUID) -> ProgramMission:
+        obj = await self._repo.get_by_id(mission_id, org_id)
+        if obj is None:
+            raise MissionNotFoundError()
+        if obj.status == "ARCHIVED":
+            raise MissionArchivedError()
+        obj.status = "ARCHIVED"
+        obj.archived_at = datetime.now(timezone.utc)
+        result = await self._repo.update(obj, {})
+        await self._session.commit()
+        return result
+
+
+class PEOService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = PEORepository(session)
+        self._po_mapping_repo = PEOPOMappingRepository(session)
+        self._mission_mapping_repo = PEOMissionMappingRepository(session)
+
+    async def list_active(
+        self, org_id: UUID, program_id: UUID
+    ) -> list[ProgramEducationalObjective]:
+        return await self._repo.list_active(org_id, program_id)
+
+    async def get(self, peo_id: UUID, org_id: UUID) -> ProgramEducationalObjective:
+        obj = await self._repo.get_by_id(peo_id, org_id)
+        if obj is None:
+            raise PEONotFoundError()
+        return obj
+
+    async def create(
+        self, body: PEOCreate, org_id: UUID
+    ) -> ProgramEducationalObjective:
+        existing = await self._repo.find_by_code(body.code, body.program_id)
+        if existing:
+            raise PEOCodeConflictError()
+        obj = ProgramEducationalObjective(
+            organization_id=org_id,
+            program_id=body.program_id,
+            code=body.code,
+            statement=body.statement,
+            order_index=body.order_index,
+            status="ACTIVE",
+        )
+        result = await self._repo.create(obj)
+        await self._session.commit()
+        return result
+
+    async def update(
+        self, peo_id: UUID, body: PEOUpdate, org_id: UUID
+    ) -> ProgramEducationalObjective:
+        obj = await self._repo.get_by_id(peo_id, org_id)
+        if obj is None:
+            raise PEONotFoundError()
+        data = body.model_dump(exclude_none=True)
+        result = await self._repo.update(obj, data)
+        await self._session.commit()
+        return result
+
+    async def archive(self, peo_id: UUID, org_id: UUID) -> ProgramEducationalObjective:
+        obj = await self._repo.get_by_id(peo_id, org_id)
+        if obj is None:
+            raise PEONotFoundError()
+        if obj.status == "ARCHIVED":
+            raise PEOArchivedError()
+        obj.status = "ARCHIVED"
+        obj.archived_at = datetime.now(timezone.utc)
+        result = await self._repo.update(obj, {})
+        await self._session.commit()
+        return result
+
+    async def set_po_mappings(
+        self, peo_id: UUID, body: PEOMappingSet, org_id: UUID
+    ) -> list[PEOPOMapping]:
+        obj = await self._repo.get_by_id(peo_id, org_id)
+        if obj is None:
+            raise PEONotFoundError()
+        results = await self._po_mapping_repo.replace_for_peo(peo_id, org_id, body.po_ids)
+        await self._session.commit()
+        return results
+
+    async def get_po_mappings(self, peo_id: UUID, org_id: UUID) -> list[PEOPOMapping]:
+        obj = await self._repo.get_by_id(peo_id, org_id)
+        if obj is None:
+            raise PEONotFoundError()
+        return await self._po_mapping_repo.list_by_peo(peo_id)
+
+    async def set_mission_mappings(
+        self, peo_id: UUID, body: PEOMissionMappingSet, org_id: UUID
+    ) -> list[PEOMissionMapping]:
+        obj = await self._repo.get_by_id(peo_id, org_id)
+        if obj is None:
+            raise PEONotFoundError()
+        results = await self._mission_mapping_repo.replace_for_peo(peo_id, org_id, body.mission_ids)
+        await self._session.commit()
+        return results
+
+    async def get_mission_mappings(self, peo_id: UUID, org_id: UUID) -> list[PEOMissionMapping]:
+        obj = await self._repo.get_by_id(peo_id, org_id)
+        if obj is None:
+            raise PEONotFoundError()
+        return await self._mission_mapping_repo.list_by_peo(peo_id)

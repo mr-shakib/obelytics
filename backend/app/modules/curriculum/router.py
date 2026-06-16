@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -410,9 +410,13 @@ async def get_course_outline_pdf(
     _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    excluded_tool_ids: Annotated[list[UUID], Query()] = [],
 ):
     svc = CourseOutlineService(db)
-    context = await svc.build_context(course_id, curriculum_id, current_user.organization_id)
+    context = await svc.build_context(
+        course_id, curriculum_id, current_user.organization_id,
+        excluded_tool_ids=excluded_tool_ids or [],
+    )
     pdf_bytes = render_course_outline_pdf(context)
     filename = f"{context['course']['code']}_course_outline.pdf"
     return Response(
@@ -762,11 +766,12 @@ async def list_section_offerings(
     _: Annotated[PermissionManifestResponse, Depends(require_permission("curriculum.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    course_id: UUID | None = None,
     academic_term_id: UUID | None = None,
     batch_id: UUID | None = None,
 ):
     svc = SectionOfferingService(db)
-    return await svc.list_all(current_user.organization_id, academic_term_id, batch_id)
+    return await svc.list_all(current_user.organization_id, course_id, academic_term_id, batch_id)
 
 
 @router.post(

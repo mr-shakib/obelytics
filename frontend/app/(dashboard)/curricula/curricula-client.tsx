@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -45,7 +45,9 @@ type Curriculum = {
   status: string
 }
 
-type Program = { id: string; title?: string; name?: string; acronym?: string }
+type Program = { id: string; title?: string; name?: string; acronym?: string; department_id?: string }
+type Department = { id: string; name: string; short_name: string }
+type Batch = { id: string; name: string }
 
 function programLabel(p: Program) {
   const title = p.title ?? p.name ?? ""
@@ -53,11 +55,11 @@ function programLabel(p: Program) {
 }
 
 const schema = z.object({
-  name: z.string().min(1, "Name is required").max(255),
   code: z.string().min(1, "Code is required").max(50),
   program_id: z.string().min(1, "Program is required"),
   effective_year: z.number().int().min(1900).max(2100),
-  batch_name: z.string().min(1, "Batch name is required").max(100),
+  version_number: z.number().int().min(1, "Version must be at least 1").max(99),
+  batch_name: z.string().min(1, "Batch is required").max(100),
   semester_count: z.number().int().min(1, "At least 1 semester is required").max(20),
 })
 type FormValues = z.infer<typeof schema>
@@ -65,6 +67,7 @@ type FormValues = z.infer<typeof schema>
 export function CurriculaClient() {
   const [open, setOpen] = useState(false)
   const [selProgramId, setSelProgramId] = useState("")
+  const [selBatchName, setSelBatchName] = useState("")
   const qc = useQueryClient()
   const router = useRouter()
 
@@ -84,7 +87,59 @@ export function CurriculaClient() {
     },
   })
 
+  const { data: departments = [] } = useQuery({
+    queryKey: queryKeys.departments.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/departments" as never)
+      return ((data as unknown) as Department[]) ?? []
+    },
+  })
+
+  const { data: batches = [] } = useQuery({
+    queryKey: queryKeys.batches.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/batches" as never)
+      return ((data as unknown) as Batch[]) ?? []
+    },
+  })
+
   const programById = Object.fromEntries(programs.map((p) => [p.id, p]))
+  const deptById = Object.fromEntries(departments.map((d) => [d.id, d]))
+
+  // Deduplicate batch names for the dropdown
+  const uniqueBatchNames = useMemo(() => {
+    const seen = new Set<string>()
+    return batches.filter((b) => {
+      if (seen.has(b.name)) return false
+      seen.add(b.name)
+      return true
+    })
+  }, [batches])
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { semester_count: 12, version_number: 1 },
+  })
+
+  const watchedYear = watch("effective_year")
+  const watchedVersion = watch("version_number")
+
+  const selectedProgram = selProgramId ? programById[selProgramId] : undefined
+  const selectedDept = selectedProgram?.department_id ? deptById[selectedProgram.department_id] : undefined
+
+  const generatedName = useMemo(() => {
+    const deptShort = selectedDept?.short_name ?? "DEPT"
+    const year = watchedYear > 1900 ? watchedYear : new Date().getFullYear()
+    const version = watchedVersion >= 1 ? watchedVersion : 1
+    return `${deptShort}_Curriculum_${year}_v${version}`
+  }, [selectedDept, watchedYear, watchedVersion])
 
   const columns: ColumnDef<Curriculum>[] = [
     { accessorKey: "name", header: "Name" },
@@ -110,19 +165,13 @@ export function CurriculaClient() {
     },
   ]
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { semester_count: 8 } })
-
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
+      const deptShort = selectedDept?.short_name ?? "DEPT"
+      const autoName = `${deptShort}_Curriculum_${values.effective_year}_v${values.version_number}`
       const { data: curriculum } = await apiClient.POST("/curricula" as never, {
         body: {
-          name: values.name,
+          name: autoName,
           code: values.code,
           program_id: values.program_id,
           effective_year: values.effective_year,
@@ -152,10 +201,18 @@ export function CurriculaClient() {
       qc.invalidateQueries({ queryKey: queryKeys.batches.all })
       setOpen(false)
       setSelProgramId("")
-      reset({ semester_count: 8 })
+      setSelBatchName("")
+      reset({ semester_count: 12, version_number: 1 })
     },
     onError: () => toast.error("Failed to create curriculum"),
   })
+
+  function handleClose() {
+    setOpen(false)
+    setSelProgramId("")
+    setSelBatchName("")
+    reset({ semester_count: 12, version_number: 1 })
+  }
 
   return (
     <div>
@@ -164,7 +221,7 @@ export function CurriculaClient() {
         description="Manage academic curricula across programs."
         actions={
           <PermissionGate permission="curriculum.create">
-            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setSelProgramId(""); reset() } }}>
+            <Dialog open={open} onOpenChange={(v) => { if (v) setOpen(true); else handleClose() }}>
               <DialogTrigger render={<Button />}>
                 <Plus className="h-4 w-4" />
                 New Curriculum
@@ -178,22 +235,22 @@ export function CurriculaClient() {
                   onSubmit={handleSubmit((v) => mutation.mutate(v))}
                   className="space-y-4 py-2"
                 >
+                  {/* Program */}
                   <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input id="name" placeholder="e.g. BSc in CSE Curriculum" {...register("name")} />
-                    {errors.name && (
-                      <p className="text-sm text-destructive">{errors.name.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="program_id">Program</Label>
+                    <Label>Program</Label>
                     <Select
                       value={selProgramId}
-                      onValueChange={(v) => { if (v == null) return; setSelProgramId(v as string); setValue("program_id", v as string, { shouldValidate: true }) }}
+                      onValueChange={(v) => {
+                        if (v == null) return
+                        setSelProgramId(v as string)
+                        setValue("program_id", v as string, { shouldValidate: true })
+                      }}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select program">
-                          {selProgramId ? (programById[selProgramId] ? programLabel(programById[selProgramId]) : undefined) : undefined}
+                          {(value: string) =>
+                            value ? (programById[value] ? programLabel(programById[value]) : value) : null
+                          }
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
@@ -208,32 +265,83 @@ export function CurriculaClient() {
                       <p className="text-sm text-destructive">{errors.program_id.message}</p>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+
+                  {/* Code / Year / Version */}
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor="code">Code</Label>
-                      <Input id="code" placeholder="e.g. CSE-2024" {...register("code")} />
+                      <Input id="code" placeholder="CSE-2024" {...register("code")} />
                       {errors.code && (
                         <p className="text-sm text-destructive">{errors.code.message}</p>
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="effective_year">Effective Year</Label>
+                      <Label htmlFor="effective_year">Year</Label>
                       <Input
                         id="effective_year"
                         type="number"
                         min={1900}
                         max={2100}
-                        placeholder="e.g. 2024"
+                        placeholder="2024"
                         {...register("effective_year", { valueAsNumber: true })}
                       />
                       {errors.effective_year && (
                         <p className="text-sm text-destructive">{errors.effective_year.message}</p>
                       )}
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="version_number">Version</Label>
+                      <Input
+                        id="version_number"
+                        type="number"
+                        min={1}
+                        max={99}
+                        placeholder="1"
+                        {...register("version_number", { valueAsNumber: true })}
+                      />
+                      {errors.version_number && (
+                        <p className="text-sm text-destructive">{errors.version_number.message}</p>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Auto-generated name preview */}
+                  <div className="rounded-xl border bg-muted/30 px-4 py-3">
+                    <p className="text-xs text-muted-foreground mb-1">Generated curriculum name</p>
+                    <p className="font-mono text-sm font-medium">{generatedName}</p>
+                  </div>
+
+                  {/* Batch */}
                   <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
-                    <Label htmlFor="batch_name">Batch Name</Label>
-                    <Input id="batch_name" placeholder="e.g. Fall 2024" {...register("batch_name")} />
+                    <Label>Batch</Label>
+                    {uniqueBatchNames.length > 0 ? (
+                      <Select
+                        value={selBatchName}
+                        onValueChange={(v) => {
+                          if (v == null) return
+                          setSelBatchName(v as string)
+                          setValue("batch_name", v as string, { shouldValidate: true })
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select batch">
+                            {(value: string) => value || null}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {uniqueBatchNames.map((b) => (
+                            <SelectItem key={b.id} value={b.name}>
+                              {b.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="e.g. Batch 61"
+                        {...register("batch_name")}
+                      />
+                    )}
                     {errors.batch_name && (
                       <p className="text-sm text-destructive">{errors.batch_name.message}</p>
                     )}
@@ -242,6 +350,8 @@ export function CurriculaClient() {
                       effective year above.
                     </p>
                   </div>
+
+                  {/* Semester count */}
                   <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
                     <Label htmlFor="semester_count">Number of Semesters</Label>
                     <Input
@@ -249,7 +359,7 @@ export function CurriculaClient() {
                       type="number"
                       min={1}
                       max={20}
-                      placeholder="e.g. 8"
+                      placeholder="8"
                       {...register("semester_count", { valueAsNumber: true })}
                     />
                     {errors.semester_count && (
@@ -264,7 +374,7 @@ export function CurriculaClient() {
                 <DialogFooter>
                   <Button
                     variant="outline"
-                    onClick={() => setOpen(false)}
+                    onClick={handleClose}
                     disabled={isSubmitting || mutation.isPending}
                   >
                     Cancel

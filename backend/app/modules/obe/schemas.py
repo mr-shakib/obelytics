@@ -224,3 +224,89 @@ class COMappingValidationIssue(BaseModel):
 class COPOMappingValidationResponse(BaseModel):
     is_valid: bool
     issues: list[COMappingValidationIssue]
+
+
+# ── Program Missions ──────────────────────────────────────────────────────────
+
+class ProgramMissionCreate(BaseModel):
+    program_id: UUID
+    code: str = Field(min_length=1, max_length=20)
+    statement: str
+    order_index: int = Field(ge=0, le=32767)
+
+
+class ProgramMissionUpdate(BaseModel):
+    statement: str | None = None
+    order_index: int | None = Field(default=None, ge=0, le=32767)
+
+
+class ProgramMissionResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    program_id: UUID
+    code: str
+    statement: str
+    order_index: int
+    status: str
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Program Educational Objectives (PEO) ─────────────────────────────────────
+
+class PEOCreate(BaseModel):
+    program_id: UUID
+    code: str = Field(min_length=1, max_length=20)
+    statement: str
+    order_index: int = Field(ge=0, le=32767)
+
+
+class PEOUpdate(BaseModel):
+    statement: str | None = None
+    order_index: int | None = Field(default=None, ge=0, le=32767)
+
+
+class PEOResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    program_id: UUID
+    code: str
+    statement: str
+    order_index: int
+    status: str
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── PEO-PO & PEO-Mission Mappings ─────────────────────────────────────────────
+
+class PEOMappingSet(BaseModel):
+    po_ids: list[UUID] = Field(default_factory=list)
+
+
+class PEOMissionMappingSet(BaseModel):
+    mission_ids: list[UUID] = Field(default_factory=list)
+
+
+class PEOPOMappingResponse(BaseModel):
+    id: UUID
+    peo_id: UUID
+    program_outcome_id: UUID
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PEOMissionMappingResponse(BaseModel):
+    id: UUID
+    peo_id: UUID
+    mission_id: UUID
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

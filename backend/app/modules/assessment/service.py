@@ -99,9 +99,9 @@ class StudentService:
         self._repo = StudentRepository(session)
 
     async def list_active(
-        self, org_id: UUID, program_id: UUID | None = None, search: str | None = None
+        self, org_id: UUID, program_id: UUID | None = None, batch_id: UUID | None = None, search: str | None = None
     ) -> list[Student]:
-        return await self._repo.list_active(org_id, program_id, search)
+        return await self._repo.list_active(org_id, program_id, batch_id, search)
 
     async def get(self, student_id: UUID, org_id: UUID) -> Student:
         student = await self._repo.get_by_id(student_id, org_id)
@@ -134,6 +134,13 @@ class StudentService:
         result = await self._repo.update(student, data)
         await self._session.commit()
         return result
+
+    async def delete(self, student_id: UUID, org_id: UUID) -> None:
+        student = await self._repo.get_by_id(student_id, org_id)
+        if student is None:
+            raise StudentNotFoundError()
+        await self._repo.delete(student)
+        await self._session.commit()
 
     async def bulk_import(
         self, items: list[StudentBulkImportItem], org_id: UUID

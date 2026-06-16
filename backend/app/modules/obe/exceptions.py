@@ -107,3 +107,45 @@ class MappingSetValidationError(HTTPException):
                 "issues": issues,
             },
         )
+
+
+class MissionNotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Mission not found")
+
+
+class MissionCodeConflictError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A mission with this code already exists for this program",
+        )
+
+
+class MissionArchivedError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mission is already archived",
+        )
+
+
+class PEONotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="PEO not found")
+
+
+class PEOCodeConflictError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A PEO with this code already exists for this program",
+        )
+
+
+class PEOArchivedError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="PEO is already archived",
+        )

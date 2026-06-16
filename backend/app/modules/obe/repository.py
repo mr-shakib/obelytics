@@ -12,7 +12,11 @@ from app.modules.obe.models import (
     COPOMappingSet,
     CourseOutcome,
     CourseOutcomeBloomLevel,
+    PEOMissionMapping,
+    PEOPOMapping,
     POKnowledgeProfile,
+    ProgramEducationalObjective,
+    ProgramMission,
     ProgramOutcome,
 )
 
@@ -453,3 +457,204 @@ class COKPMappingRepository:
         await self._session.flush()
         await self._session.refresh(obj)
         return obj
+
+
+class ProgramMissionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, mission_id: UUID, org_id: UUID) -> ProgramMission | None:
+        result = await self._session.execute(
+            select(ProgramMission).where(
+                and_(ProgramMission.id == mission_id, ProgramMission.organization_id == org_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_active(self, org_id: UUID, program_id: UUID) -> list[ProgramMission]:
+        result = await self._session.execute(
+            select(ProgramMission)
+            .where(
+                and_(
+                    ProgramMission.organization_id == org_id,
+                    ProgramMission.program_id == program_id,
+                    ProgramMission.status == "ACTIVE",
+                )
+            )
+            .order_by(ProgramMission.order_index)
+        )
+        return list(result.scalars().all())
+
+    async def find_by_code(self, code: str, program_id: UUID) -> ProgramMission | None:
+        result = await self._session.execute(
+            select(ProgramMission).where(
+                and_(
+                    ProgramMission.code == code,
+                    ProgramMission.program_id == program_id,
+                    ProgramMission.status == "ACTIVE",
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, obj: ProgramMission) -> ProgramMission:
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+    async def update(self, obj: ProgramMission, data: dict) -> ProgramMission:
+        for key, value in data.items():
+            setattr(obj, key, value)
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+
+class PEORepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, peo_id: UUID, org_id: UUID) -> ProgramEducationalObjective | None:
+        result = await self._session.execute(
+            select(ProgramEducationalObjective).where(
+                and_(
+                    ProgramEducationalObjective.id == peo_id,
+                    ProgramEducationalObjective.organization_id == org_id,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_active(
+        self, org_id: UUID, program_id: UUID
+    ) -> list[ProgramEducationalObjective]:
+        result = await self._session.execute(
+            select(ProgramEducationalObjective)
+            .where(
+                and_(
+                    ProgramEducationalObjective.organization_id == org_id,
+                    ProgramEducationalObjective.program_id == program_id,
+                    ProgramEducationalObjective.status == "ACTIVE",
+                )
+            )
+            .order_by(ProgramEducationalObjective.order_index)
+        )
+        return list(result.scalars().all())
+
+    async def find_by_code(
+        self, code: str, program_id: UUID
+    ) -> ProgramEducationalObjective | None:
+        result = await self._session.execute(
+            select(ProgramEducationalObjective).where(
+                and_(
+                    ProgramEducationalObjective.code == code,
+                    ProgramEducationalObjective.program_id == program_id,
+                    ProgramEducationalObjective.status == "ACTIVE",
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, obj: ProgramEducationalObjective) -> ProgramEducationalObjective:
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+    async def update(
+        self, obj: ProgramEducationalObjective, data: dict
+    ) -> ProgramEducationalObjective:
+        for key, value in data.items():
+            setattr(obj, key, value)
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+
+class PEOPOMappingRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_peo(self, peo_id: UUID) -> list[PEOPOMapping]:
+        result = await self._session.execute(
+            select(PEOPOMapping).where(PEOPOMapping.peo_id == peo_id)
+        )
+        return list(result.scalars().all())
+
+    async def list_by_program(self, program_id: UUID, org_id: UUID) -> list[PEOPOMapping]:
+        result = await self._session.execute(
+            select(PEOPOMapping)
+            .join(
+                ProgramEducationalObjective,
+                PEOPOMapping.peo_id == ProgramEducationalObjective.id,
+            )
+            .where(
+                and_(
+                    ProgramEducationalObjective.program_id == program_id,
+                    ProgramEducationalObjective.organization_id == org_id,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_peo(
+        self, peo_id: UUID, org_id: UUID, po_ids: list[UUID]
+    ) -> list[PEOPOMapping]:
+        await self._session.execute(
+            delete(PEOPOMapping).where(PEOPOMapping.peo_id == peo_id)
+        )
+        results = []
+        for po_id in dict.fromkeys(po_ids):
+            obj = PEOPOMapping(organization_id=org_id, peo_id=peo_id, program_outcome_id=po_id)
+            self._session.add(obj)
+            results.append(obj)
+        await self._session.flush()
+        for obj in results:
+            await self._session.refresh(obj)
+        return results
+
+
+class PEOMissionMappingRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_peo(self, peo_id: UUID) -> list[PEOMissionMapping]:
+        result = await self._session.execute(
+            select(PEOMissionMapping).where(PEOMissionMapping.peo_id == peo_id)
+        )
+        return list(result.scalars().all())
+
+    async def list_by_program(self, program_id: UUID, org_id: UUID) -> list[PEOMissionMapping]:
+        result = await self._session.execute(
+            select(PEOMissionMapping)
+            .join(
+                ProgramEducationalObjective,
+                PEOMissionMapping.peo_id == ProgramEducationalObjective.id,
+            )
+            .where(
+                and_(
+                    ProgramEducationalObjective.program_id == program_id,
+                    ProgramEducationalObjective.organization_id == org_id,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def replace_for_peo(
+        self, peo_id: UUID, org_id: UUID, mission_ids: list[UUID]
+    ) -> list[PEOMissionMapping]:
+        await self._session.execute(
+            delete(PEOMissionMapping).where(PEOMissionMapping.peo_id == peo_id)
+        )
+        results = []
+        for mission_id in dict.fromkeys(mission_ids):
+            obj = PEOMissionMapping(organization_id=org_id, peo_id=peo_id, mission_id=mission_id)
+            self._session.add(obj)
+            results.append(obj)
+        await self._session.flush()
+        for obj in results:
+            await self._session.refresh(obj)
+        return results

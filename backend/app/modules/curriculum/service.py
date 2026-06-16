@@ -1128,10 +1128,11 @@ class SectionOfferingService:
     async def list_all(
         self,
         org_id: UUID,
+        course_id: UUID | None = None,
         academic_term_id: UUID | None = None,
         batch_id: UUID | None = None,
     ) -> list[SectionOffering]:
-        return await self._repo.list_all(org_id, academic_term_id, batch_id)
+        return await self._repo.list_all(org_id, course_id, academic_term_id, batch_id)
 
     async def get(self, offering_id: UUID, org_id: UUID) -> SectionOffering:
         offering = await self._repo.get_by_id(offering_id, org_id)

@@ -87,7 +87,13 @@ class CourseOutlineService:
         self._org_repo = OrgRepository(db)
         self._user_repo = UserRepository(db)
 
-    async def build_context(self, course_id: UUID, curriculum_id: UUID, org_id: UUID) -> dict:
+    async def build_context(
+        self,
+        course_id: UUID,
+        curriculum_id: UUID,
+        org_id: UUID,
+        excluded_tool_ids: list[UUID] | None = None,
+    ) -> dict:
         course = await self._course_repo.get_by_id(course_id, org_id)
         if course is None:
             raise CourseNotFoundError()
@@ -227,6 +233,9 @@ class CourseOutlineService:
 
         # ── Assessment tools + CO-wise marks ─────────────────────────────
         assessment_tools = await self._assessment_tool_repo.list_for_course(curriculum_id, course_id)
+        if excluded_tool_ids:
+            excluded_set = set(excluded_tool_ids)
+            assessment_tools = [t for t in assessment_tools if t.id not in excluded_set]
         assessment_types = {a.id: a for a in await self._assessment_type_repo.list_active(org_id)}
         co_marks_records = await self._co_marks_repo.list_for_course(curriculum_id, course_id)
 

@@ -290,7 +290,7 @@ export function ProgramsClient() {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="prog-description">Description</Label>
+                    <Label htmlFor="prog-description">Vision</Label>
                     <Textarea id="prog-description" rows={2} {...register("description")} placeholder="Optional" />
                   </div>
                 </form>

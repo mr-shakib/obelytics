@@ -19,6 +19,7 @@ import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { usePermission } from "@/hooks/use-permission"
 import { useResolveCourseLocation } from "@/hooks/use-course-location"
+import { QuestionConfigCard } from "./course-assessment-question-config"
 import type {
   BloomDomain,
   BloomLevel,
@@ -396,7 +397,6 @@ export function CourseAssessmentClient({ id }: Props) {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="min-w-40">Assessment Type</TableHead>
-                      <TableHead className="w-24 text-center">Component</TableHead>
                       <TableHead className="w-28 text-center">Total Marks</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -404,9 +404,6 @@ export function CourseAssessmentClient({ id }: Props) {
                     {assessmentTools.map((tool) => (
                       <TableRow key={tool.id}>
                         <TableCell className="align-top">{tool.assessment_type_name}</TableCell>
-                        <TableCell className="align-top text-center">
-                          <Badge variant="outline">{tool.is_sessional ? "CIE" : "SEE"}</Badge>
-                        </TableCell>
                         <TableCell className="align-top">
                           <Input
                             type="number"
@@ -420,7 +417,7 @@ export function CourseAssessmentClient({ id }: Props) {
                       </TableRow>
                     ))}
                     <TableRow>
-                      <TableCell className="font-medium" colSpan={2}>Grand total</TableCell>
+                      <TableCell className="font-medium">Grand total</TableCell>
                       <TableCell>
                         <Badge variant={coMarksGrandTotal === 100 ? "default" : "destructive"}>
                           {coMarksGrandTotal} / 100
@@ -445,7 +442,6 @@ export function CourseAssessmentClient({ id }: Props) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Assessment Type</TableHead>
-                    <TableHead className="text-center">Component</TableHead>
                     <TableHead className="text-center">Total Marks</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -454,15 +450,12 @@ export function CourseAssessmentClient({ id }: Props) {
                     <TableRow key={tool.id}>
                       <TableCell>{tool.assessment_type_name}</TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="outline">{tool.is_sessional ? "CIE" : "SEE"}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
                         {coMarkByKey[coMarkCellKey(tool.assessment_type_id, TOTAL_COL)] ?? 0}
                       </TableCell>
                     </TableRow>
                   ))}
                   <TableRow>
-                    <TableCell className="font-medium" colSpan={2}>Grand total</TableCell>
+                    <TableCell className="font-medium">Grand total</TableCell>
                     <TableCell className="text-center">
                       <Badge variant={coMarksGrandTotal === 100 ? "default" : "destructive"}>
                         {coMarksGrandTotal} / 100
@@ -475,6 +468,10 @@ export function CourseAssessmentClient({ id }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {curriculumId && (
+        <QuestionConfigCard courseId={id} curriculumId={curriculumId} />
+      )}
 
       <Card>
         <CardHeader><CardTitle>CIE/SEE Bloom-wise Marks Breakdown</CardTitle></CardHeader>
@@ -498,7 +495,6 @@ export function CourseAssessmentClient({ id }: Props) {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="min-w-40">Assessment Type</TableHead>
-                      <TableHead className="w-20 text-center">Component</TableHead>
                       {cognitiveBloomLevels.map((level) => (
                         <TableHead key={level.id} className="w-20 text-center" title={level.name}>
                           {level.code}
@@ -510,9 +506,6 @@ export function CourseAssessmentClient({ id }: Props) {
                     {assessmentTools.map((tool) => (
                       <TableRow key={tool.id}>
                         <TableCell className="align-top">{tool.assessment_type_name}</TableCell>
-                        <TableCell className="align-top text-center">
-                          <Badge variant="outline">{tool.is_sessional ? "CIE" : "SEE"}</Badge>
-                        </TableCell>
                         {cognitiveBloomLevels.map((level) => (
                           <TableCell key={level.id} className="align-top">
                             <Input
@@ -552,7 +545,6 @@ export function CourseAssessmentClient({ id }: Props) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Assessment Type</TableHead>
-                    <TableHead className="text-center">Component</TableHead>
                     {cognitiveBloomLevels.map((level) => (
                       <TableHead key={level.id} className="text-center" title={level.name}>
                         {level.code}
@@ -564,9 +556,6 @@ export function CourseAssessmentClient({ id }: Props) {
                   {assessmentTools.map((tool) => (
                     <TableRow key={tool.id}>
                       <TableCell>{tool.assessment_type_name}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline">{tool.is_sessional ? "CIE" : "SEE"}</Badge>
-                      </TableCell>
                       {cognitiveBloomLevels.map((level) => (
                         <TableCell key={level.id} className="text-center">
                           {bloomMarkByKey[bloomMarkCellKey(tool.assessment_type_id, level.id)] ?? 0}

@@ -18,6 +18,7 @@ import { ExamGrid } from "./exam-grid"
 import { AttainmentPanel } from "./attainment-panel"
 import { MarksCoPoPanel } from "./marks-co-po-panel"
 import { RosterPanel } from "./roster-panel"
+import { QuestionConfigCard } from "@/app/(dashboard)/courses/[id]/assessment/course-assessment-question-config"
 
 type MySection = {
   section_offering_id: string
@@ -182,6 +183,10 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
             you need to make changes.
           </AlertDescription>
         </Alert>
+      )}
+
+      {offering && (
+        <QuestionConfigCard courseId={offering.course_id} curriculumId={offering.curriculum_id} />
       )}
 
       <Tabs defaultValue="roster">

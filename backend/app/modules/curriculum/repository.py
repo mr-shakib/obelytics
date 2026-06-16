@@ -694,10 +694,13 @@ class SectionOfferingRepository:
     async def list_all(
         self,
         org_id: UUID,
+        course_id: UUID | None = None,
         academic_term_id: UUID | None = None,
         batch_id: UUID | None = None,
     ) -> list[SectionOffering]:
         stmt = select(SectionOffering).where(SectionOffering.organization_id == org_id)
+        if course_id:
+            stmt = stmt.where(SectionOffering.course_id == course_id)
         if academic_term_id:
             stmt = stmt.where(SectionOffering.academic_term_id == academic_term_id)
         if batch_id:

@@ -25,8 +25,18 @@ from app.modules.obe.schemas import (
     CourseOutcomeCreate,
     CourseOutcomeResponse,
     CourseOutcomeUpdate,
+    PEOCreate,
+    PEOMappingSet,
+    PEOMissionMappingResponse,
+    PEOMissionMappingSet,
+    PEOPOMappingResponse,
+    PEOResponse,
+    PEOUpdate,
     POKnowledgeProfileCreate,
     POKnowledgeProfileResponse,
+    ProgramMissionCreate,
+    ProgramMissionResponse,
+    ProgramMissionUpdate,
     ProgramOutcomeCreate,
     ProgramOutcomeResponse,
     ProgramOutcomeUpdate,
@@ -38,8 +48,10 @@ from app.modules.obe.service import (
     COKPMappingService,
     COService,
     MappingSetService,
+    PEOService,
     POKnowledgeProfileService,
     POService,
+    ProgramMissionService,
 )
 
 router = APIRouter(tags=["OBE"])
@@ -517,3 +529,151 @@ async def delete_co_kp_mapping(
 ):
     svc = COKPMappingService(db)
     await svc.remove(mapping_id, current_user.organization_id)
+
+
+# ── Program Missions ──────────────────────────────────────────────────────────
+
+@router.get("/programs/{program_id}/missions", response_model=list[ProgramMissionResponse])
+async def list_program_missions(
+    program_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("mission.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ProgramMissionService(db)
+    return await svc.list_active(current_user.organization_id, program_id)
+
+
+@router.post(
+    "/missions",
+    response_model=ProgramMissionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_program_mission(
+    body: ProgramMissionCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("mission.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ProgramMissionService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+@router.patch("/missions/{mission_id}", response_model=ProgramMissionResponse)
+async def update_program_mission(
+    mission_id: UUID,
+    body: ProgramMissionUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("mission.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ProgramMissionService(db)
+    return await svc.update(mission_id, body, current_user.organization_id)
+
+
+@router.post("/missions/{mission_id}/archive", response_model=ProgramMissionResponse)
+async def archive_program_mission(
+    mission_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("mission.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ProgramMissionService(db)
+    return await svc.archive(mission_id, current_user.organization_id)
+
+
+# ── Program Educational Objectives (PEO) ─────────────────────────────────────
+
+@router.get("/programs/{program_id}/peos", response_model=list[PEOResponse])
+async def list_peos(
+    program_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.list_active(current_user.organization_id, program_id)
+
+
+@router.post(
+    "/peos",
+    response_model=PEOResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_peo(
+    body: PEOCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.create(body, current_user.organization_id)
+
+
+@router.patch("/peos/{peo_id}", response_model=PEOResponse)
+async def update_peo(
+    peo_id: UUID,
+    body: PEOUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.update(peo_id, body, current_user.organization_id)
+
+
+@router.post("/peos/{peo_id}/archive", response_model=PEOResponse)
+async def archive_peo(
+    peo_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.archive(peo_id, current_user.organization_id)
+
+
+@router.get("/peos/{peo_id}/po-mappings", response_model=list[PEOPOMappingResponse])
+async def get_peo_po_mappings(
+    peo_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.get_po_mappings(peo_id, current_user.organization_id)
+
+
+@router.put("/peos/{peo_id}/po-mappings", response_model=list[PEOPOMappingResponse])
+async def set_peo_po_mappings(
+    peo_id: UUID,
+    body: PEOMappingSet,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.set_po_mappings(peo_id, body, current_user.organization_id)
+
+
+@router.get("/peos/{peo_id}/mission-mappings", response_model=list[PEOMissionMappingResponse])
+async def get_peo_mission_mappings(
+    peo_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.get_mission_mappings(peo_id, current_user.organization_id)
+
+
+@router.put("/peos/{peo_id}/mission-mappings", response_model=list[PEOMissionMappingResponse])
+async def set_peo_mission_mappings(
+    peo_id: UUID,
+    body: PEOMissionMappingSet,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("peo.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = PEOService(db)
+    return await svc.set_mission_mappings(peo_id, body, current_user.organization_id)

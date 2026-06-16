@@ -39,7 +39,8 @@ class Student(Base):
     batch_id = Column(
         PGUUID(as_uuid=True),
         ForeignKey("curriculum.batches.id", ondelete="RESTRICT"),
-        nullable=True,
+        nullable=False,
+        index=True,
     )
     status = Column(String(20), nullable=False, server_default="ACTIVE")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
