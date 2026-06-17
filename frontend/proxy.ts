@@ -3,11 +3,13 @@ import { type NextRequest, NextResponse } from "next/server"
 const AUTH_ROUTES = ["/login", "/forgot-password", "/reset-password"]
 const STUDENT_ROUTES = ["/my-curriculum", "/my-courses", "/my-results", "/my-profile"]
 const PUBLIC_PATHS = ["/_next", "/favicon.ico", "/api/auth/"]
+const PUBLIC_ROUTES = ["/"]
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) return NextResponse.next()
+  if (PUBLIC_ROUTES.includes(pathname)) return NextResponse.next()
 
   const authStatus = req.cookies.get("auth-status")?.value
   const isLoggedIn = authStatus === "authenticated"
