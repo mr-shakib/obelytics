@@ -61,11 +61,11 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { num: '01', title: 'Configure', desc: 'Set up programs, courses, and outcomes for your institution.' },
-  { num: '02', title: 'Map', desc: 'Link course outcomes to program outcomes with weighted intensity.' },
-  { num: '03', title: 'Assess', desc: 'Section teachers enter marks; module leaders review and approve.' },
-  { num: '04', title: 'Calculate', desc: 'Attainment runs automatically across CO, course, and PO levels.' },
-  { num: '05', title: 'Report', desc: 'Export accreditation-ready reports with a single click.' },
+  { num: '01', title: 'Configure', desc: 'Set up programs, courses, and outcomes for your institution.', color: '#60A5FA', glow: 'rgba(96,165,250,0.28)' },
+  { num: '02', title: 'Map', desc: 'Link course outcomes to program outcomes with weighted intensity.', color: '#A78BFA', glow: 'rgba(167,139,250,0.28)' },
+  { num: '03', title: 'Assess', desc: 'Section teachers enter marks; module leaders review and approve.', color: '#34D399', glow: 'rgba(52,211,153,0.28)' },
+  { num: '04', title: 'Calculate', desc: 'Attainment runs automatically across CO, course, and PO levels.', color: '#FB923C', glow: 'rgba(251,146,60,0.28)' },
+  { num: '05', title: 'Report', desc: 'Export accreditation-ready reports with a single click.', color: '#F472B6', glow: 'rgba(244,114,182,0.28)' },
 ]
 
 const MODULES = [
@@ -97,7 +97,6 @@ const MAPPING = [
 
 function MatrixCell({ value, delay }: { value: number; delay: number }) {
   const opacity = value === 0 ? 0.06 : value === 1 ? 0.35 : value === 2 ? 0.65 : 1
-  const label = value === 0 ? '' : value === 1 ? 'L' : value === 2 ? 'M' : 'H'
 
   return (
     <div
@@ -110,13 +109,14 @@ function MatrixCell({ value, delay }: { value: number; delay: number }) {
         boxShadow: value === 3 ? '0 0 12px rgba(37,168,118,0.5)' : 'none',
       }}
     >
-      {label}
+      {value !== 0 ? '✓' : ''}
     </div>
   )
 }
 
 export default function LandingPage() {
   const countersStarted = useRef(false)
+  const rafRef = useRef<number>(0)
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -155,16 +155,58 @@ export default function LandingPage() {
     if (statsEl) counterObs.observe(statsEl)
 
     const nav = document.getElementById('main-nav')
-    const onScroll = () => {
-      if (window.scrollY > 60) nav?.setAttribute('data-scrolled', 'true')
+
+    // Parallax targets: [id, speed] — positive = scrolls slower, negative = opposite dir
+    const parallaxLayers: Array<[string, number]> = [
+      ['px-grid',   0.18],
+      ['px-glow1',  0.30],
+      ['px-glow2', -0.18],
+      ['px-orb1',   0.42],
+      ['px-orb2',  -0.28],
+      ['px-orb3',   0.55],
+      ['px-copy',   0.10],
+      ['px-matrix', 0.16],
+    ]
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    let scrollY = window.scrollY
+    let ticking = false
+
+    const heroEl = document.querySelector('.hero') as HTMLElement | null
+
+    const applyParallax = () => {
+      if (prefersReducedMotion) return
+      const heroH = heroEl?.offsetHeight ?? window.innerHeight
+      const clamped = Math.min(scrollY, heroH)
+
+      parallaxLayers.forEach(([id, speed]) => {
+        const el = document.getElementById(id) as HTMLElement | null
+        if (el) el.style.transform = `translateY(${clamped * speed}px)`
+      })
+
+      if (scrollY > 60) nav?.setAttribute('data-scrolled', 'true')
       else nav?.removeAttribute('data-scrolled')
+
+      ticking = false
     }
+
+    const onScroll = () => {
+      scrollY = window.scrollY
+      if (!ticking) {
+        rafRef.current = requestAnimationFrame(applyParallax)
+        ticking = true
+      }
+    }
+
     window.addEventListener('scroll', onScroll, { passive: true })
+    applyParallax()
 
     return () => {
       observer.disconnect()
       counterObs.disconnect()
       window.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(rafRef.current)
     }
   }, [])
 
@@ -172,21 +214,23 @@ export default function LandingPage() {
     <>
       <style>{`
         :root {
-          --teal-darkest: #061410;
-          --teal-hero: #0a1f14;
-          --teal-primary: #1d7254;
-          --teal-bright: #25a876;
-          --teal-glow: #2dd4a0;
-          --teal-mid: #175f44;
-          --mint-pale: #e8f5ed;
-          --mint-ultra: #f4fdf7;
-          --text-dark: #0d1f17;
-          --text-muted: #3d6b56;
+          --charcoal: #111110;
+          --charcoal-mid: #1C1C1A;
+          --charcoal-light: #2A2A28;
+          --charcoal-border: rgba(255,255,255,0.08);
+          --cream: #FAF7F2;
+          --cream-pale: #F3EFE6;
+          --cream-card: #FFFFFF;
+          --text-dark: #18181A;
+          --text-muted: #6B6560;
+          --text-light: rgba(255,255,255,0.72);
+          --accent: #1d7254;
+          --accent-bright: #25a876;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body { background: #fff; color: var(--text-dark); font-family: var(--font-poppins), system-ui, sans-serif; }
+        body { background: var(--cream); color: var(--text-dark); font-family: var(--font-poppins), system-ui, sans-serif; }
 
         /* ─── NAV ─── */
         #main-nav {
@@ -196,29 +240,30 @@ export default function LandingPage() {
           transition: background 0.4s ease, box-shadow 0.4s ease, padding 0.3s ease;
         }
         #main-nav[data-scrolled] {
-          background: rgba(10, 31, 20, 0.96);
+          background: rgba(17, 17, 16, 0.96);
           backdrop-filter: blur(16px);
-          box-shadow: 0 1px 0 rgba(37,168,118,0.15);
+          box-shadow: 0 1px 0 rgba(255,255,255,0.06);
           padding: 0.875rem 2rem;
         }
         .nav-logo { font-size: 1.4rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
-        .nav-logo span { color: var(--teal-glow); }
+        .nav-logo span { color: var(--cream-pale); }
         .nav-links { display: flex; gap: 2rem; align-items: center; }
-        .nav-links a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .nav-links a:hover { color: #fff; }
+        .nav-links a:not(.nav-cta) { color: rgba(255,255,255,0.65); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:not(.nav-cta):hover { color: #fff; }
         .nav-cta {
-          background: var(--teal-primary);
-          color: #fff; border: none; border-radius: 8px;
-          padding: 0.5rem 1.25rem; font-size: 0.875rem; font-weight: 600;
+          background: #ffffff;
+          color: #111110; border: none; border-radius: 8px;
+          padding: 0.5rem 1.5rem; font-size: 0.875rem; font-weight: 700;
           cursor: pointer; text-decoration: none;
-          transition: background 0.2s, transform 0.15s;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+          transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
         }
-        .nav-cta:hover { background: var(--teal-bright); transform: translateY(-1px); }
+        .nav-cta:hover { background: var(--cream-pale); color: #111110; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
 
         /* ─── HERO ─── */
         .hero {
           min-height: 100vh;
-          background: var(--teal-hero);
+          background: var(--charcoal);
           display: flex; align-items: center;
           position: relative; overflow: hidden;
           padding: 7rem 2rem 4rem;
@@ -226,10 +271,11 @@ export default function LandingPage() {
         .hero-bg-grid {
           position: absolute; inset: 0;
           background-image:
-            linear-gradient(rgba(37,168,118,0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(37,168,118,0.05) 1px, transparent 1px);
+            linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
           background-size: 48px 48px;
           animation: gridDrift 20s linear infinite;
+          will-change: transform;
         }
         @keyframes gridDrift {
           0% { background-position: 0 0; }
@@ -238,16 +284,20 @@ export default function LandingPage() {
         .hero-glow {
           position: absolute; top: -20%; left: -10%;
           width: 700px; height: 700px;
-          background: radial-gradient(circle, rgba(37,168,118,0.12) 0%, transparent 70%);
+          background: radial-gradient(circle, rgba(250,247,242,0.04) 0%, transparent 70%);
           animation: glowPulse 6s ease-in-out infinite alternate;
-          pointer-events: none;
+          pointer-events: none; will-change: transform;
         }
         .hero-glow-2 {
           position: absolute; bottom: -30%; right: -5%;
           width: 600px; height: 600px;
-          background: radial-gradient(circle, rgba(29,114,84,0.1) 0%, transparent 70%);
+          background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%);
           animation: glowPulse 8s ease-in-out infinite alternate-reverse;
           pointer-events: none;
+        }
+        .px-orb {
+          position: absolute; border-radius: 50%;
+          pointer-events: none; will-change: transform;
         }
         @keyframes glowPulse {
           from { opacity: 0.5; transform: scale(1); }
@@ -260,19 +310,19 @@ export default function LandingPage() {
         }
         .hero-badge {
           display: inline-flex; align-items: center; gap: 0.5rem;
-          background: rgba(37,168,118,0.12); border: 1px solid rgba(37,168,118,0.25);
+          background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
           border-radius: 100px; padding: 0.375rem 1rem;
-          color: var(--teal-glow); font-size: 0.8rem; font-weight: 600;
+          color: rgba(255,255,255,0.75); font-size: 0.8rem; font-weight: 600;
           letter-spacing: 0.05em; text-transform: uppercase;
           margin-bottom: 1.5rem;
           animation: fadeSlideDown 0.8s ease both;
         }
         .hero-badge::before {
           content: ''; display: block; width: 6px; height: 6px;
-          border-radius: 50%; background: var(--teal-glow);
+          border-radius: 50%; background: var(--cream-pale);
           animation: blink 2s ease-in-out infinite;
         }
-        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
+        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
 
         .hero-headline {
           font-size: clamp(2.6rem, 5vw, 4rem);
@@ -280,10 +330,10 @@ export default function LandingPage() {
           color: #ffffff;
           animation: fadeSlideDown 0.9s 0.15s ease both;
         }
-        .hero-headline em { font-style: normal; color: var(--teal-glow); }
+        .hero-headline em { font-style: normal; color: var(--cream-pale); }
         .hero-sub {
           margin-top: 1.25rem; font-size: 1.1rem; line-height: 1.65;
-          color: rgba(255,255,255,0.62); font-weight: 400;
+          color: rgba(255,255,255,0.52); font-weight: 400;
           animation: fadeSlideDown 1s 0.3s ease both;
         }
         .hero-actions {
@@ -291,23 +341,23 @@ export default function LandingPage() {
           animation: fadeSlideDown 1s 0.45s ease both;
         }
         .btn-primary {
-          background: var(--teal-bright);
-          color: #fff; border: none; border-radius: 10px;
+          background: var(--cream-pale);
+          color: var(--charcoal); border: none; border-radius: 10px;
           padding: 0.875rem 2rem; font-size: 1rem; font-weight: 700;
           cursor: pointer; text-decoration: none;
-          box-shadow: 0 0 32px rgba(37,168,118,0.35);
+          box-shadow: 0 0 32px rgba(243,239,230,0.15);
           transition: all 0.25s ease;
           position: relative; overflow: hidden;
         }
         .btn-primary::after {
           content: ''; position: absolute; inset: 0;
-          background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+          background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 60%);
           opacity: 0; transition: opacity 0.25s;
         }
-        .btn-primary:hover { background: var(--teal-glow); transform: translateY(-2px); box-shadow: 0 4px 40px rgba(37,168,118,0.5); }
+        .btn-primary:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 6px 32px rgba(255,255,255,0.18); }
         .btn-primary:hover::after { opacity: 1; }
         .btn-secondary {
-          color: rgba(255,255,255,0.75); text-decoration: none;
+          color: rgba(255,255,255,0.6); text-decoration: none;
           font-size: 0.95rem; font-weight: 600;
           display: flex; align-items: center; gap: 0.4rem;
           transition: color 0.2s;
@@ -332,16 +382,16 @@ export default function LandingPage() {
         }
         .matrix-label {
           font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em;
-          text-transform: uppercase; color: rgba(255,255,255,0.35);
+          text-transform: uppercase; color: rgba(255,255,255,0.28);
           margin-bottom: 0.625rem;
         }
         .matrix-container {
-          background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(37,168,118,0.2);
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.1);
           border-radius: 16px;
           padding: 1.25rem;
           backdrop-filter: blur(10px);
-          box-shadow: 0 0 60px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+          box-shadow: 0 0 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
         }
         .matrix-header {
           display: grid;
@@ -351,7 +401,7 @@ export default function LandingPage() {
         }
         .matrix-header-cell {
           text-align: center; font-size: 0.55rem; font-weight: 700;
-          color: rgba(255,255,255,0.4); letter-spacing: 0.02em;
+          color: rgba(255,255,255,0.3); letter-spacing: 0.02em;
           padding: 0.25rem 0;
         }
         .matrix-row {
@@ -362,13 +412,13 @@ export default function LandingPage() {
         .matrix-row-label {
           display: flex; align-items: center; justify-content: flex-end;
           font-size: 0.6rem; font-weight: 700;
-          color: rgba(255,255,255,0.45); padding-right: 0.375rem;
+          color: rgba(255,255,255,0.35); padding-right: 0.375rem;
         }
         .matrix-cell {
           aspect-ratio: 1; border-radius: 4px;
           display: flex; align-items: center; justify-content: center;
           font-size: 0.5rem; font-weight: 800; color: rgba(255,255,255,0.9);
-          border: 1px solid rgba(37,168,118,0.08);
+          border: 1px solid rgba(255,255,255,0.05);
           animation: cellReveal 0.5s ease both;
           transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
@@ -382,7 +432,7 @@ export default function LandingPage() {
         }
         .legend-item {
           display: flex; align-items: center; gap: 0.3rem;
-          font-size: 0.6rem; color: rgba(255,255,255,0.4); font-weight: 500;
+          font-size: 0.6rem; color: rgba(255,255,255,0.32); font-weight: 500;
         }
         .legend-dot {
           width: 10px; height: 10px; border-radius: 2px;
@@ -390,25 +440,27 @@ export default function LandingPage() {
 
         /* ─── STATS ─── */
         .stats-section {
-          background: var(--teal-primary);
+          background: var(--charcoal-mid);
           padding: 3.5rem 2rem;
+          border-top: 1px solid rgba(255,255,255,0.05);
+          border-bottom: 1px solid rgba(255,255,255,0.05);
         }
         .stats-inner {
           max-width: 1000px; margin: 0 auto;
-          display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; text-align: center;
+          display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; text-align: center;
         }
         .stat-item {}
         .stat-num {
           font-size: 2.75rem; font-weight: 800; color: #fff;
           letter-spacing: -0.03em; line-height: 1;
         }
-        .stat-suffix { color: var(--teal-glow); }
-        .stat-label { font-size: 0.85rem; color: rgba(255,255,255,0.6); margin-top: 0.375rem; font-weight: 500; }
+        .stat-suffix { color: rgba(250,247,242,0.6); }
+        .stat-label { font-size: 0.85rem; color: rgba(255,255,255,0.4); margin-top: 0.375rem; font-weight: 500; }
 
         /* ─── SECTION COMMONS ─── */
         .section-tag {
           display: inline-block;
-          background: var(--mint-pale); color: var(--teal-primary);
+          background: var(--cream-pale); color: var(--charcoal-mid);
           border-radius: 100px; padding: 0.3rem 0.875rem;
           font-size: 0.75rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
           margin-bottom: 1rem;
@@ -418,7 +470,7 @@ export default function LandingPage() {
           font-weight: 800; letter-spacing: -0.025em; line-height: 1.15;
           color: var(--text-dark);
         }
-        .section-heading em { font-style: normal; color: var(--teal-primary); }
+        .section-heading em { font-style: normal; color: var(--charcoal-mid); }
         .section-sub {
           font-size: 1rem; color: var(--text-muted); max-width: 520px; margin: 1rem auto 0; line-height: 1.65;
         }
@@ -426,7 +478,7 @@ export default function LandingPage() {
         /* ─── FEATURES ─── */
         .features-section {
           padding: 6rem 2rem;
-          background: #fff;
+          background: var(--cream);
         }
         .features-header { text-align: center; margin-bottom: 4rem; }
         .features-grid {
@@ -434,24 +486,23 @@ export default function LandingPage() {
           display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
         }
         .feature-card {
-          background: var(--mint-ultra);
-          border: 1px solid rgba(29,114,84,0.1);
+          background: var(--cream-card);
+          border: 1px solid rgba(24,24,26,0.08);
           border-radius: 16px; padding: 2rem;
-          transition: all 0.3s ease;
           cursor: default;
           opacity: 0; transform: translateY(24px);
           transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.3s ease, border-color 0.3s ease;
         }
         .feature-card[data-visible="true"] { opacity: 1; transform: translateY(0); }
         .feature-card:hover {
-          box-shadow: 0 8px 40px rgba(29,114,84,0.12);
-          border-color: rgba(29,114,84,0.3);
+          box-shadow: 0 8px 40px rgba(24,24,26,0.1);
+          border-color: rgba(24,24,26,0.2);
           transform: translateY(-4px);
         }
-        .feature-card:hover .feature-icon { background: var(--teal-primary); color: #fff; }
+        .feature-card:hover .feature-icon { background: var(--charcoal); color: #fff; }
         .feature-icon {
           width: 48px; height: 48px; border-radius: 12px;
-          background: rgba(29,114,84,0.1); color: var(--teal-primary);
+          background: var(--cream-pale); color: var(--charcoal-mid);
           display: flex; align-items: center; justify-content: center;
           margin-bottom: 1.25rem;
           transition: background 0.25s, color 0.25s;
@@ -462,20 +513,20 @@ export default function LandingPage() {
         /* ─── HOW IT WORKS ─── */
         .workflow-section {
           padding: 6rem 2rem;
-          background: var(--teal-hero);
+          background: var(--charcoal);
           position: relative; overflow: hidden;
         }
         .workflow-bg {
           position: absolute; inset: 0;
           background-image:
-            linear-gradient(rgba(37,168,118,0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(37,168,118,0.04) 1px, transparent 1px);
+            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
           background-size: 64px 64px;
         }
         .workflow-header { text-align: center; margin-bottom: 4rem; position: relative; z-index: 1; }
-        .workflow-header .section-tag { background: rgba(37,168,118,0.12); color: var(--teal-glow); }
+        .workflow-header .section-tag { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.65); }
         .workflow-header .section-heading { color: #fff; }
-        .workflow-header .section-sub { color: rgba(255,255,255,0.5); }
+        .workflow-header .section-sub { color: rgba(255,255,255,0.42); }
 
         .workflow-steps {
           max-width: 1100px; margin: 0 auto;
@@ -484,12 +535,12 @@ export default function LandingPage() {
         }
         .workflow-connector {
           position: absolute; top: 2.25rem; left: 10%; right: 10%;
-          height: 1px; background: rgba(37,168,118,0.25);
+          height: 1px; background: rgba(255,255,255,0.08);
           z-index: 0;
         }
         .workflow-connector-fill {
           height: 100%; width: 0%;
-          background: linear-gradient(90deg, var(--teal-primary), var(--teal-glow));
+          background: linear-gradient(90deg, #60A5FA, #A78BFA, #34D399, #FB923C, #F472B6);
           transition: width 1.5s ease;
         }
         .workflow-steps-container { position: relative; }
@@ -503,25 +554,25 @@ export default function LandingPage() {
         .step[data-visible="true"] { opacity: 1; transform: translateY(0); }
         .step-num-wrap {
           width: 4.5rem; height: 4.5rem; border-radius: 50%;
-          background: rgba(37,168,118,0.1);
-          border: 1px solid rgba(37,168,118,0.25);
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.15);
           display: flex; align-items: center; justify-content: center;
-          font-size: 1.1rem; font-weight: 800; color: var(--teal-glow);
+          font-size: 1.1rem; font-weight: 800; color: rgba(255,255,255,0.7);
           margin-bottom: 1.25rem; position: relative; z-index: 1;
-          transition: all 0.3s ease;
+          transition: filter 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
         }
         .step:hover .step-num-wrap {
-          background: var(--teal-primary);
-          box-shadow: 0 0 24px rgba(37,168,118,0.4);
-          border-color: var(--teal-bright);
+          filter: brightness(1.2);
+          box-shadow: 0 0 28px var(--step-glow, rgba(255,255,255,0.1));
+          transform: scale(1.08);
         }
-        .step-title { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem; }
-        .step-desc { font-size: 0.78rem; color: rgba(255,255,255,0.45); line-height: 1.55; }
+        .step-title { font-size: 0.95rem; font-weight: 700; color: rgba(255,255,255,0.9); margin-bottom: 0.5rem; }
+        .step-desc { font-size: 0.78rem; color: rgba(255,255,255,0.38); line-height: 1.55; }
 
         /* ─── MODULES ─── */
         .modules-section {
           padding: 6rem 2rem;
-          background: var(--mint-ultra);
+          background: var(--cream-pale);
         }
         .modules-header { text-align: center; margin-bottom: 3.5rem; }
         .modules-grid {
@@ -529,8 +580,8 @@ export default function LandingPage() {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem;
         }
         .module-card {
-          background: #fff;
-          border: 1px solid rgba(29,114,84,0.1);
+          background: var(--cream-card);
+          border: 1px solid rgba(24,24,26,0.08);
           border-radius: 12px; padding: 1.25rem 1rem;
           text-align: center;
           cursor: default;
@@ -539,8 +590,8 @@ export default function LandingPage() {
         }
         .module-card[data-visible="true"] { opacity: 1; transform: scale(1); }
         .module-card:hover {
-          border-color: var(--teal-primary);
-          box-shadow: 0 4px 24px rgba(29,114,84,0.12);
+          border-color: rgba(24,24,26,0.25);
+          box-shadow: 0 4px 24px rgba(24,24,26,0.08);
           transform: translateY(-3px) scale(1);
         }
         .module-emoji { font-size: 1.5rem; margin-bottom: 0.5rem; display: block; }
@@ -549,13 +600,13 @@ export default function LandingPage() {
         /* ─── CTA ─── */
         .cta-section {
           padding: 7rem 2rem;
-          background: linear-gradient(135deg, var(--teal-hero) 0%, var(--teal-mid) 50%, #0d2e1a 100%);
+          background: linear-gradient(135deg, #111110 0%, #1C1C1A 50%, #111110 100%);
           text-align: center; position: relative; overflow: hidden;
         }
         .cta-glow {
           position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
           width: 600px; height: 300px;
-          background: radial-gradient(ellipse, rgba(37,168,118,0.15) 0%, transparent 70%);
+          background: radial-gradient(ellipse, rgba(255,255,255,0.04) 0%, transparent 70%);
           pointer-events: none;
         }
         .cta-heading {
@@ -563,30 +614,30 @@ export default function LandingPage() {
           font-weight: 800; color: #fff; letter-spacing: -0.025em;
           position: relative; z-index: 1; margin-bottom: 1rem;
         }
-        .cta-heading em { font-style: normal; color: var(--teal-glow); }
-        .cta-sub { font-size: 1.05rem; color: rgba(255,255,255,0.55); position: relative; z-index: 1; margin-bottom: 2.5rem; }
+        .cta-heading em { font-style: normal; color: var(--cream-pale); }
+        .cta-sub { font-size: 1.05rem; color: rgba(255,255,255,0.42); position: relative; z-index: 1; margin-bottom: 2.5rem; }
         .cta-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; position: relative; z-index: 1; }
         .btn-outline {
-          border: 1px solid rgba(255,255,255,0.25); border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.18); border-radius: 10px;
           padding: 0.875rem 2rem; font-size: 1rem; font-weight: 600;
-          color: rgba(255,255,255,0.8); text-decoration: none;
+          color: rgba(255,255,255,0.65); text-decoration: none;
           transition: all 0.25s ease;
         }
-        .btn-outline:hover { border-color: rgba(255,255,255,0.5); color: #fff; background: rgba(255,255,255,0.05); }
+        .btn-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; background: rgba(255,255,255,0.04); }
 
         /* ─── FOOTER ─── */
         .footer {
-          background: var(--teal-darkest);
+          background: #0C0C0B;
           padding: 3rem 2rem;
           display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;
-          border-top: 1px solid rgba(37,168,118,0.1);
+          border-top: 1px solid rgba(255,255,255,0.06);
         }
         .footer-brand { font-size: 1.1rem; font-weight: 700; color: #fff; }
-        .footer-brand span { color: var(--teal-glow); }
-        .footer-copy { font-size: 0.8rem; color: rgba(255,255,255,0.3); }
+        .footer-brand span { color: rgba(243,239,230,0.6); }
+        .footer-copy { font-size: 0.8rem; color: rgba(255,255,255,0.25); }
         .footer-links { display: flex; gap: 1.5rem; }
-        .footer-links a { font-size: 0.8rem; color: rgba(255,255,255,0.4); text-decoration: none; transition: color 0.2s; }
-        .footer-links a:hover { color: rgba(255,255,255,0.7); }
+        .footer-links a { font-size: 0.8rem; color: rgba(255,255,255,0.35); text-decoration: none; transition: color 0.2s; }
+        .footer-links a:hover { color: rgba(255,255,255,0.65); }
 
         /* ─── SCROLL REVEAL DELAYS ─── */
         .feature-card:nth-child(1) { transition-delay: 0.05s; }
@@ -644,12 +695,16 @@ export default function LandingPage() {
 
       {/* ─── HERO ─── */}
       <section className="hero">
-        <div className="hero-bg-grid" />
-        <div className="hero-glow" />
-        <div className="hero-glow-2" />
+        <div id="px-grid" className="hero-bg-grid" />
+        <div id="px-glow1" className="hero-glow" />
+        <div id="px-glow2" className="hero-glow-2" />
+        {/* Floating parallax orbs */}
+        <div id="px-orb1" className="px-orb" style={{ width: 260, height: 260, top: '15%', left: '38%', background: 'radial-gradient(circle, rgba(96,165,250,0.07) 0%, transparent 70%)' }} />
+        <div id="px-orb2" className="px-orb" style={{ width: 180, height: 180, top: '60%', left: '20%', background: 'radial-gradient(circle, rgba(167,139,250,0.08) 0%, transparent 70%)' }} />
+        <div id="px-orb3" className="px-orb" style={{ width: 220, height: 220, top: '25%', right: '8%', background: 'radial-gradient(circle, rgba(244,114,182,0.06) 0%, transparent 70%)' }} />
         <div className="hero-inner">
           {/* Left: Copy */}
-          <div>
+          <div id="px-copy">
             <div className="hero-badge">OBE Accreditation Platform</div>
             <h1 className="hero-headline">
               Turn outcomes into<br />
@@ -672,7 +727,7 @@ export default function LandingPage() {
           </div>
 
           {/* Right: CO-PO Matrix */}
-          <div className="matrix-wrapper">
+          <div id="px-matrix" className="matrix-wrapper">
             <p className="matrix-label">Live CO–PO Mapping Matrix</p>
             <div className="matrix-container">
               <div className="matrix-header">
@@ -712,7 +767,6 @@ export default function LandingPage() {
         <div className="stats-inner">
           {[
             { num: 13, suffix: '+', label: 'Integrated Modules' },
-            { num: 51, suffix: '', label: 'Database Tables' },
             { num: 5, suffix: '', label: 'Role Levels' },
             { num: 12, suffix: '', label: 'Program Outcomes Supported' },
           ].map(({ num, suffix, label }) => (
@@ -753,7 +807,7 @@ export default function LandingPage() {
         <div className="workflow-bg" />
         <div className="workflow-header" data-animate>
           <div className="section-tag">Process</div>
-          <h2 className="section-heading" style={{ color: '#fff' }}>Five steps from setup<br /><em style={{ color: 'var(--teal-glow)' }}>to accreditation.</em></h2>
+          <h2 className="section-heading" style={{ color: '#fff' }}>Five steps from setup<br /><em style={{ color: 'var(--cream-pale)' }}>to accreditation.</em></h2>
           <p className="section-sub" style={{ color: 'rgba(255,255,255,0.45)', margin: '1rem auto 0' }}>
             A clear path from initial configuration to board-ready reports.
           </p>
@@ -764,9 +818,15 @@ export default function LandingPage() {
           </div>
           <div className="workflow-steps">
             {STEPS.map((s, i) => (
-              <div key={s.num} className="step" data-animate style={{ transitionDelay: `${i * 0.12}s` }}>
-                <div className="step-num-wrap">{s.num}</div>
-                <div className="step-title">{s.title}</div>
+              <div key={s.num} className="step" data-animate style={{ transitionDelay: `${i * 0.12}s`, ['--step-glow' as string]: s.glow }}>
+                <div className="step-num-wrap" style={{
+                  border: `1px solid ${s.color}44`,
+                  background: `${s.color}12`,
+                  color: s.color,
+                }}>
+                  {s.num}
+                </div>
+                <div className="step-title" style={{ color: s.color }}>{s.title}</div>
                 <div className="step-desc">{s.desc}</div>
               </div>
             ))}
