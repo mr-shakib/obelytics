@@ -24,6 +24,8 @@ from app.modules.curriculum.schemas import (
     CourseBloomDomainsUpdate,
     CourseBloomMarkResponse,
     CourseBloomMarksUpdate,
+    CourseBulkImportRequest,
+    CourseBulkImportResponse,
     CourseCOMarkResponse,
     CourseCOMarksUpdate,
     CourseCreate,
@@ -223,6 +225,17 @@ async def create_course(
 ):
     svc = CourseService(db)
     return await svc.create(body, current_user.organization_id)
+
+
+@router.post("/courses/bulk-import", response_model=CourseBulkImportResponse)
+async def bulk_import_courses(
+    body: CourseBulkImportRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("course.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseService(db)
+    return await svc.bulk_import(body.courses, current_user.organization_id)
 
 
 @router.get("/courses/{course_id}", response_model=CourseResponse)

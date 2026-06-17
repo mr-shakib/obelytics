@@ -292,6 +292,56 @@ class CourseService:
             raise CourseNotFoundError()
         return course
 
+    async def bulk_import(
+        self, items: list, org_id: UUID
+    ):
+        from app.modules.curriculum.schemas import CourseBulkImportError, CourseBulkImportResponse
+
+        created = 0
+        errors: list[CourseBulkImportError] = []
+        seen_codes: set[str] = set()
+
+        for index, item in enumerate(items):
+            row = index + 1
+            code = item.code.strip()
+            title = item.title.strip()
+            if not code or not title:
+                errors.append(
+                    CourseBulkImportError(row=row, code=code, message="Code and title are required")
+                )
+                continue
+            if code in seen_codes:
+                errors.append(
+                    CourseBulkImportError(row=row, code=code, message="Duplicate code in this import")
+                )
+                continue
+            seen_codes.add(code)
+
+            existing = await self._repo.find_by_code(code, org_id)
+            if existing:
+                errors.append(
+                    CourseBulkImportError(row=row, code=code, message="A course with this code already exists")
+                )
+                continue
+
+            course = Course(
+                organization_id=org_id,
+                course_category_id=item.course_category_id,
+                course_type=item.course_type,
+                code=code,
+                title=title,
+                credits=item.credits,
+                theory_hours=item.theory_hours,
+                lab_hours=item.lab_hours,
+                description=item.description,
+                status="ACTIVE",
+            )
+            await self._repo.create(course)
+            created += 1
+
+        await self._session.commit()
+        return CourseBulkImportResponse(created=created, errors=errors)
+
 
 class CourseObjectiveService:
     def __init__(self, session: AsyncSession) -> None:

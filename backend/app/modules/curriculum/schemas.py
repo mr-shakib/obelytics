@@ -101,6 +101,34 @@ class CourseResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Course Bulk Import ────────────────────────────────────────────────────────
+
+class CourseBulkImportItem(BaseModel):
+    course_category_id: UUID
+    course_type: Literal["THEORY", "LAB", "THEORY_LAB", "THESIS_DEFENSE"]
+    code: str = Field(min_length=1, max_length=30)
+    title: str = Field(min_length=1, max_length=255)
+    credits: int = Field(ge=0, le=20)
+    theory_hours: int = Field(default=0, ge=0)
+    lab_hours: int = Field(default=0, ge=0)
+    description: str | None = None
+
+
+class CourseBulkImportRequest(BaseModel):
+    courses: list[CourseBulkImportItem]
+
+
+class CourseBulkImportError(BaseModel):
+    row: int
+    code: str
+    message: str
+
+
+class CourseBulkImportResponse(BaseModel):
+    created: int
+    errors: list[CourseBulkImportError]
+
+
 # ── Course Objectives ─────────────────────────────────────────────────────────
 
 class CourseObjectiveResponse(BaseModel):

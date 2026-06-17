@@ -16,6 +16,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { Badge } from "@/components/ui/badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { Button } from "@/components/ui/button"
+import { BulkImportCoursesDialog } from "./bulk-import-courses-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -216,6 +217,7 @@ export function CoursesClient() {
         description="Manage the course catalogue."
         actions={
           <PermissionGate permission="course.create">
+            <BulkImportCoursesDialog />
             <Dialog
               open={open}
               onOpenChange={(v) => {
