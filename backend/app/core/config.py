@@ -25,12 +25,18 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "obelytics"
     POSTGRES_USER: str = "obelytics"
     POSTGRES_PASSWORD: str = "obelytics_dev"
+    DATABASE_URL_OVERRIDE: str = ""
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
 
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
+        if self.DATABASE_URL_OVERRIDE:
+            url = self.DATABASE_URL_OVERRIDE
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return url
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -39,6 +45,13 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DATABASE_URL_SYNC(self) -> str:
+        if self.DATABASE_URL_OVERRIDE:
+            url = self.DATABASE_URL_OVERRIDE
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            elif url.startswith("postgresql+asyncpg://"):
+                url = url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+            return url
         return (
             f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -49,10 +62,13 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: str = "redis_dev"
     REDIS_DB: int = 0
+    REDIS_URL_OVERRIDE: str = ""
 
     @computed_field
     @property
     def REDIS_URL(self) -> str:
+        if self.REDIS_URL_OVERRIDE:
+            return self.REDIS_URL_OVERRIDE
         return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # MinIO
