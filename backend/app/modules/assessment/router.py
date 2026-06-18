@@ -622,6 +622,53 @@ async def get_marksheet_course_report_pdf(
 
 # ── Course End Reports ────────────────────────────────────────────────────────
 
+@router.get("/end-reports/pending/list")
+async def list_pending_end_reports(
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.approve.ml", "result.approve.pc"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseEndReportService(db)
+    return await svc.list_pending_for_ml(current_user.organization_id)
+
+
+@router.get("/end-reports/combined")
+async def get_combined_end_report_data(
+    course_id: UUID,
+    batch_id: UUID,
+    academic_term_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.approve.ml", "result.approve.pc"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseEndReportService(db)
+    return await svc.get_combined_data(course_id, batch_id, academic_term_id, current_user.organization_id)
+
+
+@router.get("/end-reports/combined/pdf")
+async def download_combined_end_report_pdf(
+    course_id: UUID,
+    batch_id: UUID,
+    academic_term_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.approve.ml", "result.approve.pc"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    ml_feedback: str = "",
+):
+    svc = CourseEndReportService(db)
+    context = await svc.build_combined_end_report_context(
+        course_id, batch_id, academic_term_id, current_user.organization_id, ml_feedback
+    )
+    pdf_bytes = render_end_report_pdf(context)
+    course_code = context["section"]["course_code"]
+    filename = f"{course_code}_Combined_End_Report.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/end-reports/{section_offering_id}", response_model=CourseEndReportResponse)
 async def get_end_report(
     section_offering_id: UUID,
@@ -691,13 +738,3 @@ async def download_end_report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@router.get("/end-reports/pending/list")
-async def list_pending_end_reports(
-    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.approve.ml", "result.approve.pc"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = CourseEndReportService(db)
-    return await svc.list_pending_for_ml(current_user.organization_id)

@@ -310,7 +310,7 @@
   {% if unattained_co_explanations %}
   {% for exp in unattained_co_explanations %}
   <tr>
-    <td style="text-align:center;">{{ exp.co_code }}</td>
+    <td style="text-align:center;">{{ exp.co_code }}{% if exp.section_name is defined %}<br><small>({{ exp.section_name }})</small>{% endif %}</td>
     <td>{{ exp.reason }}</td>
     <td>{{ exp.suggestion }}</td>
   </tr>
@@ -325,8 +325,25 @@
   {% endfor %}
 </table>
 
+{% if section_feedbacks is defined and section_feedbacks %}
+<!-- Per-Section Teacher Feedback (Combined Report) -->
+<p class="section-title">Section Teacher Feedback:</p>
+<table class="bordered feedback-table">
+  <tr>
+    <th style="width:80px;">Section</th>
+    <th>Feedback</th>
+  </tr>
+  {% for sf in section_feedbacks %}
+  <tr>
+    <td style="text-align:center;">{{ sf.section_name }}</td>
+    <td>{{ sf.feedback }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
 <!-- Overall Feedback -->
-<p class="section-title">Overall Feedback from Course Teacher:</p>
+<p class="section-title">{% if is_combined is defined and is_combined %}Overall Feedback from Module Leader:{% else %}Overall Feedback from Course Teacher:{% endif %}</p>
 <table class="bordered feedback-table">
   <tr>
     <th>Sl. No.</th>

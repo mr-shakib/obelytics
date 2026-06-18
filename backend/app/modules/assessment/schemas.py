@@ -224,6 +224,7 @@ class ResultSubmissionListItem(BaseModel):
     submitted_at: Optional[datetime]
     ml_rejection_comment: Optional[str]
     student_count: int
+    end_report_status: Optional[str] = None
 
 
 class BulkApproveMLRequest(BaseModel):

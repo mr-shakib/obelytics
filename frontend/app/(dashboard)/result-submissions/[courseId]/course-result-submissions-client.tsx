@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
-import { ArrowLeft, ArrowRight, Download, Loader2, Send } from "lucide-react"
+import { ArrowLeft, ArrowRight, Download, FileText, Loader2, Send } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -35,6 +35,7 @@ type ResultSubmission = {
   submitted_at: string | null
   ml_rejection_comment: string | null
   student_count: number
+  end_report_status: string | null
 }
 
 function SubmittedAt({ value }: { value: string | null }) {
@@ -178,6 +179,18 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                 <Button
                   size="sm"
                   variant="outline"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      href={`/result-submissions/${courseId}/combined-end-report?batch_id=${group.batch_id}&term_id=${group.academic_term_id}&code=${encodeURIComponent(headerCode ?? "")}&title=${encodeURIComponent(headerTitle ?? "")}`}
+                    />
+                  }
+                >
+                  <FileText /> Combined End Report
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   disabled={isDownloading}
                   onClick={() => handleDownloadCombinedReport(group)}
                 >
@@ -211,21 +224,38 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                         {item.student_count} student{item.student_count === 1 ? "" : "s"}
                       </Badge>
                       <StatusBadge status={item.status} />
+                      {item.end_report_status === "SUBMITTED" && (
+                        <Badge variant="outline" className="text-xs font-normal border-green-300 text-green-700">
+                          End Report ✓
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground"><SubmittedAt value={item.submitted_at} /></p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    nativeButton={false}
-                    render={
-                      <Link
-                        href={`/results/${item.section_offering_id}?label=${encodeURIComponent(`${headerCode} — Section ${item.section_name}`)}`}
-                      />
-                    }
-                  >
-                    Review <ArrowRight />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {item.end_report_status === "SUBMITTED" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        nativeButton={false}
+                        render={<Link href={`/results/${item.section_offering_id}/end-report`} />}
+                      >
+                        End Report
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      nativeButton={false}
+                      render={
+                        <Link
+                          href={`/results/${item.section_offering_id}?label=${encodeURIComponent(`${headerCode} — Section ${item.section_name}`)}`}
+                        />
+                      }
+                    >
+                      Review <ArrowRight />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -902,6 +902,7 @@ class ResultPublicationService:
 
         offering_ids = [row.section_offering_id for row in rows]
         counts: dict[UUID, int] = {}
+        end_report_statuses: dict[UUID, str] = {}
         if offering_ids:
             count_result = await self._session.execute(
                 select(StudentEnrollment.section_offering_id, func.count(StudentEnrollment.id))
@@ -910,16 +911,22 @@ class ResultPublicationService:
             )
             counts = dict(count_result.all())
 
+            er_rows = (await self._session.execute(
+                select(CourseEndReport.section_offering_id, CourseEndReport.status)
+                .where(CourseEndReport.section_offering_id.in_(offering_ids))
+            )).all()
+            for er_row in er_rows:
+                end_report_statuses[er_row[0]] = er_row[1]
+
         return [
             {
                 **row._mapping,
                 "status": row.status or "DRAFT",
+                "end_report_status": end_report_statuses.get(row.section_offering_id),
                 "student_count": counts.get(row.section_offering_id, 0),
             }
             for row in rows
         ]
-
-        return result
 
 
 async def _assert_section_teacher(session: AsyncSession, section_offering_id: UUID, user_id: UUID) -> None:
@@ -1594,6 +1601,25 @@ class CourseEndReportService:
         report.teacher_feedback = body.teacher_feedback
         report.status = "SUBMITTED"
         report.submitted_at = datetime.now(timezone.utc)
+
+        pub_result = await self._session.execute(
+            select(ResultPublication).where(ResultPublication.section_offering_id == section_offering_id)
+        )
+        pub = pub_result.scalar_one_or_none()
+        if pub is not None and pub.status == "DRAFT":
+            pub.status = "SUBMITTED"
+            pub.submitted_by_user_id = user_id
+            pub.submitted_at = datetime.now(timezone.utc)
+        elif pub is None:
+            pub = ResultPublication(
+                organization_id=org_id,
+                section_offering_id=section_offering_id,
+                status="SUBMITTED",
+                submitted_by_user_id=user_id,
+                submitted_at=datetime.now(timezone.utc),
+            )
+            self._session.add(pub)
+
         await self._session.commit()
         await self._session.refresh(report)
         return report
@@ -1871,3 +1897,187 @@ class CourseEndReportService:
             }
             for report, course, offering, section, batch, term in rows
         ]
+
+    async def get_combined_data(
+        self, course_id: UUID, batch_id: UUID, academic_term_id: UUID, org_id: UUID,
+    ) -> dict:
+        rows = (await self._session.execute(
+            select(SectionOffering, Section, CourseEndReport)
+            .join(Section, Section.id == SectionOffering.section_id)
+            .outerjoin(CourseEndReport, CourseEndReport.section_offering_id == SectionOffering.id)
+            .where(
+                SectionOffering.organization_id == org_id,
+                SectionOffering.course_id == course_id,
+                SectionOffering.batch_id == batch_id,
+                SectionOffering.academic_term_id == academic_term_id,
+            )
+            .order_by(Section.name)
+        )).all()
+
+        sections = []
+        combined_grade: dict[str, int] = {g: 0 for g in GRADES}
+        co_attainment_sums: dict[str, float] = defaultdict(float)
+        co_attainment_counts: dict[str, int] = defaultdict(int)
+        all_unattained: list[dict] = []
+        section_feedbacks: list[dict] = []
+        total_submitted = 0
+
+        for offering, section, report in rows:
+            is_submitted = report is not None and report.status == "SUBMITTED"
+            sections.append({
+                "section_name": section.name,
+                "section_offering_id": str(offering.id),
+                "end_report_status": report.status if report else None,
+            })
+            if not is_submitted:
+                continue
+            total_submitted += 1
+            gd = report.grade_distribution or {}
+            for g in GRADES:
+                combined_grade[g] += gd.get(g, 0)
+            for co_code, pct in (report.co_attainment or {}).items():
+                co_attainment_sums[co_code] += float(pct)
+                co_attainment_counts[co_code] += 1
+            for exp in (report.unattained_co_explanations or []):
+                all_unattained.append({**exp, "section_name": section.name})
+            if report.teacher_feedback:
+                section_feedbacks.append({
+                    "section_name": section.name,
+                    "feedback": report.teacher_feedback,
+                })
+
+        co_attainment_avg = {
+            code: round(co_attainment_sums[code] / co_attainment_counts[code], 1)
+            for code in co_attainment_sums
+        }
+
+        course_row = (await self._session.execute(
+            select(Course.code, Course.title, Course.credits, Course.theory_hours, Course.lab_hours)
+            .where(Course.id == course_id)
+        )).first()
+        batch_row = (await self._session.execute(select(Batch.name).where(Batch.id == batch_id))).scalar_one()
+        term_row = (await self._session.execute(
+            select(AcademicTerm.name, AcademicTerm.season, AcademicTerm.year)
+            .where(AcademicTerm.id == academic_term_id)
+        )).first()
+
+        return {
+            "course_code": course_row.code if course_row else "",
+            "course_title": course_row.title if course_row else "",
+            "credits": course_row.credits if course_row else 0,
+            "batch_name": batch_row,
+            "term_name": term_row.name if term_row else "",
+            "term_season": term_row.season if term_row else "",
+            "term_year": term_row.year if term_row else 0,
+            "sections": sections,
+            "total_sections": len(sections),
+            "submitted_sections": total_submitted,
+            "combined_grade_distribution": combined_grade,
+            "combined_co_attainment": co_attainment_avg,
+            "all_unattained_explanations": all_unattained,
+            "section_feedbacks": section_feedbacks,
+        }
+
+    async def build_combined_end_report_context(
+        self, course_id: UUID, batch_id: UUID, academic_term_id: UUID, org_id: UUID, ml_feedback: str = "",
+    ) -> dict:
+        data = await self.get_combined_data(course_id, batch_id, academic_term_id, org_id)
+
+        first_offering_id = None
+        for s in data["sections"]:
+            if s["end_report_status"] == "SUBMITTED":
+                first_offering_id = UUID(s["section_offering_id"])
+                break
+        if first_offering_id is None and data["sections"]:
+            first_offering_id = UUID(data["sections"][0]["section_offering_id"])
+
+        program_acronym = ""
+        department_name = ""
+        if first_offering_id:
+            offering_row = (await self._session.execute(
+                select(SectionOffering.curriculum_id).where(SectionOffering.id == first_offering_id)
+            )).scalar_one_or_none()
+            if offering_row:
+                curriculum_row = (await self._session.execute(
+                    select(Curriculum).where(Curriculum.id == offering_row)
+                )).scalar_one_or_none()
+                if curriculum_row:
+                    prog = (await self._session.execute(
+                        select(Program).where(Program.id == curriculum_row.program_id)
+                    )).scalar_one_or_none()
+                    if prog:
+                        program_acronym = prog.acronym
+                        dept = (await self._session.execute(
+                            select(Department).where(Department.id == prog.department_id)
+                        )).scalar_one_or_none()
+                        if dept:
+                            department_name = f"{dept.name} ({dept.short_name})"
+
+        org_repo = OrgRepository(self._session)
+        org = await org_repo.get(org_id)
+        logo_url = None
+        if org and org.logo_file_key:
+            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+
+        co_rows = list((await self._session.execute(
+            select(CourseOutcome)
+            .where(CourseOutcome.course_id == course_id)
+            .order_by(CourseOutcome.code)
+        )).scalars().all())
+        seen_codes: set[str] = set()
+        unique_cos: list = []
+        for co in co_rows:
+            if co.code not in seen_codes:
+                seen_codes.add(co.code)
+                unique_cos.append(co)
+
+        course_outcomes = [{"code": co.code, "statement": co.statement} for co in unique_cos]
+
+        co_attainment_entries = [
+            {"code": code, "pct": pct}
+            for code, pct in data["combined_co_attainment"].items()
+        ]
+
+        total_students = sum(data["combined_grade_distribution"].get(g, 0) for g in GRADES)
+        unattained = data["all_unattained_explanations"]
+        empty_explanation_rows = max(0, 2 - len(unattained))
+
+        ml_feedback_lines = [l.strip() for l in ml_feedback.split("\n") if l.strip()] if ml_feedback else []
+
+        conduct_hours = 0
+        if data["credits"]:
+            conduct_hours = data["credits"]
+
+        section_names = ", ".join(s["section_name"] for s in data["sections"])
+
+        return {
+            "section": {
+                "course_code": data["course_code"],
+                "course_title": data["course_title"],
+                "credits": data["credits"],
+                "conduct_hours": conduct_hours,
+                "term_name": data["term_name"],
+                "term_year": data["term_year"],
+                "term_season": data["term_season"],
+                "section_name": f"Combined ({section_names})",
+                "batch_name": data["batch_name"],
+            },
+            "program_acronym": program_acronym,
+            "department_name": department_name,
+            "teacher": None,
+            "course_outcomes": course_outcomes,
+            "grades": GRADES,
+            "grade_distribution": data["combined_grade_distribution"],
+            "total_students": total_students,
+            "co_attainment_entries": co_attainment_entries,
+            "unattained_co_explanations": unattained,
+            "empty_explanation_rows": empty_explanation_rows,
+            "feedback_lines": ml_feedback_lines,
+            "section_feedbacks": data["section_feedbacks"],
+            "org": {
+                "name": org.name if org else "",
+                "short_name": org.short_name if org else "",
+                "logo_url": logo_url,
+            },
+            "is_combined": True,
+        }
