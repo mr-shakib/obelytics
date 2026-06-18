@@ -203,6 +203,8 @@ class COService:
         self, curriculum_id: UUID, course_id: UUID, org_id: UUID
     ) -> list[CourseOutcomeResponse]:
         cos = await self._repo.list_by_curriculum_course(curriculum_id, course_id)
+        if not cos:
+            cos = await self._repo.list_by_course_fallback(course_id, org_id)
         bloom_level_ids_by_co = await self._repo.get_bloom_level_ids_bulk([co.id for co in cos])
         return [self._to_response(co, bloom_level_ids_by_co.get(co.id, [])) for co in cos]
 

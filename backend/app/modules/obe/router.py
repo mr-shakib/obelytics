@@ -315,6 +315,8 @@ async def get_co_po_mapping_set(
     svc = MappingSetService(db)
     ms = await svc._repo.find_by_curriculum_course(curriculum_id, course_id)
     if ms is None:
+        ms = await svc._repo.find_by_course_fallback(course_id)
+    if ms is None:
         from app.modules.obe.exceptions import MappingSetNotFoundError
         raise MappingSetNotFoundError()
     return ms

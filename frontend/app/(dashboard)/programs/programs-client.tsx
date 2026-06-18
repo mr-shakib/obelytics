@@ -72,6 +72,8 @@ const schema = z.object({
   total_credits: z.number().int().min(1).max(500),
   study_mode: z.enum(["FULL_TIME", "PART_TIME"], { message: "Mode required" }),
   description: z.string().optional(),
+  threshold_co_score_pct: z.number().min(0).max(100),
+  threshold_student_pct: z.number().min(0).max(100),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -137,7 +139,10 @@ export function ProgramsClient() {
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { threshold_co_score_pct: 50, threshold_student_pct: 50 },
+  })
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -292,6 +297,36 @@ export function ProgramsClient() {
                   <div className="space-y-2">
                     <Label htmlFor="prog-description">Vision</Label>
                     <Textarea id="prog-description" rows={2} {...register("description")} placeholder="Optional" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>CO Score Threshold (%)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        {...register("threshold_co_score_pct", { valueAsNumber: true })}
+                        placeholder="50"
+                      />
+                      {errors.threshold_co_score_pct && (
+                        <p className="text-sm text-destructive">{errors.threshold_co_score_pct.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Student Attainment Threshold (%)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        {...register("threshold_student_pct", { valueAsNumber: true })}
+                        placeholder="50"
+                      />
+                      {errors.threshold_student_pct && (
+                        <p className="text-sm text-destructive">{errors.threshold_student_pct.message}</p>
+                      )}
+                    </div>
                   </div>
                 </form>
                 <DialogFooter showCloseButton>

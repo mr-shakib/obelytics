@@ -21,6 +21,20 @@ type InboxItem = {
   section_offering_id?: string | null
 }
 
+type PendingEndReport = {
+  id: string
+  section_offering_id: string
+  course_code: string
+  course_title: string
+  section_name: string
+  batch_name: string
+  term_name: string
+  term_season: string
+  term_year: number
+  submitted_at: string | null
+  teacher_feedback: string | null
+}
+
 type InboxResponse = {
   pending_result_publications: InboxItem[]
   pending_course_outcomes: InboxItem[]
@@ -42,6 +56,14 @@ export function ApprovalsClient() {
     },
   })
 
+  const { data: pendingEndReports = [] } = useQuery({
+    queryKey: queryKeys.endReports.pending,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/end-reports/pending/list" as never)
+      return ((data as unknown) as PendingEndReport[]) ?? []
+    },
+  })
+
   const resultItems = data?.pending_result_publications ?? []
   const coItems = data?.pending_course_outcomes ?? []
   const mappingItems = data?.pending_co_po_mapping_sets ?? []
@@ -60,7 +82,7 @@ export function ApprovalsClient() {
         </div>
       )}
 
-      {!isLoading && total === 0 && (
+      {!isLoading && total === 0 && pendingEndReports.length === 0 && (
         <p className="text-sm text-muted-foreground">No pending approvals.</p>
       )}
 
@@ -92,6 +114,38 @@ export function ApprovalsClient() {
                     Review <ArrowRight />
                   </Button>
                 )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {pendingEndReports.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Course End Reports ({pendingEndReports.length})
+          </h2>
+          {pendingEndReports.map((item) => (
+            <Card key={item.id}>
+              <CardContent className="p-4 flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="font-medium text-sm">
+                    {item.course_code} — {item.course_title} · Section {item.section_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.batch_name} · {item.term_name} ({item.term_season} {item.term_year})
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <SubmittedAt value={item.submitted_at} />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  nativeButton={false}
+                  render={<Link href={`/results/${item.section_offering_id}/end-report`} />}
+                >
+                  Review <ArrowRight />
+                </Button>
               </CardContent>
             </Card>
           ))}

@@ -212,6 +212,17 @@ async def archive_department(
 
 # ── Programs ──────────────────────────────────────────────────────────────────
 
+async def _enrich_program(program, db: AsyncSession, org_id) -> ProgramResponse:
+    from app.modules.attainment.repository import AttainmentConfigRepository
+    resp = ProgramResponse.model_validate(program)
+    config_repo = AttainmentConfigRepository(db)
+    config = await config_repo.get_for_program(org_id, program.id)
+    if config:
+        resp.threshold_co_score_pct = float(config.threshold_co_score_pct)
+        resp.threshold_student_pct = float(config.threshold_student_pct)
+    return resp
+
+
 @router.get("/programs", response_model=list[ProgramResponse])
 async def list_programs(
     _: Annotated[PermissionManifestResponse, Depends(require_permission("program.create"))],
@@ -220,7 +231,8 @@ async def list_programs(
     department_id: UUID | None = None,
 ):
     svc = ProgramService(db)
-    return await svc.list_active(current_user.organization_id, department_id)
+    programs = await svc.list_active(current_user.organization_id, department_id)
+    return [await _enrich_program(p, db, current_user.organization_id) for p in programs]
 
 
 @router.post("/programs", response_model=ProgramResponse, status_code=status.HTTP_201_CREATED)
@@ -231,7 +243,8 @@ async def create_program(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ProgramService(db)
-    return await svc.create(body, current_user.organization_id)
+    program = await svc.create(body, current_user.organization_id)
+    return await _enrich_program(program, db, current_user.organization_id)
 
 
 @router.get("/programs/{program_id}", response_model=ProgramResponse)
@@ -242,7 +255,8 @@ async def get_program(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ProgramService(db)
-    return await svc.get(program_id, current_user.organization_id)
+    program = await svc.get(program_id, current_user.organization_id)
+    return await _enrich_program(program, db, current_user.organization_id)
 
 
 @router.patch("/programs/{program_id}", response_model=ProgramResponse)
@@ -254,7 +268,8 @@ async def update_program(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ProgramService(db)
-    return await svc.update(program_id, body, current_user.organization_id)
+    program = await svc.update(program_id, body, current_user.organization_id)
+    return await _enrich_program(program, db, current_user.organization_id)
 
 
 @router.post("/programs/{program_id}/archive", status_code=status.HTTP_200_OK, response_model=ProgramResponse)
@@ -265,4 +280,5 @@ async def archive_program(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ProgramService(db)
-    return await svc.archive(program_id, current_user.organization_id)
+    program = await svc.archive(program_id, current_user.organization_id)
+    return await _enrich_program(program, db, current_user.organization_id)

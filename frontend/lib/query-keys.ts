@@ -166,11 +166,16 @@ export const queryKeys = {
     questions: (offeringId: string, examType: string) => ["marksheets", offeringId, "questions", examType] as const,
     grid: (offeringId: string, examType: string) => ["marksheets", offeringId, "grid", examType] as const,
     attainment: (offeringId: string) => ["marksheets", offeringId, "attainment"] as const,
+    gradeDistribution: (offeringId: string) => ["marksheets", offeringId, "grade-distribution"] as const,
   },
   results: {
     all: ["results"] as const,
     byOffering: (offeringId: string) => ["results", "offering", offeringId] as const,
     submissions: (filters?: Record<string, unknown>) => ["results", "submissions", filters] as const,
+  },
+  endReports: {
+    byOffering: (offeringId: string) => ["end-reports", offeringId] as const,
+    pending: ["end-reports", "pending"] as const,
   },
 
   // Attainment

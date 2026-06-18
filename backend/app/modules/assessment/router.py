@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -16,6 +17,8 @@ from app.modules.assessment.schemas import (
     AssessmentCreate,
     AssessmentResponse,
     AssessmentUpdate,
+    CourseEndReportResponse,
+    CourseEndReportSubmit,
     EnrollmentBulkCreate,
     EnrollmentBulkResponse,
     EnrollmentCreate,
@@ -41,11 +44,13 @@ from app.modules.assessment.schemas import (
 )
 from app.modules.assessment.service import (
     AssessmentService,
+    CourseEndReportService,
     EnrollmentService,
     MarksheetService,
     MarksService,
     ResultPublicationService,
     StudentService,
+    render_end_report_pdf,
     render_marksheet_course_report_pdf,
     render_marksheet_report_pdf,
 )
@@ -563,6 +568,17 @@ async def get_marksheet_attainment(
     return await svc.get_attainment(section_offering_id, current_user.organization_id)
 
 
+@router.get("/marksheets/{section_offering_id}/grade-distribution")
+async def get_grade_distribution(
+    section_offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("assessment.read", "attainment.read", "marks.read.section"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = MarksheetService(db)
+    return await svc.get_grade_distribution(section_offering_id, current_user.organization_id)
+
+
 @router.get("/marksheets/{section_offering_id}/report-pdf")
 async def get_marksheet_report_pdf(
     section_offering_id: UUID,
@@ -602,3 +618,86 @@ async def get_marksheet_course_report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── Course End Reports ────────────────────────────────────────────────────────
+
+@router.get("/end-reports/{section_offering_id}", response_model=CourseEndReportResponse)
+async def get_end_report(
+    section_offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.submit", "result.approve.ml"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseEndReportService(db)
+    report = await svc.get(section_offering_id)
+    if report is None:
+        return CourseEndReportResponse(
+            id=UUID("00000000-0000-0000-0000-000000000000"),
+            organization_id=current_user.organization_id,
+            section_offering_id=section_offering_id,
+            created_by_user_id=None,
+            grade_distribution={},
+            co_attainment={},
+            unattained_co_explanations=[],
+            teacher_feedback=None,
+            status="DRAFT",
+            submitted_at=None,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    return report
+
+
+@router.post("/end-reports/{section_offering_id}/save-draft", response_model=CourseEndReportResponse)
+async def save_end_report_draft(
+    section_offering_id: UUID,
+    body: CourseEndReportSubmit,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.submit"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseEndReportService(db)
+    return await svc.save_draft(section_offering_id, body, current_user.organization_id, current_user.id)
+
+
+@router.post("/end-reports/{section_offering_id}/submit", response_model=CourseEndReportResponse)
+async def submit_end_report(
+    section_offering_id: UUID,
+    body: CourseEndReportSubmit,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.submit"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseEndReportService(db)
+    return await svc.submit(section_offering_id, body, current_user.organization_id, current_user.id)
+
+
+@router.get("/end-reports/{section_offering_id}/pdf")
+async def download_end_report_pdf(
+    section_offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.submit", "result.approve.ml"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseEndReportService(db)
+    context = await svc.build_end_report_context(section_offering_id, current_user.organization_id)
+    pdf_bytes = render_end_report_pdf(context)
+    course_code = context["section"]["course_code"]
+    section_name = context["section"]["section_name"]
+    filename = f"{course_code}_Section_{section_name}_End_Report.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/end-reports/pending/list")
+async def list_pending_end_reports(
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.approve.ml", "result.approve.pc"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = CourseEndReportService(db)
+    return await svc.list_pending_for_ml(current_user.organization_id)

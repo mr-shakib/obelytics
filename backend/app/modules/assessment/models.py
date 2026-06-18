@@ -1,9 +1,9 @@
 import sqlalchemy as sa
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime, ForeignKey,
-    Index, Numeric, String, UniqueConstraint,
+    Index, Numeric, String, Text, UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 
 from app.core.database import Base
 
@@ -298,6 +298,44 @@ class ResultPublication(Base):
     pc_approved_at = Column(DateTime(timezone=True), nullable=True)
     published_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
     published_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
+
+
+class CourseEndReport(Base):
+    __tablename__ = "course_end_reports"
+    __table_args__ = (
+        UniqueConstraint("section_offering_id", name="uq_end_report_offering"),
+        CheckConstraint("status IN ('DRAFT', 'SUBMITTED')", name="ck_end_report_status"),
+        {"schema": "assessment"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    section_offering_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("curriculum.section_offerings.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    # Plain UUID — no FK constraint (cross-schema IAM)
+    created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
+    grade_distribution = Column(JSONB, nullable=False, server_default=sa.text("'{}'::jsonb"))
+    co_attainment = Column(JSONB, nullable=False, server_default=sa.text("'{}'::jsonb"))
+    unattained_co_explanations = Column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
+    teacher_feedback = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, server_default="DRAFT")
+    submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),

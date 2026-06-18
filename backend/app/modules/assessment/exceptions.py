@@ -135,3 +135,16 @@ class MarksheetLockedError(HTTPException):
             status_code=status.HTTP_409_CONFLICT,
             detail="This section's results have been submitted and are locked. Ask your Module Leader to unlock the section to make changes.",
         )
+
+
+class ResultAlreadySubmittedError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This end report has already been submitted",
+        )
+
+
+class EndReportNotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="End report not found")

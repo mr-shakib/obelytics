@@ -37,6 +37,7 @@ from app.modules.assessment.exceptions import (
 from app.modules.assessment.models import (
     Assessment,
     AssessmentCOWeight,
+    CourseEndReport,
     MarksheetMark,
     MarksheetQuestion,
     ResultPublication,
@@ -80,14 +81,16 @@ from app.modules.assessment.schemas import (
     StudentUpdate,
 )
 from app.modules.curriculum.exceptions import SectionOfferingNotFoundError
-from app.modules.curriculum.models import AcademicTerm, Batch, Course, Section, SectionOffering
+from app.modules.curriculum.models import AcademicTerm, Batch, Course, Curriculum, Section, SectionOffering
 from app.modules.curriculum.repository import (
     FacultyAssignmentRepository,
     ModuleLeaderAssignmentRepository,
     SectionOfferingRepository,
 )
 from app.modules.curriculum.service import _assert_module_leader
+from app.modules.iam.models import User
 from app.modules.obe.models import COPOMappingEntry, COPOMappingSet, CourseOutcome, ProgramOutcome
+from app.modules.org.models import Department, Program
 from app.modules.org.repository import OrgRepository
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -1117,6 +1120,36 @@ class MarksheetService:
 
         return Decimal("50.00"), Decimal("50.00")
 
+    async def get_grade_distribution(self, offering_id: UUID, org_id: UUID) -> dict[str, int]:
+        offering = await self._offering_repo.get_by_id(offering_id, org_id)
+        if offering is None:
+            raise SectionOfferingNotFoundError()
+
+        questions = await self._question_repo.list_by_offering(offering_id)
+        if not questions:
+            return {g: 0 for g in GRADES}
+
+        total_max = sum(Decimal(str(q.max_marks)) for q in questions)
+        if total_max <= 0:
+            return {g: 0 for g in GRADES}
+
+        enrollment_rows = await self._enrollment_repo.list_with_students_by_offering(offering_id)
+        marks = await self._mark_repo.list_by_offering(offering_id)
+        mark_map = {(m.question_id, m.student_enrollment_id): m for m in marks}
+
+        grade_counts = {g: 0 for g in GRADES}
+        for enrollment, _ in enrollment_rows:
+            obtained = Decimal("0")
+            for q in questions:
+                mark = mark_map.get((q.id, enrollment.id))
+                if mark is not None and not mark.is_absent and mark.marks_obtained is not None:
+                    obtained += Decimal(str(mark.marks_obtained))
+            pct = float(obtained / total_max * Decimal("100"))
+            grade = _pct_to_grade(pct)
+            grade_counts[grade] += 1
+
+        return grade_counts
+
     async def get_attainment(self, offering_id: UUID, org_id: UUID) -> MarksheetAttainmentResponse:
         offering = await self._offering_repo.get_by_id(offering_id, org_id)
         if offering is None:
@@ -1198,6 +1231,13 @@ class MarksheetService:
                 )
             )
             mapping_set = mapping_set_result.scalar_one_or_none()
+            if mapping_set is None:
+                fallback_result = await self._session.execute(
+                    select(COPOMappingSet).where(
+                        COPOMappingSet.course_id == offering.course_id,
+                    ).order_by(COPOMappingSet.created_at.desc()).limit(1)
+                )
+                mapping_set = fallback_result.scalar_one_or_none()
             if mapping_set is not None:
                 entries_result = await self._session.execute(
                     select(COPOMappingEntry).where(
@@ -1460,3 +1500,374 @@ def render_marksheet_course_report_pdf(context: dict) -> bytes:
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     html = env.get_template("marksheet_course_report.html").render(**context)
     return HTML(string=html).write_pdf()
+
+
+def render_end_report_pdf(context: dict) -> bytes:
+    from weasyprint import HTML
+
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
+    html = env.get_template("end_report.html").render(**context)
+    return HTML(string=html).write_pdf()
+
+
+GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"]
+
+GRADE_THRESHOLDS = [
+    (80, "A+"), (75, "A"), (70, "A-"), (65, "B+"), (60, "B"),
+    (55, "B-"), (50, "C+"), (45, "C"), (40, "D"),
+]
+
+
+def _pct_to_grade(pct: float) -> str:
+    for threshold, grade in GRADE_THRESHOLDS:
+        if pct >= threshold:
+            return grade
+    return "F"
+
+
+class CourseEndReportService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_or_create(self, section_offering_id: UUID, org_id: UUID, user_id: UUID) -> CourseEndReport:
+        result = await self._session.execute(
+            select(CourseEndReport).where(CourseEndReport.section_offering_id == section_offering_id)
+        )
+        report = result.scalar_one_or_none()
+        if report:
+            return report
+        report = CourseEndReport(
+            organization_id=org_id,
+            section_offering_id=section_offering_id,
+            created_by_user_id=user_id,
+            grade_distribution={},
+            co_attainment={},
+            unattained_co_explanations=[],
+            status="DRAFT",
+        )
+        self._session.add(report)
+        await self._session.flush()
+        await self._session.refresh(report)
+        return report
+
+    async def get(self, section_offering_id: UUID) -> CourseEndReport | None:
+        result = await self._session.execute(
+            select(CourseEndReport).where(CourseEndReport.section_offering_id == section_offering_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def save_draft(self, section_offering_id: UUID, body, org_id: UUID, user_id: UUID) -> CourseEndReport:
+        report = await self.get(section_offering_id)
+        if report is None:
+            report = CourseEndReport(
+                organization_id=org_id,
+                section_offering_id=section_offering_id,
+                created_by_user_id=user_id,
+            )
+            self._session.add(report)
+        elif report.status == "SUBMITTED":
+            from app.modules.assessment.exceptions import ResultAlreadySubmittedError
+            raise ResultAlreadySubmittedError()
+        report.grade_distribution = body.grade_distribution
+        report.co_attainment = body.co_attainment
+        report.unattained_co_explanations = [e.model_dump() for e in body.unattained_co_explanations]
+        report.teacher_feedback = body.teacher_feedback
+        await self._session.flush()
+        await self._session.refresh(report)
+        return report
+
+    async def submit(self, section_offering_id: UUID, body, org_id: UUID, user_id: UUID) -> CourseEndReport:
+        report = await self.get(section_offering_id)
+        if report is None:
+            report = CourseEndReport(
+                organization_id=org_id,
+                section_offering_id=section_offering_id,
+                created_by_user_id=user_id,
+            )
+            self._session.add(report)
+        elif report.status == "SUBMITTED":
+            from app.modules.assessment.exceptions import ResultAlreadySubmittedError
+            raise ResultAlreadySubmittedError()
+        report.grade_distribution = body.grade_distribution
+        report.co_attainment = body.co_attainment
+        report.unattained_co_explanations = [e.model_dump() for e in body.unattained_co_explanations]
+        report.teacher_feedback = body.teacher_feedback
+        report.status = "SUBMITTED"
+        report.submitted_at = datetime.now(timezone.utc)
+        await self._session.commit()
+        await self._session.refresh(report)
+        return report
+
+    async def build_end_report_context(self, section_offering_id: UUID, org_id: UUID) -> dict:
+        report = await self.get(section_offering_id)
+        if report is None:
+            from app.modules.assessment.exceptions import EndReportNotFoundError
+            raise EndReportNotFoundError()
+
+        row = (await self._session.execute(
+            select(
+                Course.code.label("course_code"),
+                Course.title.label("course_title"),
+                Course.credits.label("credits"),
+                Course.theory_hours.label("theory_hours"),
+                Course.lab_hours.label("lab_hours"),
+                AcademicTerm.name.label("term_name"),
+                AcademicTerm.year.label("term_year"),
+                AcademicTerm.season.label("term_season"),
+                Section.name.label("section_name"),
+                Batch.name.label("batch_name"),
+                SectionOffering.curriculum_id,
+                SectionOffering.course_id,
+            )
+            .select_from(SectionOffering)
+            .join(Course, Course.id == SectionOffering.course_id)
+            .join(AcademicTerm, AcademicTerm.id == SectionOffering.academic_term_id)
+            .join(Section, Section.id == SectionOffering.section_id)
+            .join(Batch, Batch.id == SectionOffering.batch_id)
+            .where(SectionOffering.id == section_offering_id)
+        )).first()
+
+        if row is None:
+            raise SectionOfferingNotFoundError()
+
+        program_acronym = ""
+        department_name = ""
+        curriculum_row = (await self._session.execute(
+            select(Curriculum).where(Curriculum.id == row.curriculum_id)
+        )).scalar_one_or_none()
+        if curriculum_row:
+            prog = (await self._session.execute(
+                select(Program).where(Program.id == curriculum_row.program_id)
+            )).scalar_one_or_none()
+            if prog:
+                program_acronym = prog.acronym
+                dept = (await self._session.execute(
+                    select(Department).where(Department.id == prog.department_id)
+                )).scalar_one_or_none()
+                if dept:
+                    department_name = f"{dept.name} ({dept.short_name})"
+
+        teacher_info = None
+        if report.created_by_user_id:
+            user = (await self._session.execute(
+                select(User).where(User.id == report.created_by_user_id)
+            )).scalar_one_or_none()
+            if user:
+                teacher_info = {
+                    "full_name": user.full_name,
+                    "designation": user.designation or "",
+                    "email": user.email or "",
+                }
+
+        co_rows = list((await self._session.execute(
+            select(CourseOutcome)
+            .where(
+                CourseOutcome.curriculum_id == row.curriculum_id,
+                CourseOutcome.course_id == row.course_id,
+            )
+            .order_by(CourseOutcome.code)
+        )).scalars().all())
+        if not co_rows:
+            co_rows = list((await self._session.execute(
+                select(CourseOutcome)
+                .where(CourseOutcome.course_id == row.course_id)
+                .order_by(CourseOutcome.code)
+            )).scalars().all())
+            seen: set[str] = set()
+            unique: list = []
+            for co in co_rows:
+                if co.code not in seen:
+                    seen.add(co.code)
+                    unique.append(co)
+            co_rows = unique
+
+        co_ids = [co.id for co in co_rows]
+
+        from app.modules.obe.models import CourseOutcomeBloomLevel, COKPMapping, COCPMapping, COCAMapping
+        from app.modules.ref_data.models import BloomLevel, ComplexProblem, ComplexActivity, KnowledgeProfile
+
+        bloom_links = list((await self._session.execute(
+            select(CourseOutcomeBloomLevel).where(CourseOutcomeBloomLevel.course_outcome_id.in_(co_ids))
+        )).scalars().all()) if co_ids else []
+        bloom_ids = {bl.bloom_level_id for bl in bloom_links}
+        bloom_map: dict = {}
+        if bloom_ids:
+            bloom_map = {b.id: b.code for b in (await self._session.execute(
+                select(BloomLevel).where(BloomLevel.id.in_(bloom_ids))
+            )).scalars().all()}
+
+        mapping_set = None
+        if co_ids:
+            mapping_set_result = await self._session.execute(
+                select(COPOMappingSet).where(
+                    and_(COPOMappingSet.curriculum_id == row.curriculum_id, COPOMappingSet.course_id == row.course_id)
+                )
+            )
+            mapping_set = mapping_set_result.scalar_one_or_none()
+            if mapping_set is None:
+                fallback = await self._session.execute(
+                    select(COPOMappingSet).where(COPOMappingSet.course_id == row.course_id)
+                    .order_by(COPOMappingSet.created_at.desc()).limit(1)
+                )
+                mapping_set = fallback.scalar_one_or_none()
+
+        po_by_co: dict[UUID, list[str]] = defaultdict(list)
+        if mapping_set:
+            entries = (await self._session.execute(
+                select(COPOMappingEntry).where(COPOMappingEntry.mapping_set_id == mapping_set.id)
+            )).scalars().all()
+            po_ids = {e.program_outcome_id for e in entries}
+            po_map = {}
+            if po_ids:
+                po_map = {po.id: po.code for po in (await self._session.execute(
+                    select(ProgramOutcome).where(ProgramOutcome.id.in_(po_ids))
+                )).scalars().all()}
+            for e in entries:
+                code = po_map.get(e.program_outcome_id)
+                if code and code not in po_by_co[e.course_outcome_id]:
+                    po_by_co[e.course_outcome_id].append(code)
+
+        kp_by_co: dict[UUID, list[str]] = defaultdict(list)
+        cp_by_co: dict[UUID, list[str]] = defaultdict(list)
+        ca_by_co: dict[UUID, list[str]] = defaultdict(list)
+        if co_ids:
+            kp_rows = (await self._session.execute(
+                select(COKPMapping).where(COKPMapping.course_outcome_id.in_(co_ids))
+            )).scalars().all()
+            kp_ids = {r.knowledge_profile_id for r in kp_rows}
+            kp_map = {k.id: k.code for k in (await self._session.execute(
+                select(KnowledgeProfile).where(KnowledgeProfile.id.in_(kp_ids))
+            )).scalars().all()} if kp_ids else {}
+            for r in kp_rows:
+                c = kp_map.get(r.knowledge_profile_id)
+                if c:
+                    kp_by_co[r.course_outcome_id].append(c)
+
+            cp_rows = (await self._session.execute(
+                select(COCPMapping).where(COCPMapping.course_outcome_id.in_(co_ids))
+            )).scalars().all()
+            cp_ids = {r.complex_problem_id for r in cp_rows}
+            cp_map = {k.id: k.code for k in (await self._session.execute(
+                select(ComplexProblem).where(ComplexProblem.id.in_(cp_ids))
+            )).scalars().all()} if cp_ids else {}
+            for r in cp_rows:
+                c = cp_map.get(r.complex_problem_id)
+                if c:
+                    cp_by_co[r.course_outcome_id].append(c)
+
+            ca_rows = (await self._session.execute(
+                select(COCAMapping).where(COCAMapping.course_outcome_id.in_(co_ids))
+            )).scalars().all()
+            ca_ids = {r.complex_activity_id for r in ca_rows}
+            ca_map = {k.id: k.code for k in (await self._session.execute(
+                select(ComplexActivity).where(ComplexActivity.id.in_(ca_ids))
+            )).scalars().all()} if ca_ids else {}
+            for r in ca_rows:
+                c = ca_map.get(r.complex_activity_id)
+                if c:
+                    ca_by_co[r.course_outcome_id].append(c)
+
+        bloom_by_co: dict[UUID, list[str]] = defaultdict(list)
+        for bl in bloom_links:
+            c = bloom_map.get(bl.bloom_level_id)
+            if c:
+                bloom_by_co[bl.course_outcome_id].append(c)
+
+        course_outcomes = [
+            {
+                "code": co.code,
+                "statement": co.statement,
+                "pos": ", ".join(sorted(po_by_co.get(co.id, []))) or "—",
+                "learning_domains": ", ".join(sorted(bloom_by_co.get(co.id, []))) or "—",
+                "knowledge_profile": ", ".join(sorted(kp_by_co.get(co.id, []))) or "—",
+                "complex_problem": ", ".join(sorted(cp_by_co.get(co.id, []))) or "—",
+                "complex_activity": ", ".join(sorted(ca_by_co.get(co.id, []))) or "—",
+            }
+            for co in co_rows
+        ]
+
+        grade_distribution = report.grade_distribution or {}
+        total_students = sum(grade_distribution.get(g, 0) for g in GRADES)
+
+        co_attainment = report.co_attainment or {}
+        co_attainment_entries = [
+            {"code": code, "pct": pct}
+            for code, pct in co_attainment.items()
+        ]
+
+        unattained = report.unattained_co_explanations or []
+        empty_explanation_rows = max(0, 2 - len(unattained))
+
+        feedback_text = report.teacher_feedback or ""
+        feedback_lines = [line.strip() for line in feedback_text.split("\n") if line.strip()] if feedback_text else []
+
+        org_repo = OrgRepository(self._session)
+        org = await org_repo.get(org_id)
+        logo_url = None
+        if org and org.logo_file_key:
+            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+
+        conduct_hours = row.theory_hours + row.lab_hours
+        if conduct_hours == 0:
+            conduct_hours = row.credits
+
+        return {
+            "section": {
+                "course_code": row.course_code,
+                "course_title": row.course_title,
+                "credits": row.credits,
+                "conduct_hours": conduct_hours,
+                "term_name": row.term_name,
+                "term_year": row.term_year,
+                "term_season": row.term_season,
+                "section_name": row.section_name,
+                "batch_name": row.batch_name,
+            },
+            "program_acronym": program_acronym,
+            "department_name": department_name,
+            "teacher": teacher_info,
+            "course_outcomes": course_outcomes,
+            "grades": GRADES,
+            "grade_distribution": grade_distribution,
+            "total_students": total_students,
+            "co_attainment_entries": co_attainment_entries,
+            "unattained_co_explanations": unattained,
+            "empty_explanation_rows": empty_explanation_rows,
+            "feedback_lines": feedback_lines,
+            "org": {
+                "name": org.name if org else "",
+                "short_name": org.short_name if org else "",
+                "logo_url": logo_url,
+            },
+        }
+
+    async def list_pending_for_ml(self, org_id: UUID) -> list[dict]:
+        from app.modules.curriculum.models import SectionOffering, Course, Batch, AcademicTerm, Section
+        result = await self._session.execute(
+            select(CourseEndReport, Course, SectionOffering, Section, Batch, AcademicTerm)
+            .join(SectionOffering, CourseEndReport.section_offering_id == SectionOffering.id)
+            .join(Course, SectionOffering.course_id == Course.id)
+            .join(Section, SectionOffering.section_id == Section.id)
+            .join(Batch, SectionOffering.batch_id == Batch.id)
+            .join(AcademicTerm, SectionOffering.academic_term_id == AcademicTerm.id)
+            .where(CourseEndReport.organization_id == org_id)
+            .where(CourseEndReport.status == "SUBMITTED")
+            .order_by(CourseEndReport.submitted_at.desc())
+        )
+        rows = result.all()
+        return [
+            {
+                "id": str(report.id),
+                "section_offering_id": str(report.section_offering_id),
+                "course_code": course.code,
+                "course_title": course.title,
+                "section_name": section.name,
+                "batch_name": batch.name,
+                "term_name": term.name,
+                "term_season": term.season,
+                "term_year": term.year,
+                "submitted_at": report.submitted_at.isoformat() if report.submitted_at else None,
+                "teacher_feedback": report.teacher_feedback,
+            }
+            for report, course, offering, section, batch, term in rows
+        ]

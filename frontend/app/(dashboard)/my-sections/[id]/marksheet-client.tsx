@@ -2,9 +2,10 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { ArrowLeft, Download, Loader2, Send } from "lucide-react"
+import { ArrowLeft, Download, FileText, Loader2, Send } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -60,9 +61,10 @@ interface Props {
 }
 
 export function MarksheetClient({ sectionOfferingId }: Props) {
-  const qc = useQueryClient()
+  const router = useRouter()
   const canSubmit = useHasAnyPermission(["result.submit"])
   const [isDownloading, setIsDownloading] = useState(false)
+  const [isDownloadingEndReport, setIsDownloadingEndReport] = useState(false)
 
   const { data: sections = [] } = useQuery({
     queryKey: queryKeys.facultyAssignments.mySections,
@@ -101,16 +103,65 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
     },
   })
 
-  const submitMutation = useMutation({
-    mutationFn: async () => {
-      await apiClient.POST(`/results/${sectionOfferingId}/submit` as never, {} as never)
+  const { data: midQuestions = [] } = useQuery({
+    queryKey: queryKeys.marksheets.questions(sectionOfferingId, "MID"),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/marksheets/${sectionOfferingId}/questions` as never, {
+        params: { query: { exam_type: "MID" } },
+      } as never)
+      return ((data as unknown) as { id: string }[]) ?? []
     },
-    onSuccess: () => {
-      toast.success("Section report submitted to the Module Leader")
-      qc.invalidateQueries({ queryKey: queryKeys.results.byOffering(sectionOfferingId) })
-    },
-    onError: () => toast.error("Failed to submit section report"),
   })
+
+  const { data: finalQuestions = [] } = useQuery({
+    queryKey: queryKeys.marksheets.questions(sectionOfferingId, "FINAL"),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/marksheets/${sectionOfferingId}/questions` as never, {
+        params: { query: { exam_type: "FINAL" } },
+      } as never)
+      return ((data as unknown) as { id: string }[]) ?? []
+    },
+  })
+
+  const { data: endReport } = useQuery({
+    queryKey: queryKeys.endReports.byOffering(sectionOfferingId),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/end-reports/${sectionOfferingId}` as never)
+      return (data as unknown) as { id: string; status: string }
+    },
+  })
+
+  const hasMidMarks = midQuestions.length > 0
+  const hasFinalMarks = finalQuestions.length > 0
+  const endReportSubmitted = endReport?.status === "SUBMITTED"
+  const canSubmitToML = canSubmit && result?.status === "DRAFT" && hasMidMarks && hasFinalMarks && !endReportSubmitted
+  const endReportExists = endReport && endReport.id !== "00000000-0000-0000-0000-000000000000"
+
+  async function handleDownloadEndReportPdf() {
+    setIsDownloadingEndReport(true)
+    try {
+      const { data: blob, error } = await apiClient.GET(
+        `/end-reports/${sectionOfferingId}/pdf` as never,
+        { parseAs: "blob" } as never
+      )
+      if (error || !blob) {
+        toast.error("Failed to generate end report PDF")
+        return
+      }
+      const url = URL.createObjectURL(blob as Blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${section?.course_code ?? "section"}_end_report.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error("Failed to generate end report PDF")
+    } finally {
+      setIsDownloadingEndReport(false)
+    }
+  }
 
   async function handleDownloadPdf() {
     setIsDownloading(true)
@@ -138,7 +189,7 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
     }
   }
 
-  const isLocked = result?.status != null && result.status !== "DRAFT"
+  const isLocked = (result?.status != null && result.status !== "DRAFT") || endReportSubmitted
 
   return (
     <div className="space-y-6">
@@ -154,12 +205,27 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
             {section && <StatusBadge status={section.status} />}
             {result && result.status !== "DRAFT" && <StatusBadge status={result.status} />}
             <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isDownloading}>
-              {isDownloading ? <Loader2 className="animate-spin" /> : <Download />} Download PDF
+              {isDownloading ? <Loader2 className="animate-spin" /> : <Download />} Section Report
             </Button>
-            {canSubmit && result?.status === "DRAFT" && (
-              <Button size="sm" onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}>
-                {submitMutation.isPending ? <Loader2 className="animate-spin" /> : <Send />} Submit Report
+            {endReportSubmitted && (
+              <Button variant="outline" size="sm" onClick={handleDownloadEndReportPdf} disabled={isDownloadingEndReport}>
+                {isDownloadingEndReport ? <Loader2 className="animate-spin" /> : <Download />} End Report PDF
               </Button>
+            )}
+            {endReportExists && (
+              <Button variant="outline" size="sm" onClick={() => router.push(`/my-sections/${sectionOfferingId}/end-report`)}>
+                <FileText className="h-4 w-4" /> End Report
+              </Button>
+            )}
+            {canSubmitToML && (
+              <Button size="sm" onClick={() => router.push(`/my-sections/${sectionOfferingId}/end-report`)}>
+                <Send className="h-4 w-4" /> Submit Report
+              </Button>
+            )}
+            {canSubmit && result?.status === "DRAFT" && !endReportSubmitted && (!hasMidMarks || !hasFinalMarks) && (
+              <div className="text-xs text-muted-foreground max-w-48">
+                Enter both MID and FINAL marks before submitting
+              </div>
             )}
             <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/my-sections" />}>
               <ArrowLeft /> Back
@@ -177,10 +243,11 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
 
       {isLocked && (
         <Alert>
-          <AlertTitle>Section submitted</AlertTitle>
+          <AlertTitle>Section locked</AlertTitle>
           <AlertDescription>
-            This section&apos;s results have been submitted and are locked. Contact your Module Leader if
-            you need to make changes.
+            {endReportSubmitted
+              ? "The end report has been submitted. This section is now locked — enrollment and marks cannot be changed."
+              : "This section's results have been submitted and are locked. Contact your Module Leader if you need to make changes."}
           </AlertDescription>
         </Alert>
       )}
@@ -199,7 +266,7 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
         </TabsList>
 
         <TabsContent value="roster" className="mt-4">
-          <RosterPanel sectionOfferingId={sectionOfferingId} />
+          <RosterPanel sectionOfferingId={sectionOfferingId} locked={isLocked} />
         </TabsContent>
 
         <TabsContent value="MID" className="mt-4">

@@ -41,6 +41,7 @@ type BulkEnrollResult = { enrolled: number; already_enrolled: number; not_found:
 
 interface Props {
   sectionOfferingId: string
+  locked?: boolean
 }
 
 function EnrollDialog({ sectionOfferingId, roster }: Props & { roster: RosterEntry[] }) {
@@ -204,7 +205,7 @@ function EnrollDialog({ sectionOfferingId, roster }: Props & { roster: RosterEnt
   )
 }
 
-export function RosterPanel({ sectionOfferingId }: Props) {
+export function RosterPanel({ sectionOfferingId, locked = false }: Props) {
   const qc = useQueryClient()
 
   const { data: roster = [], isLoading } = useQuery({
@@ -232,7 +233,7 @@ export function RosterPanel({ sectionOfferingId }: Props) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Enrolled Students ({roster.length})</CardTitle>
-        <EnrollDialog sectionOfferingId={sectionOfferingId} roster={roster} />
+        {!locked && <EnrollDialog sectionOfferingId={sectionOfferingId} roster={roster} />}
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -250,7 +251,7 @@ export function RosterPanel({ sectionOfferingId }: Props) {
                 <TableHead>Student ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead className="w-10" />
+                {!locked && <TableHead className="w-10" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -259,16 +260,18 @@ export function RosterPanel({ sectionOfferingId }: Props) {
                   <TableCell>{r.student_id_number}</TableCell>
                   <TableCell>{r.full_name}</TableCell>
                   <TableCell>{r.email ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => unenrollMutation.mutate(r.id)}
-                      disabled={unenrollMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
+                  {!locked && (
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => unenrollMutation.mutate(r.id)}
+                        disabled={unenrollMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

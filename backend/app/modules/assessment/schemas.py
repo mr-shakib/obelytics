@@ -3,7 +3,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── Student ───────────────────────────────────────────────────────────────────
@@ -339,3 +339,45 @@ class MarksheetAttainmentResponse(BaseModel):
     cos: list[COAttainmentPreview]
     pos: list[POAttainmentPreview]
     students: list[StudentAttainmentRow]
+
+
+# ── Course End Report ─────────────────────────────────────────────────────────
+
+GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"]
+
+
+class UnattainedCOExplanation(BaseModel):
+    co_code: str
+    reason: str
+    suggestion: str
+
+
+class CourseEndReportCreate(BaseModel):
+    grade_distribution: dict[str, int] = Field(default_factory=dict)
+    co_attainment: dict[str, float] = Field(default_factory=dict)
+    unattained_co_explanations: list[UnattainedCOExplanation] = Field(default_factory=list)
+    teacher_feedback: str | None = None
+
+
+class CourseEndReportSubmit(BaseModel):
+    grade_distribution: dict[str, int] = Field(default_factory=dict)
+    co_attainment: dict[str, float] = Field(default_factory=dict)
+    unattained_co_explanations: list[UnattainedCOExplanation] = Field(default_factory=list)
+    teacher_feedback: str | None = None
+
+
+class CourseEndReportResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    section_offering_id: UUID
+    created_by_user_id: UUID | None
+    grade_distribution: dict[str, int]
+    co_attainment: dict[str, float]
+    unattained_co_explanations: list[UnattainedCOExplanation]
+    teacher_feedback: str | None
+    status: str
+    submitted_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

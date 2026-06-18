@@ -134,6 +134,25 @@ class CORepository:
         )
         return list(result.scalars().all())
 
+    async def list_by_course_fallback(
+        self, course_id: UUID, org_id: UUID
+    ) -> list[CourseOutcome]:
+        result = await self._session.execute(
+            select(CourseOutcome).where(
+                and_(
+                    CourseOutcome.course_id == course_id,
+                    CourseOutcome.organization_id == org_id,
+                )
+            ).order_by(CourseOutcome.code)
+        )
+        seen_codes: set[str] = set()
+        unique: list[CourseOutcome] = []
+        for co in result.scalars().all():
+            if co.code not in seen_codes:
+                seen_codes.add(co.code)
+                unique.append(co)
+        return unique
+
     async def find_by_code(
         self, curriculum_id: UUID, course_id: UUID, code: str
     ) -> CourseOutcome | None:
@@ -253,6 +272,15 @@ class MappingSetRepository:
                     COPOMappingSet.course_id == course_id,
                 )
             )
+        )
+        return result.scalar_one_or_none()
+
+    async def find_by_course_fallback(self, course_id: UUID) -> COPOMappingSet | None:
+        result = await self._session.execute(
+            select(COPOMappingSet)
+            .where(COPOMappingSet.course_id == course_id)
+            .order_by(COPOMappingSet.created_at.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

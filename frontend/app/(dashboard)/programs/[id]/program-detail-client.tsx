@@ -47,6 +47,8 @@ type Program = {
   study_mode: string
   description?: string | null
   status: string
+  threshold_co_score_pct?: number
+  threshold_student_pct?: number
 }
 
 type Department = { id: string; name: string }
@@ -104,6 +106,8 @@ const programSchema = z.object({
   total_credits: z.number().int().min(1).max(500),
   study_mode: z.enum(["FULL_TIME", "PART_TIME"], { message: "Mode required" }),
   description: z.string().optional(),
+  threshold_co_score_pct: z.number().min(0).max(100),
+  threshold_student_pct: z.number().min(0).max(100),
 })
 type ProgramFormValues = z.infer<typeof programSchema>
 
@@ -681,6 +685,8 @@ export function ProgramDetailClient({ id }: Props) {
           total_credits: data.total_credits,
           study_mode: data.study_mode as ProgramFormValues["study_mode"],
           description: data.description ?? "",
+          threshold_co_score_pct: data.threshold_co_score_pct ?? 50,
+          threshold_student_pct: data.threshold_student_pct ?? 50,
         }
       : undefined,
   })
@@ -843,6 +849,34 @@ export function ProgramDetailClient({ id }: Props) {
                   <div className="space-y-2">
                     <Label htmlFor="description">Vision</Label>
                     <Textarea id="description" rows={2} {...register("description")} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>CO Score Threshold (%)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        {...register("threshold_co_score_pct", { valueAsNumber: true })}
+                      />
+                      {errors.threshold_co_score_pct && (
+                        <p className="text-sm text-destructive">{errors.threshold_co_score_pct.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Student Attainment Threshold (%)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        {...register("threshold_student_pct", { valueAsNumber: true })}
+                      />
+                      {errors.threshold_student_pct && (
+                        <p className="text-sm text-destructive">{errors.threshold_student_pct.message}</p>
+                      )}
+                    </div>
                   </div>
                   <Button type="submit" disabled={!isDirty || isSubmitting || mutation.isPending}>
                     {(isSubmitting || mutation.isPending) && <Loader2 className="animate-spin" />}

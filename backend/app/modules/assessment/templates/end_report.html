@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Section-Wise Course End Report — {{ section.course_code }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0.75in 0.6in 0.75in 0.6in;
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #666;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Liberation Serif", "Times New Roman", Georgia, serif;
+    font-size: 10pt;
+    color: #000;
+    line-height: 1.3;
+  }
+
+  h1, h2, h3 { margin: 0; }
+
+  .header {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .header-logo {
+    max-height: 60px;
+    max-width: 60px;
+    vertical-align: middle;
+    margin-right: 10px;
+  }
+
+  .header-text {
+    display: inline-block;
+    vertical-align: middle;
+    text-align: center;
+  }
+
+  .header h1 {
+    font-size: 15pt;
+    font-weight: bold;
+    margin-bottom: 2px;
+  }
+
+  .header h2 {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-bottom: 2px;
+  }
+
+  .header h3 {
+    font-size: 11pt;
+    font-weight: bold;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  table.bordered td,
+  table.bordered th {
+    border: 1px solid #000;
+    padding: 4px 6px;
+    font-size: 10pt;
+    vertical-align: top;
+  }
+
+  table.bordered th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+    text-align: left;
+  }
+
+  .info-table td {
+    padding: 2px 6px;
+    font-size: 10pt;
+    border: 1px solid #000;
+  }
+
+  .info-table .label {
+    font-weight: bold;
+    width: 140px;
+    background-color: #f2f2f2;
+  }
+
+  .section-title {
+    font-size: 10pt;
+    font-weight: bold;
+    margin: 14px 0 6px 0;
+  }
+
+  .grade-table th,
+  .grade-table td {
+    text-align: center;
+    min-width: 40px;
+  }
+
+  .grade-table th:first-child,
+  .grade-table td:first-child {
+    text-align: left;
+    min-width: 100px;
+  }
+
+  .co-table th,
+  .co-table td {
+    text-align: center;
+  }
+
+  .co-table th:first-child,
+  .co-table td:first-child {
+    text-align: left;
+    min-width: 80px;
+  }
+
+  .feedback-table td:first-child {
+    width: 50px;
+    text-align: center;
+  }
+
+  .signature-block {
+    margin-top: 40px;
+  }
+
+  .signature-block .name {
+    font-weight: bold;
+    font-size: 11pt;
+  }
+
+  .signature-line {
+    width: 200px;
+    border-top: 1.5px solid #000;
+    margin-top: 30px;
+    margin-bottom: 4px;
+  }
+
+  .co-outcomes-table td:first-child {
+    font-weight: bold;
+    width: 50px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  {% if org.logo_url %}
+  <img class="header-logo" src="{{ org.logo_url }}" alt="Logo">
+  {% endif %}
+  <div class="header-text">
+    <h1>{{ org.name }}</h1>
+    {% if department_name %}
+    <h2>Department of {{ department_name }}</h2>
+    {% endif %}
+    <h3>Section-Wise Course End Report</h3>
+  </div>
+</div>
+
+<!-- Course Information -->
+<table class="info-table bordered">
+  <tr>
+    <td class="label">Course Code:</td>
+    <td>{{ section.course_code }}</td>
+    <td class="label" style="width:100px;"></td>
+    <td style="width:100px;"></td>
+  </tr>
+  <tr>
+    <td class="label">Course Title:</td>
+    <td>{{ section.course_title }}</td>
+    <td class="label"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td class="label">Program:</td>
+    <td>{{ program_acronym }}</td>
+    <td class="label"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td class="label">Semester:</td>
+    <td>{{ section.term_season }}</td>
+    <td class="label">Year:</td>
+    <td>{{ section.term_year }}</td>
+  </tr>
+  <tr>
+    <td class="label">Credit:</td>
+    <td>{{ section.credits }}</td>
+    <td class="label">Conduct Hour:</td>
+    <td>{{ section.conduct_hours }}</td>
+  </tr>
+  <tr>
+    <td class="label">Course Section:</td>
+    <td>{{ section.section_name }}</td>
+    <td class="label"></td>
+    <td></td>
+  </tr>
+  {% if teacher %}
+  <tr>
+    <td class="label">Course Teacher<br>Name with Initial:</td>
+    <td>{{ teacher.full_name }}</td>
+    <td class="label"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td class="label">Designation:</td>
+    <td>{{ teacher.designation | default('', true) }}</td>
+    <td class="label"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td class="label">Email:</td>
+    <td>{{ teacher.email | default('', true) }}</td>
+    <td class="label"></td>
+    <td></td>
+  </tr>
+  {% endif %}
+</table>
+
+<!-- 1. Course Outcomes with Mappings -->
+<p class="section-title">1. Course Outcomes (CO's): After completing this course, students will be able to,</p>
+<table class="bordered" style="font-size: 9pt;">
+  <tr>
+    <th style="width:35px; text-align:center;">CO</th>
+    <th style="min-width:180px;">CO Statements</th>
+    <th style="width:45px; text-align:center;">POs</th>
+    <th style="width:60px; text-align:center;">Learning Domains</th>
+    <th style="width:60px; text-align:center;">Knowledge Profile</th>
+    <th style="width:60px; text-align:center;">Complex Eng. Problem</th>
+    <th style="width:60px; text-align:center;">Complex Eng. Activities</th>
+  </tr>
+  {% for co in course_outcomes %}
+  <tr>
+    <td style="font-weight:bold; text-align:center;">{{ co.code }}</td>
+    <td>{{ co.statement }}</td>
+    <td style="text-align:center;">{{ co.pos }}</td>
+    <td style="text-align:center;">{{ co.learning_domains }}</td>
+    <td style="text-align:center;">{{ co.knowledge_profile }}</td>
+    <td style="text-align:center;">{{ co.complex_problem }}</td>
+    <td style="text-align:center;">{{ co.complex_activity }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- 2. Grade Distribution -->
+<p class="section-title">2. Grade Distribution</p>
+<table class="bordered grade-table">
+  <tr>
+    <th>Grades</th>
+    {% for g in grades %}
+    <th>{{ g }}</th>
+    {% endfor %}
+  </tr>
+  <tr>
+    <td><strong>No. of Student</strong></td>
+    {% for g in grades %}
+    <td>{{ grade_distribution.get(g, 0) }}</td>
+    {% endfor %}
+  </tr>
+  <tr>
+    <td><strong>Percentage (%)</strong></td>
+    {% for g in grades %}
+    {% set count = grade_distribution.get(g, 0) %}
+    {% if total_students > 0 %}
+    <td>{{ ((count / total_students) * 100) | round(0) | int }}</td>
+    {% else %}
+    <td>0</td>
+    {% endif %}
+    {% endfor %}
+  </tr>
+</table>
+
+<!-- 3. CO Attainment -->
+<p class="section-title">3. CO Attainment</p>
+<table class="bordered co-table">
+  <tr>
+    <td colspan="{{ co_attainment_entries | length + 1 }}" style="text-align:center; font-weight:bold;">
+      CO attainment in the course
+    </td>
+  </tr>
+  <tr>
+    <th>CO#</th>
+    {% for entry in co_attainment_entries %}
+    <th>{{ entry.code }}</th>
+    {% endfor %}
+  </tr>
+  <tr>
+    <td><strong>Percentage (%)</strong></td>
+    {% for entry in co_attainment_entries %}
+    <td>{{ entry.pct }}</td>
+    {% endfor %}
+  </tr>
+</table>
+
+<!-- 4. Unattained CO Explanation -->
+<p class="section-title">4. Unattained CO Explanation:</p>
+<table class="bordered">
+  <tr>
+    <th style="width:120px;">Unattained CO</th>
+    <th>Identified Reasons behind CO&lt;50%</th>
+    <th>Suggestions for improvement on CO Attainment</th>
+  </tr>
+  {% if unattained_co_explanations %}
+  {% for exp in unattained_co_explanations %}
+  <tr>
+    <td style="text-align:center;">{{ exp.co_code }}</td>
+    <td>{{ exp.reason }}</td>
+    <td>{{ exp.suggestion }}</td>
+  </tr>
+  {% endfor %}
+  {% endif %}
+  {% for _ in range(empty_explanation_rows) %}
+  <tr>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- Overall Feedback -->
+<p class="section-title">Overall Feedback from Course Teacher:</p>
+<table class="bordered feedback-table">
+  <tr>
+    <th>Sl. No.</th>
+    <th>Feedback</th>
+  </tr>
+  {% if feedback_lines %}
+  {% for line in feedback_lines %}
+  <tr>
+    <td>{{ loop.index }}.</td>
+    <td>{{ line }}</td>
+  </tr>
+  {% endfor %}
+  {% else %}
+  <tr>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+  </tr>
+  {% endif %}
+</table>
+
+<!-- Signature -->
+<div class="signature-block">
+  {% if teacher %}
+  <p class="name">{{ teacher.full_name }}</p>
+  {% endif %}
+  <div class="signature-line"></div>
+  <p>Course Teacher's Signature</p>
+</div>
+
+</body>
+</html>
