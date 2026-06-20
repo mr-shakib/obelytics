@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 # ── Curriculum ────────────────────────────────────────────────────────────────
@@ -13,11 +13,15 @@ class CurriculumCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     code: str = Field(min_length=1, max_length=50)
     effective_year: int = Field(ge=1900, le=2100)
+    threshold_co_score_pct: Decimal = Field(default=Decimal("50"), ge=0, le=100)
+    threshold_student_pct: Decimal = Field(default=Decimal("50"), ge=0, le=100)
 
 
 class CurriculumUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
+    threshold_co_score_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    threshold_student_pct: Decimal | None = Field(default=None, ge=0, le=100)
 
 
 class CurriculumResponse(BaseModel):
@@ -30,6 +34,8 @@ class CurriculumResponse(BaseModel):
     version_number: int
     parent_curriculum_id: UUID | None
     status: str
+    threshold_co_score_pct: Decimal
+    threshold_student_pct: Decimal
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -494,6 +500,41 @@ class SectionOfferingResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SectionOfferingDependents(BaseModel):
+    """Counts of records that reference a section offering. Used to warn the user
+    before a cascade delete."""
+
+    enrolled_students: int = 0
+    assessments: int = 0
+    marksheet_questions: int = 0
+    student_marks: int = 0
+    result_publications: int = 0
+    course_end_reports: int = 0
+    co_attainment_results: int = 0
+    po_attainment_results: int = 0
+    faculty_assignments: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total(self) -> int:
+        return (
+            self.enrolled_students
+            + self.assessments
+            + self.marksheet_questions
+            + self.student_marks
+            + self.result_publications
+            + self.course_end_reports
+            + self.co_attainment_results
+            + self.po_attainment_results
+            + self.faculty_assignments
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_dependents(self) -> bool:
+        return self.total > 0
 
 
 # ── Faculty Assignment ────────────────────────────────────────────────────────

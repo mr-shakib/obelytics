@@ -3,12 +3,20 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Loader2, Plus, Trash2, UserCog, X } from "lucide-react"
+import { AlertTriangle, Loader2, Plus, Trash2, UserCog, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Combobox } from "@/components/ui/combobox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PageHeader } from "@/components/shared/page-header"
 import { apiClient } from "@/lib/api/client"
@@ -60,7 +68,195 @@ type FacultyRosterEntry = {
   faculty_type: string | null
 }
 
+type SectionDependents = {
+  enrolled_students: number
+  assessments: number
+  marksheet_questions: number
+  student_marks: number
+  result_publications: number
+  course_end_reports: number
+  co_attainment_results: number
+  po_attainment_results: number
+  faculty_assignments: number
+  total: number
+  has_dependents: boolean
+}
+
+const DEPENDENT_LABELS: { key: keyof SectionDependents; label: string }[] = [
+  { key: "enrolled_students", label: "enrolled student(s)" },
+  { key: "assessments", label: "assessment(s)" },
+  { key: "marksheet_questions", label: "marksheet question(s)" },
+  { key: "student_marks", label: "recorded mark(s)" },
+  { key: "result_publications", label: "result publication(s)" },
+  { key: "course_end_reports", label: "course end report(s)" },
+  { key: "co_attainment_results", label: "CO attainment result(s)" },
+  { key: "po_attainment_results", label: "PO attainment result(s)" },
+  { key: "faculty_assignments", label: "faculty assignment(s)" },
+]
+
 const NEXT_SECTION_LABEL = (count: number) => String.fromCharCode(65 + count) // A, B, C…
+
+// ── Delete section (with cascade confirmation) ─────────────────────────────────
+
+function DeleteSectionDialog({
+  offering,
+  batchId,
+  termId,
+}: {
+  offering: OfferingInfo
+  batchId: string
+  termId: string
+}) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  // null while no data has data; "summary" → first warning, "final" → last confirm
+  const [stage, setStage] = useState<"summary" | "final">("summary")
+
+  const { data: dependents, isLoading } = useQuery({
+    queryKey: queryKeys.sectionOfferings.dependents(offering.id),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(
+        `/section-offerings/${offering.id}/dependents` as never
+      )
+      return (data as unknown) as SectionDependents
+    },
+    enabled: open,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (cascade: boolean) => {
+      await apiClient.DELETE(`/section-offerings/${offering.id}` as never, {
+        params: { query: { cascade } },
+      } as never)
+    },
+    onSuccess: () => {
+      toast.success("Section removed")
+      setOpen(false)
+      qc.invalidateQueries({ queryKey: queryKeys.batches.termOfferings(batchId, termId) })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { detail?: string })?.detail
+      toast.error(msg ?? "Failed to remove section")
+    },
+  })
+
+  const openDialog = () => {
+    setStage("summary")
+    setOpen(true)
+  }
+
+  const lines = dependents
+    ? DEPENDENT_LABELS.filter(({ key }) => (dependents[key] as number) > 0).map(
+        ({ key, label }) => `${dependents[key]} ${label}`
+      )
+    : []
+
+  return (
+    <>
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-destructive transition-colors"
+        disabled={deleteMutation.isPending}
+        title="Remove section"
+        onClick={openDialog}
+      >
+        {deleteMutation.isPending ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Trash2 className="h-3.5 w-3.5" />
+        )}
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          {isLoading ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking for related data…
+            </div>
+          ) : !dependents?.has_dependents ? (
+            // No dependent data — single confirmation
+            <>
+              <DialogHeader>
+                <DialogTitle>Remove Section {offering.section_name}?</DialogTitle>
+                <DialogDescription>
+                  This section has no related data. This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate(false)}
+                >
+                  {deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Remove section
+                </Button>
+              </DialogFooter>
+            </>
+          ) : stage === "summary" ? (
+            // Has data — first warning listing what will be deleted
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  Section {offering.section_name} has related data
+                </DialogTitle>
+                <DialogDescription>
+                  Deleting this section will also permanently delete the following:
+                </DialogDescription>
+              </DialogHeader>
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                {lines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={() => setStage("final")}>
+                  Continue
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            // Final confirmation
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  Are you absolutely sure?
+                </DialogTitle>
+                <DialogDescription>
+                  This will permanently delete Section {offering.section_name} and all{" "}
+                  {dependents.total} related record(s), including any student marks and
+                  results. This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setStage("summary")}>
+                  Go back
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate(true)}
+                >
+                  {deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Delete everything
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
 
 // ── Add section control ───────────────────────────────────────────────────────
 
@@ -222,20 +418,6 @@ function SectionOfferingRow({
     onSettled: () => setPending(false),
   })
 
-  const deleteOfferingMutation = useMutation({
-    mutationFn: async () => {
-      await apiClient.DELETE(`/section-offerings/${offering.id}` as never)
-    },
-    onSuccess: () => {
-      toast.success("Section removed")
-      qc.invalidateQueries({ queryKey: queryKeys.batches.termOfferings(batchId, termId) })
-    },
-    onError: (err: unknown) => {
-      const msg = (err as { detail?: string })?.detail
-      toast.error(msg ?? "Failed to remove section")
-    },
-  })
-
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
       <div className="flex items-center gap-2 text-sm">
@@ -273,19 +455,7 @@ function SectionOfferingRow({
           />
         )}
 
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-destructive transition-colors"
-          disabled={deleteOfferingMutation.isPending}
-          title="Remove section"
-          onClick={() => deleteOfferingMutation.mutate()}
-        >
-          {deleteOfferingMutation.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Trash2 className="h-3.5 w-3.5" />
-          )}
-        </button>
+        <DeleteSectionDialog offering={offering} batchId={batchId} termId={termId} />
       </div>
     </div>
   )

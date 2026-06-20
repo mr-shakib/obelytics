@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.curriculum.models import (
@@ -744,6 +744,73 @@ class SectionOfferingRepository:
 
     async def delete(self, offering: SectionOffering) -> None:
         await self._session.delete(offering)
+        await self._session.flush()
+
+    async def count_dependents(self, offering_id: UUID) -> dict[str, int]:
+        """Count rows across other schemas that reference this offering so the UI can
+        warn before a cascade delete. Uses raw SQL to avoid importing the assessment /
+        attainment models (cross-module coupling)."""
+        sql = text(
+            """
+            SELECT
+              (SELECT count(*) FROM assessment.student_enrollments  WHERE section_offering_id = :oid) AS enrolled_students,
+              (SELECT count(*) FROM assessment.assessments          WHERE section_offering_id = :oid) AS assessments,
+              (SELECT count(*) FROM assessment.marksheet_questions   WHERE section_offering_id = :oid) AS marksheet_questions,
+              (SELECT count(*) FROM assessment.student_marks sm
+                 WHERE sm.assessment_id IN (SELECT id FROM assessment.assessments WHERE section_offering_id = :oid)) AS student_marks,
+              (SELECT count(*) FROM assessment.result_publications  WHERE section_offering_id = :oid) AS result_publications,
+              (SELECT count(*) FROM assessment.course_end_reports   WHERE section_offering_id = :oid) AS course_end_reports,
+              (SELECT count(*) FROM attainment.co_attainment_results WHERE section_offering_id = :oid) AS co_attainment_results,
+              (SELECT count(*) FROM attainment.po_attainment_results WHERE section_offering_id = :oid) AS po_attainment_results,
+              (SELECT count(*) FROM curriculum.faculty_assignments  WHERE section_offering_id = :oid) AS faculty_assignments
+            """
+        )
+        row = (await self._session.execute(sql, {"oid": offering_id})).mappings().one()
+        return dict(row)
+
+    async def assigned_user_ids(self, offering_id: UUID) -> list[UUID]:
+        """Users whose RBAC role grants are scoped to this offering — their permission
+        manifests must be invalidated when the offering is removed."""
+        rows = await self._session.execute(
+            text(
+                "SELECT DISTINCT user_id FROM iam.user_role_assignments "
+                "WHERE scope_type = 'SECTION_OFFERING' AND scope_id = :oid"
+            ),
+            {"oid": offering_id},
+        )
+        return [r[0] for r in rows.all()]
+
+    async def cascade_delete(self, offering_id: UUID) -> None:
+        """Delete every record referencing this offering, in FK-dependency order, then
+        the offering's own scoped role grants. The offering row itself is removed by the
+        caller via delete(). All statements run in the caller's transaction."""
+        statements = [
+            # grandchildren (marks) first — they RESTRICT their parents
+            "DELETE FROM assessment.student_marks WHERE student_enrollment_id IN "
+            "(SELECT id FROM assessment.student_enrollments WHERE section_offering_id = :oid)",
+            "DELETE FROM assessment.student_marks WHERE assessment_id IN "
+            "(SELECT id FROM assessment.assessments WHERE section_offering_id = :oid)",
+            "DELETE FROM assessment.assessment_co_weights WHERE assessment_id IN "
+            "(SELECT id FROM assessment.assessments WHERE section_offering_id = :oid)",
+            "DELETE FROM assessment.marksheet_marks WHERE question_id IN "
+            "(SELECT id FROM assessment.marksheet_questions WHERE section_offering_id = :oid)",
+            "DELETE FROM assessment.marksheet_marks WHERE student_enrollment_id IN "
+            "(SELECT id FROM assessment.student_enrollments WHERE section_offering_id = :oid)",
+            # direct children
+            "DELETE FROM assessment.marksheet_questions WHERE section_offering_id = :oid",
+            "DELETE FROM assessment.assessments WHERE section_offering_id = :oid",
+            "DELETE FROM assessment.student_enrollments WHERE section_offering_id = :oid",
+            "DELETE FROM assessment.result_publications WHERE section_offering_id = :oid",
+            "DELETE FROM assessment.course_end_reports WHERE section_offering_id = :oid",
+            "DELETE FROM attainment.co_attainment_results WHERE section_offering_id = :oid",
+            "DELETE FROM attainment.po_attainment_results WHERE section_offering_id = :oid",
+            "DELETE FROM curriculum.faculty_assignments WHERE section_offering_id = :oid",
+            # RBAC grants scoped to this offering (auto-granted to section teachers)
+            "DELETE FROM iam.user_role_assignments "
+            "WHERE scope_type = 'SECTION_OFFERING' AND scope_id = :oid",
+        ]
+        for stmt in statements:
+            await self._session.execute(text(stmt), {"oid": offering_id})
         await self._session.flush()
 
 

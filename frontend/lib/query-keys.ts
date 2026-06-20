@@ -100,6 +100,7 @@ export const queryKeys = {
   sectionOfferings: {
     all: ["section-offerings"] as const,
     byCourse: (courseId: string) => ["section-offerings", "course", courseId] as const,
+    dependents: (offeringId: string) => ["section-offerings", "dependents", offeringId] as const,
   },
   facultyAssignments: {
     byOfferings: (offeringIds: string[]) => ["faculty-assignments", "by-offerings", offeringIds] as const,

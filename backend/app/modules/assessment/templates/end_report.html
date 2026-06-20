@@ -307,6 +307,11 @@
     <th>Identified Reasons behind CO&lt;50%</th>
     <th>Suggestions for improvement on CO Attainment</th>
   </tr>
+  {% if all_co_attained is defined and all_co_attained %}
+  <tr>
+    <td colspan="3" style="text-align:center; font-style:italic;">All COs attained — no unattained CO explanation required.</td>
+  </tr>
+  {% else %}
   {% if unattained_co_explanations %}
   {% for exp in unattained_co_explanations %}
   <tr>
@@ -323,6 +328,7 @@
     <td>&nbsp;</td>
   </tr>
   {% endfor %}
+  {% endif %}
 </table>
 
 {% if section_feedbacks is defined and section_feedbacks %}

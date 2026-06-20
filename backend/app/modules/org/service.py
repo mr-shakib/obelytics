@@ -124,10 +124,6 @@ class ProgramService:
         )
         result = await self._repo.create(program)
         await self._seed_pos_from_types(result.id, organization_id)
-        await self._upsert_attainment_config(
-            result.id, organization_id,
-            body.threshold_co_score_pct, body.threshold_student_pct,
-        )
         return result
 
     async def _seed_pos_from_types(self, program_id: UUID, organization_id: UUID) -> None:
@@ -160,46 +156,11 @@ class ProgramService:
         if program is None:
             raise ProgramNotFoundError()
         data = body.model_dump(exclude_none=True)
-        data.pop("threshold_co_score_pct", None)
-        data.pop("threshold_student_pct", None)
         if "acronym" in data and data["acronym"] != program.acronym:
             conflict = await self._repo.find_by_acronym(data["acronym"], organization_id)
             if conflict:
                 raise ProgramAcronymConflictError()
-        if body.threshold_co_score_pct is not None or body.threshold_student_pct is not None:
-            await self._upsert_attainment_config(
-                program_id, organization_id,
-                body.threshold_co_score_pct, body.threshold_student_pct,
-            )
         return await self._repo.update(program, data)
-
-    async def _upsert_attainment_config(
-        self, program_id: UUID, org_id: UUID,
-        co_pct: float | None, student_pct: float | None,
-    ) -> None:
-        from app.modules.attainment.models import AttainmentConfig
-        from sqlalchemy import and_, select
-
-        result = await self._session.execute(
-            select(AttainmentConfig).where(
-                and_(AttainmentConfig.organization_id == org_id, AttainmentConfig.program_id == program_id)
-            )
-        )
-        config = result.scalar_one_or_none()
-        if config is None:
-            config = AttainmentConfig(
-                organization_id=org_id,
-                program_id=program_id,
-                threshold_co_score_pct=co_pct if co_pct is not None else 50.0,
-                threshold_student_pct=student_pct if student_pct is not None else 50.0,
-            )
-            self._session.add(config)
-        else:
-            if co_pct is not None:
-                config.threshold_co_score_pct = co_pct
-            if student_pct is not None:
-                config.threshold_student_pct = student_pct
-        await self._session.flush()
 
     async def archive(self, program_id: UUID, organization_id: UUID) -> Program:
         program = await self._repo.get_by_id(program_id, organization_id)

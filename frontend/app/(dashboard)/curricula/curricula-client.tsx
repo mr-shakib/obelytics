@@ -61,6 +61,8 @@ const schema = z.object({
   version_number: z.number().int().min(1, "Version must be at least 1").max(99),
   batch_name: z.string().min(1, "Batch is required").max(100),
   semester_count: z.number().int().min(1, "At least 1 semester is required").max(20),
+  threshold_co_score_pct: z.number().min(0, "0–100").max(100, "0–100"),
+  threshold_student_pct: z.number().min(0, "0–100").max(100, "0–100"),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -125,7 +127,7 @@ export function CurriculaClient() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { semester_count: 12, version_number: 1 },
+    defaultValues: { semester_count: 12, version_number: 1, threshold_co_score_pct: 50, threshold_student_pct: 50 },
   })
 
   const watchedYear = watch("effective_year")
@@ -175,6 +177,8 @@ export function CurriculaClient() {
           code: values.code,
           program_id: values.program_id,
           effective_year: values.effective_year,
+          threshold_co_score_pct: values.threshold_co_score_pct,
+          threshold_student_pct: values.threshold_student_pct,
         },
       } as never)
       const created = (curriculum as unknown) as { id: string }
@@ -202,7 +206,7 @@ export function CurriculaClient() {
       setOpen(false)
       setSelProgramId("")
       setSelBatchName("")
-      reset({ semester_count: 12, version_number: 1 })
+      reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50, threshold_student_pct: 50 })
     },
     onError: () => toast.error("Failed to create curriculum"),
   })
@@ -211,7 +215,7 @@ export function CurriculaClient() {
     setOpen(false)
     setSelProgramId("")
     setSelBatchName("")
-    reset({ semester_count: 12, version_number: 1 })
+    reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50, threshold_student_pct: 50 })
   }
 
   return (
@@ -368,6 +372,49 @@ export function CurriculaClient() {
                     <p className="text-xs text-muted-foreground">
                       Automatically creates this many semesters (Semester 1, Semester 2, …) for the
                       curriculum, ready for courses to be placed into.
+                    </p>
+                  </div>
+
+                  {/* Attainment thresholds */}
+                  <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+                    <Label>Attainment Thresholds</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="threshold_co_score_pct" className="text-xs font-normal text-muted-foreground">
+                          CO/PO pass mark (%)
+                        </Label>
+                        <Input
+                          id="threshold_co_score_pct"
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          {...register("threshold_co_score_pct", { valueAsNumber: true })}
+                        />
+                        {errors.threshold_co_score_pct && (
+                          <p className="text-sm text-destructive">{errors.threshold_co_score_pct.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="threshold_student_pct" className="text-xs font-normal text-muted-foreground">
+                          Students attaining (%)
+                        </Label>
+                        <Input
+                          id="threshold_student_pct"
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          {...register("threshold_student_pct", { valueAsNumber: true })}
+                        />
+                        {errors.threshold_student_pct && (
+                          <p className="text-sm text-destructive">{errors.threshold_student_pct.message}</p>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      A student attains a CO/PO when their score reaches the pass mark. A CO is
+                      considered attained when at least this share of students attain it. Defaults to 50% each.
                     </p>
                   </div>
                 </form>

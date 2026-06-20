@@ -18,9 +18,8 @@ from app.modules.assessment.models import (
     StudentEnrollment,
     StudentMark,
 )
-from app.modules.attainment.models import AttainmentConfig, COAttainmentResult, POAttainmentResult
+from app.modules.attainment.models import COAttainmentResult, POAttainmentResult
 from app.modules.attainment.repository import (
-    AttainmentConfigRepository,
     COAttainmentResultRepository,
     POAttainmentResultRepository,
 )
@@ -31,7 +30,6 @@ from app.modules.obe.models import COPOMappingEntry, COPOMappingSet
 class AttainmentEngine:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-        self._config_repo = AttainmentConfigRepository(session)
         self._co_repo = COAttainmentResultRepository(session)
         self._po_repo = POAttainmentResultRepository(session)
 
@@ -53,10 +51,9 @@ class AttainmentEngine:
         curriculum_id = section_offering.curriculum_id
         course_id = section_offering.course_id
 
-        # 2. Load threshold config (program-specific or org-wide default, or use 50/50)
-        config = await self._load_config(org_id, curriculum_id)
-        threshold_co_score_pct = Decimal(str(config.threshold_co_score_pct))
-        threshold_student_pct = Decimal(str(config.threshold_student_pct))
+        # 2. Load attainment thresholds from the curriculum (set by the Program
+        #    Coordinator), falling back to 50/50 if the curriculum is missing.
+        threshold_co_score_pct, threshold_student_pct = await self._load_thresholds(curriculum_id)
 
         # 3. Load LOCKED assessments for this offering
         assessments_result = await self._session.execute(
@@ -248,32 +245,19 @@ class AttainmentEngine:
             )
             await self._po_repo.upsert(po_result)
 
-    async def _load_config(self, org_id: UUID, curriculum_id: UUID) -> AttainmentConfig:
-        """
-        Load attainment config. Returns program-specific config if available,
-        then org-wide default, then a synthetic default with 50/50 thresholds.
-        """
-        # Try to find the program_id from curriculum
+    async def _load_thresholds(self, curriculum_id: UUID) -> tuple[Decimal, Decimal]:
+        """Attainment thresholds (CO-score %, student %) for a curriculum, set by the
+        Program Coordinator. Falls back to 50/50 if the curriculum can't be found."""
         from app.modules.curriculum.models import Curriculum
 
-        curr_result = await self._session.execute(
+        curriculum = (await self._session.execute(
             select(Curriculum).where(Curriculum.id == curriculum_id)
-        )
-        curriculum = curr_result.scalar_one_or_none()
+        )).scalar_one_or_none()
 
         if curriculum is not None:
-            # Try program-specific config first
-            config = await self._config_repo.get_for_program(org_id, curriculum.program_id)
-            if config is not None:
-                return config
+            return (
+                Decimal(str(curriculum.threshold_co_score_pct)),
+                Decimal(str(curriculum.threshold_student_pct)),
+            )
 
-        # Try org-wide default
-        config = await self._config_repo.get_for_org(org_id)
-        if config is not None:
-            return config
-
-        # Return a synthetic default with 50/50 thresholds (not persisted)
-        synthetic = AttainmentConfig()
-        synthetic.threshold_student_pct = Decimal("50.00")
-        synthetic.threshold_co_score_pct = Decimal("50.00")
-        return synthetic
+        return Decimal("50.00"), Decimal("50.00")

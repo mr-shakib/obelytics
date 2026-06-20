@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -17,8 +17,13 @@ from app.modules.assessment.schemas import (
     AssessmentCreate,
     AssessmentResponse,
     AssessmentUpdate,
+    BulkApprovePCRequest,
+    BulkApprovePCResponse,
+    CombinedEndReportPdfRequest,
     CourseEndReportResponse,
     CourseEndReportSubmit,
+    PublicStudentResults,
+    StudentCourseResult,
     EnrollmentBulkCreate,
     EnrollmentBulkResponse,
     EnrollmentCreate,
@@ -78,7 +83,41 @@ def _result_scoped_user_id(manifest: PermissionManifestResponse, current_user: U
     return current_user.id
 
 
+# ── Public result lookup (no authentication) ──────────────────────────────────
+
+@router.get("/public/student-results", response_model=PublicStudentResults)
+async def public_student_results(
+    uid: Annotated[str, Query(description="Student ID number")],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Public lookup of a student's published CO/PO attainment by their student ID
+    number. No authentication required."""
+    svc = MarksheetService(db)
+    data = await svc.get_public_results_by_uid(uid.strip())
+    if data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No student found with that ID. Please check and try again.",
+        )
+    return data
+
+
 # ── Students ──────────────────────────────────────────────────────────────────
+
+@router.get("/students/me/results", response_model=list[StudentCourseResult])
+async def get_my_results(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Published CO/PO attainment results for the logged-in student.
+    Returns an empty list if the user is not linked to a student record."""
+    if current_user.linked_student_id is None:
+        return []
+    svc = MarksheetService(db)
+    return await svc.get_results_for_student(
+        current_user.linked_student_id, current_user.organization_id
+    )
+
 
 @router.get("/students", response_model=list[StudentResponse])
 async def list_students(
@@ -412,6 +451,24 @@ async def bulk_approve_ml(
     return BulkApproveMLResponse(approved_count=approved_count)
 
 
+@router.post("/results/bulk-approve-pc", response_model=BulkApprovePCResponse)
+async def bulk_approve_pc(
+    body: BulkApprovePCRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.approve.pc"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ResultPublicationService(db)
+    published_count = await svc.bulk_approve_pc(
+        current_user.organization_id,
+        body.course_id,
+        current_user.id,
+        batch_id=body.batch_id,
+        academic_term_id=body.academic_term_id,
+    )
+    return BulkApprovePCResponse(published_count=published_count)
+
+
 @router.get("/results/{section_offering_id}", response_model=ResultPublicationResponse)
 async def get_result_publication(
     section_offering_id: UUID,
@@ -645,19 +702,21 @@ async def get_combined_end_report_data(
     return await svc.get_combined_data(course_id, batch_id, academic_term_id, current_user.organization_id)
 
 
-@router.get("/end-reports/combined/pdf")
+@router.post("/end-reports/combined/pdf")
 async def download_combined_end_report_pdf(
-    course_id: UUID,
-    batch_id: UUID,
-    academic_term_id: UUID,
+    body: CombinedEndReportPdfRequest,
     _: Annotated[PermissionManifestResponse, Depends(require_any_permission("result.approve.ml", "result.approve.pc"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    ml_feedback: str = "",
 ):
     svc = CourseEndReportService(db)
     context = await svc.build_combined_end_report_context(
-        course_id, batch_id, academic_term_id, current_user.organization_id, ml_feedback
+        body.course_id,
+        body.batch_id,
+        body.academic_term_id,
+        current_user.organization_id,
+        body.ml_feedback,
+        [j.model_dump() for j in body.unattained_justifications],
     )
     pdf_bytes = render_end_report_pdf(context)
     course_code = context["section"]["course_code"]

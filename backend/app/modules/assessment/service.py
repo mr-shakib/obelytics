@@ -836,6 +836,94 @@ class ResultPublicationService:
         await self._session.commit()
         return len(pubs)
 
+    async def bulk_approve_pc(
+        self,
+        org_id: UUID,
+        course_id: UUID,
+        user_id: UUID,
+        batch_id: UUID | None = None,
+        academic_term_id: UUID | None = None,
+    ) -> int:
+        """Program Coordinator approves every ML_APPROVED section result for a course
+        and publishes them in one action: locks assessments, records the approval and
+        publication, notifies the submitter, and triggers CO/PO attainment computation
+        so enrolled students can see their results."""
+        query = (
+            select(ResultPublication)
+            .join(SectionOffering, SectionOffering.id == ResultPublication.section_offering_id)
+            .where(
+                ResultPublication.organization_id == org_id,
+                SectionOffering.course_id == course_id,
+                ResultPublication.status == "ML_APPROVED",
+            )
+        )
+        if batch_id is not None:
+            query = query.where(SectionOffering.batch_id == batch_id)
+        if academic_term_id is not None:
+            query = query.where(SectionOffering.academic_term_id == academic_term_id)
+
+        pubs = (await self._session.execute(query)).scalars().all()
+
+        now = datetime.now(timezone.utc)
+        offering_ids: list[UUID] = []
+        for pub in pubs:
+            pub.status = "PUBLISHED"
+            pub.pc_approved_by_user_id = user_id
+            pub.pc_approved_at = now
+            pub.published_by_user_id = user_id
+            pub.published_at = now
+            self._session.add(pub)
+            offering_ids.append(pub.section_offering_id)
+
+            # Lock all assessments for this offering
+            assessments = await self._assessment_repo.list_by_offering(pub.section_offering_id)
+            for a in assessments:
+                a.status = "LOCKED"
+                await self._assessment_repo.update(a, {})
+
+            write_audit_log(
+                self._session,
+                entity_type="result_publication",
+                entity_id=pub.id,
+                action="RESULT_PC_APPROVED",
+                org_id=org_id,
+                actor_user_id=user_id,
+                before_status="ML_APPROVED",
+                after_status="PC_APPROVED",
+            )
+            write_audit_log(
+                self._session,
+                entity_type="result_publication",
+                entity_id=pub.id,
+                action="RESULT_PUBLISHED",
+                org_id=org_id,
+                actor_user_id=user_id,
+                before_status="PC_APPROVED",
+                after_status="PUBLISHED",
+            )
+            if pub.submitted_by_user_id:
+                write_notification(
+                    self._session,
+                    org_id=org_id,
+                    recipient_user_id=pub.submitted_by_user_id,
+                    notification_type="RESULT_PUBLISHED",
+                    title="Results have been officially published",
+                    body="The results for your section have been approved by the Program Coordinator and published.",
+                    entity_type="result_publication",
+                    entity_id=pub.id,
+                )
+
+        await self._session.commit()
+
+        # Trigger attainment computation for each published offering
+        from app.modules.attainment.engine import AttainmentEngine
+        engine = AttainmentEngine(self._session)
+        for offering_id in offering_ids:
+            await engine.compute_for_section_offering(offering_id, org_id)
+        await self._session.commit()
+
+        return len(pubs)
+
     async def list_submissions(
         self,
         org_id: UUID,
@@ -1106,24 +1194,19 @@ class MarksheetService:
         return result
 
     async def _load_thresholds(self, org_id: UUID, curriculum_id: UUID) -> tuple[Decimal, Decimal]:
-        from app.modules.attainment.repository import AttainmentConfigRepository
+        """Attainment thresholds are set per-curriculum by the Program Coordinator.
+        Falls back to 50/50 only when the curriculum can't be found."""
         from app.modules.curriculum.models import Curriculum
 
-        config_repo = AttainmentConfigRepository(self._session)
-
-        curr_result = await self._session.execute(
+        curriculum = (await self._session.execute(
             select(Curriculum).where(Curriculum.id == curriculum_id)
-        )
-        curriculum = curr_result.scalar_one_or_none()
+        )).scalar_one_or_none()
 
         if curriculum is not None:
-            config = await config_repo.get_for_program(org_id, curriculum.program_id)
-            if config is not None:
-                return Decimal(str(config.threshold_co_score_pct)), Decimal(str(config.threshold_student_pct))
-
-        config = await config_repo.get_for_org(org_id)
-        if config is not None:
-            return Decimal(str(config.threshold_co_score_pct)), Decimal(str(config.threshold_student_pct))
+            return (
+                Decimal(str(curriculum.threshold_co_score_pct)),
+                Decimal(str(curriculum.threshold_student_pct)),
+            )
 
         return Decimal("50.00"), Decimal("50.00")
 
@@ -1360,6 +1443,123 @@ class MarksheetService:
             pos=po_previews,
             students=students,
         )
+
+    async def get_results_for_student(self, student_id: UUID, org_id: UUID) -> list[dict]:
+        """Published course results for a single student: per-course overall grade plus
+        the student's own CO and PO attainment. Only PUBLISHED section offerings appear."""
+        rows = (await self._session.execute(
+            select(StudentEnrollment, SectionOffering, Course, AcademicTerm)
+            .join(SectionOffering, SectionOffering.id == StudentEnrollment.section_offering_id)
+            .join(ResultPublication, ResultPublication.section_offering_id == SectionOffering.id)
+            .join(Course, Course.id == SectionOffering.course_id)
+            .join(AcademicTerm, AcademicTerm.id == SectionOffering.academic_term_id)
+            .where(
+                StudentEnrollment.student_id == student_id,
+                StudentEnrollment.organization_id == org_id,
+                ResultPublication.status == "PUBLISHED",
+            )
+            .order_by(AcademicTerm.year.desc(), Course.code)
+        )).all()
+
+        results: list[dict] = []
+        for enrollment, offering, course, term in rows:
+            attainment = await self.get_attainment(offering.id, org_id)
+            student_row = next(
+                (s for s in attainment.students if s.enrollment_id == enrollment.id), None
+            )
+            if student_row is None:
+                continue
+            threshold = float(attainment.threshold_co_score_pct)
+
+            co_stmt = {
+                co.code: co.statement
+                for co in (await self._session.execute(
+                    select(CourseOutcome).where(CourseOutcome.course_id == offering.course_id)
+                )).scalars().all()
+            }
+            co_results = [
+                {
+                    "co_code": code,
+                    "co_statement": co_stmt.get(code, ""),
+                    "attainment_percentage": round(float(student_row.co_pct.get(code, 0)), 2),
+                    "threshold": threshold,
+                    "is_threshold_met": bool(student_row.co_results.get(code, False)),
+                }
+                for code in student_row.co_pct
+            ]
+
+            po_codes = list(student_row.po_pct.keys())
+            po_stmt: dict[str, str] = {}
+            if po_codes:
+                program_id = (await self._session.execute(
+                    select(Curriculum.program_id).where(Curriculum.id == offering.curriculum_id)
+                )).scalar_one_or_none()
+                if program_id:
+                    po_stmt = {
+                        po.code: po.statement
+                        for po in (await self._session.execute(
+                            select(ProgramOutcome).where(
+                                ProgramOutcome.program_id == program_id,
+                                ProgramOutcome.code.in_(po_codes),
+                            )
+                        )).scalars().all()
+                    }
+            po_results = [
+                {
+                    "po_code": code,
+                    "po_statement": po_stmt.get(code),
+                    "attainment_percentage": round(float(student_row.po_pct.get(code, 0)), 2),
+                    "threshold": threshold,
+                    "is_threshold_met": bool(student_row.po_results.get(code, False)),
+                }
+                for code in po_codes
+            ]
+
+            # Overall marks + grade from the marksheet
+            questions = await self._question_repo.list_by_offering(offering.id)
+            total_max = sum((Decimal(str(q.max_marks)) for q in questions), Decimal("0"))
+            obtained = Decimal("0")
+            for m in await self._mark_repo.list_by_offering(offering.id):
+                if (
+                    m.student_enrollment_id == enrollment.id
+                    and not m.is_absent
+                    and m.marks_obtained is not None
+                ):
+                    obtained += Decimal(str(m.marks_obtained))
+            pct = float(obtained / total_max * Decimal("100")) if total_max > 0 else 0.0
+
+            results.append({
+                "course_code": course.code,
+                "course_title": course.title,
+                "term_name": term.name,
+                "result_status": "PUBLISHED",
+                "total_marks_obtained": round(float(obtained), 2),
+                "total_marks": round(float(total_max), 2),
+                "percentage": round(pct, 2),
+                "grade": _pct_to_grade(pct) if total_max > 0 else None,
+                "co_results": co_results,
+                "po_results": po_results,
+            })
+
+        return results
+
+    async def get_public_results_by_uid(self, uid: str) -> dict | None:
+        """Public result lookup by student ID number (no authentication). Returns the
+        student's name plus their published CO/PO attainment, or None if no matching
+        active student exists."""
+        student = (await self._session.execute(
+            select(Student)
+            .where(Student.student_id_number == uid, Student.status != "WITHDRAWN")
+            .limit(1)
+        )).scalar_one_or_none()
+        if student is None:
+            return None
+        results = await self.get_results_for_student(student.id, student.organization_id)
+        return {
+            "student_id_number": student.student_id_number,
+            "full_name": student.full_name,
+            "results": results,
+        }
 
     async def build_report_context(self, offering_id: UUID, org_id: UUID) -> dict:
         offering = await self._offering_repo.get_by_id(offering_id, org_id)
@@ -1624,88 +1824,45 @@ class CourseEndReportService:
         await self._session.refresh(report)
         return report
 
-    async def build_end_report_context(self, section_offering_id: UUID, org_id: UUID) -> dict:
-        report = await self.get(section_offering_id)
-        if report is None:
-            from app.modules.assessment.exceptions import EndReportNotFoundError
-            raise EndReportNotFoundError()
-
-        row = (await self._session.execute(
-            select(
-                Course.code.label("course_code"),
-                Course.title.label("course_title"),
-                Course.credits.label("credits"),
-                Course.theory_hours.label("theory_hours"),
-                Course.lab_hours.label("lab_hours"),
-                AcademicTerm.name.label("term_name"),
-                AcademicTerm.year.label("term_year"),
-                AcademicTerm.season.label("term_season"),
-                Section.name.label("section_name"),
-                Batch.name.label("batch_name"),
-                SectionOffering.curriculum_id,
-                SectionOffering.course_id,
-            )
-            .select_from(SectionOffering)
-            .join(Course, Course.id == SectionOffering.course_id)
-            .join(AcademicTerm, AcademicTerm.id == SectionOffering.academic_term_id)
-            .join(Section, Section.id == SectionOffering.section_id)
-            .join(Batch, Batch.id == SectionOffering.batch_id)
-            .where(SectionOffering.id == section_offering_id)
-        )).first()
-
-        if row is None:
-            raise SectionOfferingNotFoundError()
-
-        program_acronym = ""
-        department_name = ""
-        curriculum_row = (await self._session.execute(
-            select(Curriculum).where(Curriculum.id == row.curriculum_id)
-        )).scalar_one_or_none()
-        if curriculum_row:
-            prog = (await self._session.execute(
-                select(Program).where(Program.id == curriculum_row.program_id)
+    async def _get_co_threshold(self, org_id: UUID, curriculum_id: UUID | None = None) -> float:
+        """CO attainment threshold (%) for a curriculum, set by the Program Coordinator.
+        Defaults to 50 when the curriculum can't be resolved."""
+        if curriculum_id is not None:
+            curriculum = (await self._session.execute(
+                select(Curriculum).where(Curriculum.id == curriculum_id)
             )).scalar_one_or_none()
-            if prog:
-                program_acronym = prog.acronym
-                dept = (await self._session.execute(
-                    select(Department).where(Department.id == prog.department_id)
-                )).scalar_one_or_none()
-                if dept:
-                    department_name = f"{dept.name} ({dept.short_name})"
+            if curriculum is not None:
+                return float(curriculum.threshold_co_score_pct)
+        return 50.0
 
-        teacher_info = None
-        if report.created_by_user_id:
-            user = (await self._session.execute(
-                select(User).where(User.id == report.created_by_user_id)
-            )).scalar_one_or_none()
-            if user:
-                teacher_info = {
-                    "full_name": user.full_name,
-                    "designation": user.designation or "",
-                    "email": user.email or "",
-                }
-
-        co_rows = list((await self._session.execute(
-            select(CourseOutcome)
-            .where(
-                CourseOutcome.curriculum_id == row.curriculum_id,
-                CourseOutcome.course_id == row.course_id,
-            )
-            .order_by(CourseOutcome.code)
-        )).scalars().all())
-        if not co_rows:
+    async def _build_co_outcome_rows(
+        self, curriculum_id: UUID | None, course_id: UUID
+    ) -> list[dict]:
+        """Build the Section-1 CO table rows (code, statement, and the PO / learning
+        domain / knowledge profile / complex problem / complex activity mappings).
+        Shared by the per-section and combined end reports so both render mappings."""
+        co_rows: list = []
+        if curriculum_id is not None:
             co_rows = list((await self._session.execute(
                 select(CourseOutcome)
-                .where(CourseOutcome.course_id == row.course_id)
+                .where(
+                    CourseOutcome.curriculum_id == curriculum_id,
+                    CourseOutcome.course_id == course_id,
+                )
+                .order_by(CourseOutcome.code)
+            )).scalars().all())
+        if not co_rows:
+            all_rows = list((await self._session.execute(
+                select(CourseOutcome)
+                .where(CourseOutcome.course_id == course_id)
                 .order_by(CourseOutcome.code)
             )).scalars().all())
             seen: set[str] = set()
-            unique: list = []
-            for co in co_rows:
+            co_rows = []
+            for co in all_rows:
                 if co.code not in seen:
                     seen.add(co.code)
-                    unique.append(co)
-            co_rows = unique
+                    co_rows.append(co)
 
         co_ids = [co.id for co in co_rows]
 
@@ -1724,18 +1881,17 @@ class CourseEndReportService:
 
         mapping_set = None
         if co_ids:
-            mapping_set_result = await self._session.execute(
-                select(COPOMappingSet).where(
-                    and_(COPOMappingSet.curriculum_id == row.curriculum_id, COPOMappingSet.course_id == row.course_id)
-                )
-            )
-            mapping_set = mapping_set_result.scalar_one_or_none()
+            if curriculum_id is not None:
+                mapping_set = (await self._session.execute(
+                    select(COPOMappingSet).where(
+                        and_(COPOMappingSet.curriculum_id == curriculum_id, COPOMappingSet.course_id == course_id)
+                    )
+                )).scalar_one_or_none()
             if mapping_set is None:
-                fallback = await self._session.execute(
-                    select(COPOMappingSet).where(COPOMappingSet.course_id == row.course_id)
+                mapping_set = (await self._session.execute(
+                    select(COPOMappingSet).where(COPOMappingSet.course_id == course_id)
                     .order_by(COPOMappingSet.created_at.desc()).limit(1)
-                )
-                mapping_set = fallback.scalar_one_or_none()
+                )).scalar_one_or_none()
 
         po_by_co: dict[UUID, list[str]] = defaultdict(list)
         if mapping_set:
@@ -1799,7 +1955,7 @@ class CourseEndReportService:
             if c:
                 bloom_by_co[bl.course_outcome_id].append(c)
 
-        course_outcomes = [
+        return [
             {
                 "code": co.code,
                 "statement": co.statement,
@@ -1812,6 +1968,69 @@ class CourseEndReportService:
             for co in co_rows
         ]
 
+    async def build_end_report_context(self, section_offering_id: UUID, org_id: UUID) -> dict:
+        report = await self.get(section_offering_id)
+        if report is None:
+            from app.modules.assessment.exceptions import EndReportNotFoundError
+            raise EndReportNotFoundError()
+
+        row = (await self._session.execute(
+            select(
+                Course.code.label("course_code"),
+                Course.title.label("course_title"),
+                Course.credits.label("credits"),
+                Course.theory_hours.label("theory_hours"),
+                Course.lab_hours.label("lab_hours"),
+                AcademicTerm.name.label("term_name"),
+                AcademicTerm.year.label("term_year"),
+                AcademicTerm.season.label("term_season"),
+                Section.name.label("section_name"),
+                Batch.name.label("batch_name"),
+                SectionOffering.curriculum_id,
+                SectionOffering.course_id,
+            )
+            .select_from(SectionOffering)
+            .join(Course, Course.id == SectionOffering.course_id)
+            .join(AcademicTerm, AcademicTerm.id == SectionOffering.academic_term_id)
+            .join(Section, Section.id == SectionOffering.section_id)
+            .join(Batch, Batch.id == SectionOffering.batch_id)
+            .where(SectionOffering.id == section_offering_id)
+        )).first()
+
+        if row is None:
+            raise SectionOfferingNotFoundError()
+
+        program_acronym = ""
+        department_name = ""
+        curriculum_row = (await self._session.execute(
+            select(Curriculum).where(Curriculum.id == row.curriculum_id)
+        )).scalar_one_or_none()
+        if curriculum_row:
+            prog = (await self._session.execute(
+                select(Program).where(Program.id == curriculum_row.program_id)
+            )).scalar_one_or_none()
+            if prog:
+                program_acronym = prog.acronym
+                dept = (await self._session.execute(
+                    select(Department).where(Department.id == prog.department_id)
+                )).scalar_one_or_none()
+                if dept:
+                    department_name = f"{dept.name} ({dept.short_name})"
+
+        teacher_info = None
+        if report.created_by_user_id:
+            user = (await self._session.execute(
+                select(User).where(User.id == report.created_by_user_id)
+            )).scalar_one_or_none()
+            if user:
+                teacher_info = {
+                    "full_name": user.full_name,
+                    "designation": user.designation or "",
+                    "email": user.email or "",
+                }
+
+        course_outcomes = await self._build_co_outcome_rows(row.curriculum_id, row.course_id)
+
         grade_distribution = report.grade_distribution or {}
         total_students = sum(grade_distribution.get(g, 0) for g in GRADES)
 
@@ -1821,8 +2040,13 @@ class CourseEndReportService:
             for code, pct in co_attainment.items()
         ]
 
+        threshold = float((await self._get_co_threshold(org_id, row.curriculum_id)))
         unattained = report.unattained_co_explanations or []
-        empty_explanation_rows = max(0, 2 - len(unattained))
+        # All COs attained when attainment data exists and none falls below threshold.
+        all_co_attained = bool(co_attainment) and all(
+            float(pct) >= threshold for pct in co_attainment.values()
+        )
+        empty_explanation_rows = 0 if all_co_attained else max(0, 2 - len(unattained))
 
         feedback_text = report.teacher_feedback or ""
         feedback_lines = [line.strip() for line in feedback_text.split("\n") if line.strip()] if feedback_text else []
@@ -1859,6 +2083,7 @@ class CourseEndReportService:
             "co_attainment_entries": co_attainment_entries,
             "unattained_co_explanations": unattained,
             "empty_explanation_rows": empty_explanation_rows,
+            "all_co_attained": all_co_attained,
             "feedback_lines": feedback_lines,
             "org": {
                 "name": org.name if org else "",
@@ -1951,6 +2176,12 @@ class CourseEndReportService:
             for code in co_attainment_sums
         }
 
+        curriculum_id = rows[0][0].curriculum_id if rows else None
+        threshold = await self._get_co_threshold(org_id, curriculum_id)
+        unattained_cos = sorted(
+            code for code, pct in co_attainment_avg.items() if float(pct) < threshold
+        )
+
         course_row = (await self._session.execute(
             select(Course.code, Course.title, Course.credits, Course.theory_hours, Course.lab_hours)
             .where(Course.id == course_id)
@@ -1976,10 +2207,13 @@ class CourseEndReportService:
             "combined_co_attainment": co_attainment_avg,
             "all_unattained_explanations": all_unattained,
             "section_feedbacks": section_feedbacks,
+            "co_threshold": threshold,
+            "unattained_cos": unattained_cos,
         }
 
     async def build_combined_end_report_context(
-        self, course_id: UUID, batch_id: UUID, academic_term_id: UUID, org_id: UUID, ml_feedback: str = "",
+        self, course_id: UUID, batch_id: UUID, academic_term_id: UUID, org_id: UUID,
+        ml_feedback: str = "", unattained_justifications: list[dict] | None = None,
     ) -> dict:
         data = await self.get_combined_data(course_id, batch_id, academic_term_id, org_id)
 
@@ -1993,13 +2227,14 @@ class CourseEndReportService:
 
         program_acronym = ""
         department_name = ""
+        curriculum_id = None
         if first_offering_id:
-            offering_row = (await self._session.execute(
+            curriculum_id = (await self._session.execute(
                 select(SectionOffering.curriculum_id).where(SectionOffering.id == first_offering_id)
             )).scalar_one_or_none()
-            if offering_row:
+            if curriculum_id:
                 curriculum_row = (await self._session.execute(
-                    select(Curriculum).where(Curriculum.id == offering_row)
+                    select(Curriculum).where(Curriculum.id == curriculum_id)
                 )).scalar_one_or_none()
                 if curriculum_row:
                     prog = (await self._session.execute(
@@ -2019,19 +2254,7 @@ class CourseEndReportService:
         if org and org.logo_file_key:
             logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
 
-        co_rows = list((await self._session.execute(
-            select(CourseOutcome)
-            .where(CourseOutcome.course_id == course_id)
-            .order_by(CourseOutcome.code)
-        )).scalars().all())
-        seen_codes: set[str] = set()
-        unique_cos: list = []
-        for co in co_rows:
-            if co.code not in seen_codes:
-                seen_codes.add(co.code)
-                unique_cos.append(co)
-
-        course_outcomes = [{"code": co.code, "statement": co.statement} for co in unique_cos]
+        course_outcomes = await self._build_co_outcome_rows(curriculum_id, course_id)
 
         co_attainment_entries = [
             {"code": code, "pct": pct}
@@ -2039,8 +2262,25 @@ class CourseEndReportService:
         ]
 
         total_students = sum(data["combined_grade_distribution"].get(g, 0) for g in GRADES)
-        unattained = data["all_unattained_explanations"]
-        empty_explanation_rows = max(0, 2 - len(unattained))
+        # Combined report is authored by the Module Leader: section teachers' CO
+        # justifications are excluded. Instead the ML justifies each unattained CO
+        # (combined attainment below threshold). When every CO is attained, the
+        # template prints "All COs attained" rather than empty cells.
+        unattained_cos: list[str] = data["unattained_cos"]
+        all_co_attained = bool(data["combined_co_attainment"]) and not unattained_cos
+        justification_map = {
+            (j.get("co_code") or "").strip(): j
+            for j in (unattained_justifications or [])
+        }
+        unattained: list[dict] = [
+            {
+                "co_code": code,
+                "reason": (justification_map.get(code, {}).get("reason") or "").strip(),
+                "suggestion": (justification_map.get(code, {}).get("suggestion") or "").strip(),
+            }
+            for code in unattained_cos
+        ]
+        empty_explanation_rows = 0 if (all_co_attained or unattained) else 2
 
         ml_feedback_lines = [l.strip() for l in ml_feedback.split("\n") if l.strip()] if ml_feedback else []
 
@@ -2072,8 +2312,11 @@ class CourseEndReportService:
             "co_attainment_entries": co_attainment_entries,
             "unattained_co_explanations": unattained,
             "empty_explanation_rows": empty_explanation_rows,
+            "all_co_attained": all_co_attained,
             "feedback_lines": ml_feedback_lines,
-            "section_feedbacks": data["section_feedbacks"],
+            # Section teacher feedback is excluded from the combined report — the ML's
+            # overall feedback above is the only commentary shown.
+            "section_feedbacks": [],
             "org": {
                 "name": org.name if org else "",
                 "short_name": org.short_name if org else "",
