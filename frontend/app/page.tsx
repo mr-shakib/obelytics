@@ -689,6 +689,7 @@ export default function LandingPage() {
           <a href="#features">Features</a>
           <a href="#workflow">How It Works</a>
           <a href="#modules">Modules</a>
+          <Link href="/result">Check Result</Link>
           <Link href="/login" className="nav-cta">Sign In</Link>
         </div>
       </nav>
@@ -717,12 +718,12 @@ export default function LandingPage() {
             </p>
             <div className="hero-actions">
               <Link href="/login" className="btn-primary">Get Started Free</Link>
-              <a href="#workflow" className="btn-secondary">
-                See how it works
+              <Link href="/result" className="btn-secondary">
+                Check your result
                 <svg viewBox="0 0 16 16" fill="none" width="14" height="14" stroke="currentColor" strokeWidth="2">
                   <path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-              </a>
+              </Link>
             </div>
           </div>
 

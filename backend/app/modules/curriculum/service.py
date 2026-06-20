@@ -25,6 +25,7 @@ from app.modules.curriculum.exceptions import (
     SectionConflictError,
     SectionNotFoundError,
     SectionOfferingConflictError,
+    SectionOfferingHasDependentsError,
     SectionOfferingNotFoundError,
 )
 from app.modules.curriculum.models import (
@@ -128,6 +129,8 @@ class CurriculumService:
             effective_year=body.effective_year,
             version_number=1,
             status="DRAFT",
+            threshold_co_score_pct=body.threshold_co_score_pct,
+            threshold_student_pct=body.threshold_student_pct,
         )
         result = await self._repo.create(curriculum)
         await self._session.commit()
@@ -1190,7 +1193,19 @@ class SectionOfferingService:
             raise SectionOfferingNotFoundError()
         return offering
 
-    async def delete(self, offering_id: UUID, org_id: UUID, acting_user_id: UUID | None = None) -> None:
+    async def get_dependents(self, offering_id: UUID, org_id: UUID) -> dict[str, int]:
+        offering = await self._repo.get_by_id(offering_id, org_id)
+        if offering is None:
+            raise SectionOfferingNotFoundError()
+        return await self._repo.count_dependents(offering_id)
+
+    async def delete(
+        self,
+        offering_id: UUID,
+        org_id: UUID,
+        acting_user_id: UUID | None = None,
+        cascade: bool = False,
+    ) -> None:
         offering = await self._repo.get_by_id(offering_id, org_id)
         if offering is None:
             raise SectionOfferingNotFoundError()
@@ -1198,6 +1213,22 @@ class SectionOfferingService:
             await _assert_module_leader(
                 self._session, offering.batch_id, offering.academic_term_id, offering.course_id, acting_user_id
             )
+
+        dependents = await self._repo.count_dependents(offering_id)
+        if any(dependents.values()):
+            if not cascade:
+                raise SectionOfferingHasDependentsError()
+            # Capture users whose scoped role grants we're about to remove so we can
+            # refresh their permission manifests after the cascade.
+            affected_user_ids = await self._repo.assigned_user_ids(offering_id)
+            await self._repo.cascade_delete(offering_id)
+            if affected_user_ids:
+                from app.modules.iam.service.permission_service import PermissionManifestBuilder
+
+                builder = PermissionManifestBuilder(self._session)
+                for user_id in affected_user_ids:
+                    await builder.invalidate(user_id)
+
         await self._repo.delete(offering)
         await self._session.commit()
 

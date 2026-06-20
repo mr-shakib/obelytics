@@ -100,6 +100,18 @@ class SectionOfferingConflictError(HTTPException):
         )
 
 
+class SectionOfferingHasDependentsError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This section has related data (enrollments, assessments, marks, "
+                "results, or reports). Confirm a cascade delete to remove it along "
+                "with all dependent records."
+            ),
+        )
+
+
 class FacultyAssignmentNotFoundError(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Faculty assignment not found")

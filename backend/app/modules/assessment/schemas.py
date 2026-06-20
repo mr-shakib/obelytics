@@ -237,6 +237,55 @@ class BulkApproveMLResponse(BaseModel):
     approved_count: int
 
 
+class BulkApprovePCRequest(BaseModel):
+    course_id: UUID
+    batch_id: Optional[UUID] = None
+    academic_term_id: Optional[UUID] = None
+
+
+class BulkApprovePCResponse(BaseModel):
+    published_count: int
+
+
+# ── Student results (CO/PO attainment) ────────────────────────────────────────
+
+class StudentCOResult(BaseModel):
+    co_code: str
+    co_statement: str
+    attainment_percentage: float
+    threshold: float
+    is_threshold_met: bool
+
+
+class StudentPOResult(BaseModel):
+    po_code: str
+    po_statement: Optional[str] = None
+    attainment_percentage: float
+    threshold: float
+    is_threshold_met: bool
+
+
+class StudentCourseResult(BaseModel):
+    course_code: str
+    course_title: str
+    term_name: str
+    result_status: str
+    total_marks_obtained: float
+    total_marks: float
+    percentage: float
+    grade: Optional[str] = None
+    co_results: list[StudentCOResult] = Field(default_factory=list)
+    po_results: list[StudentPOResult] = Field(default_factory=list)
+
+
+class PublicStudentResults(BaseModel):
+    """Public (unauthenticated) result lookup payload."""
+
+    student_id_number: str
+    full_name: str
+    results: list[StudentCourseResult] = Field(default_factory=list)
+
+
 # ── Marksheet ─────────────────────────────────────────────────────────────────
 
 class MarksheetQuestionInput(BaseModel):
@@ -351,6 +400,17 @@ class UnattainedCOExplanation(BaseModel):
     co_code: str
     reason: str
     suggestion: str
+
+
+class CombinedEndReportPdfRequest(BaseModel):
+    """Module Leader's input when generating the combined course end report PDF."""
+
+    course_id: UUID
+    batch_id: UUID
+    academic_term_id: UUID
+    ml_feedback: str = ""
+    # ML's justification for each unattained CO (combined attainment below threshold).
+    unattained_justifications: list[UnattainedCOExplanation] = Field(default_factory=list)
 
 
 class CourseEndReportCreate(BaseModel):

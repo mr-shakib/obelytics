@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
-import { ArrowLeft, ArrowRight, Download, FileText, Loader2, Send } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, Download, FileText, Loader2, Send } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -71,6 +71,7 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
   const code = searchParams.get("code")
   const title = searchParams.get("title")
   const canSubmitToPC = useHasAnyPermission(["result.approve.ml"])
+  const canApprovePC = useHasAnyPermission(["result.approve.pc"])
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
 
   const { data: submissions = [], isLoading } = useQuery({
@@ -97,6 +98,22 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
       qc.invalidateQueries({ queryKey: queryKeys.results.all })
     },
     onError: () => toast.error("Failed to submit results to the Program Coordinator"),
+  })
+
+  const bulkApprovePCMutation = useMutation({
+    mutationFn: async (vars: { batchId: string; academicTermId: string }) => {
+      const { data } = await apiClient.POST("/results/bulk-approve-pc" as never, {
+        body: { course_id: courseId, batch_id: vars.batchId, academic_term_id: vars.academicTermId },
+      } as never)
+      return (data as unknown) as { published_count: number }
+    },
+    onSuccess: (data) => {
+      toast.success(
+        `Approved & published ${data.published_count} section${data.published_count === 1 ? "" : "s"} — students can now see their results`
+      )
+      qc.invalidateQueries({ queryKey: queryKeys.results.all })
+    },
+    onError: () => toast.error("Failed to approve and publish results"),
   })
 
   async function handleDownloadCombinedReport(group: { label: string; batch_id: string; academic_term_id: string }) {
@@ -163,10 +180,15 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
       <div className="space-y-4">
         {termGroups.map((group) => {
           const reviewCount = group.items.filter((i) => i.status === "SUBMITTED").length
+          const pcReviewCount = group.items.filter((i) => i.status === "ML_APPROVED").length
           const isSubmitting =
             bulkApproveMutation.isPending &&
             bulkApproveMutation.variables?.batchId === group.batch_id &&
             bulkApproveMutation.variables?.academicTermId === group.academic_term_id
+          const isPublishing =
+            bulkApprovePCMutation.isPending &&
+            bulkApprovePCMutation.variables?.batchId === group.batch_id &&
+            bulkApprovePCMutation.variables?.academicTermId === group.academic_term_id
           const isDownloading = downloadingKey === group.label
 
           return (
@@ -207,6 +229,18 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                   >
                     {isSubmitting ? <Loader2 className="animate-spin" /> : <Send />}
                     Submit {reviewCount} section{reviewCount === 1 ? "" : "s"} to Program Coordinator
+                  </Button>
+                )}
+                {canApprovePC && pcReviewCount > 0 && (
+                  <Button
+                    size="sm"
+                    disabled={isPublishing}
+                    onClick={() =>
+                      bulkApprovePCMutation.mutate({ batchId: group.batch_id, academicTermId: group.academic_term_id })
+                    }
+                  >
+                    {isPublishing ? <Loader2 className="animate-spin" /> : <Check />}
+                    Approve &amp; publish {pcReviewCount} section{pcReviewCount === 1 ? "" : "s"}
                   </Button>
                 )}
               </div>

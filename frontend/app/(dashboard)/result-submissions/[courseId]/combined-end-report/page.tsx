@@ -34,7 +34,11 @@ type CombinedData = {
   combined_co_attainment: Record<string, number>
   all_unattained_explanations: { co_code: string; reason: string; suggestion: string; section_name: string }[]
   section_feedbacks: { section_name: string; feedback: string }[]
+  co_threshold: number
+  unattained_cos: string[]
 }
+
+type Justification = { reason: string; suggestion: string }
 
 export default function CombinedEndReportPage() {
   const params = useParams()
@@ -46,7 +50,14 @@ export default function CombinedEndReportPage() {
   const code = searchParams.get("code") ?? ""
   const title = searchParams.get("title") ?? ""
   const [mlFeedback, setMlFeedback] = useState("")
+  const [justifications, setJustifications] = useState<Record<string, Justification>>({})
   const [isDownloading, setIsDownloading] = useState(false)
+
+  const setJustification = (coCode: string, field: keyof Justification, value: string) =>
+    setJustifications((prev) => {
+      const current = prev[coCode] ?? { reason: "", suggestion: "" }
+      return { ...prev, [coCode]: { ...current, [field]: value } }
+    })
 
   const { data, isLoading } = useQuery({
     queryKey: ["end-reports", "combined", courseId, batchId, termId],
@@ -62,10 +73,23 @@ export default function CombinedEndReportPage() {
   async function handleDownloadPdf() {
     setIsDownloading(true)
     try {
-      const feedbackParam = encodeURIComponent(mlFeedback)
-      const { data: blob, error } = await apiClient.GET(
-        `/end-reports/combined/pdf?course_id=${courseId}&batch_id=${batchId}&academic_term_id=${termId}&ml_feedback=${feedbackParam}` as never,
-        { parseAs: "blob" } as never
+      const unattained_justifications = (data?.unattained_cos ?? []).map((co_code) => ({
+        co_code,
+        reason: justifications[co_code]?.reason ?? "",
+        suggestion: justifications[co_code]?.suggestion ?? "",
+      }))
+      const { data: blob, error } = await apiClient.POST(
+        `/end-reports/combined/pdf` as never,
+        {
+          body: {
+            course_id: courseId,
+            batch_id: batchId,
+            academic_term_id: termId,
+            ml_feedback: mlFeedback,
+            unattained_justifications,
+          },
+          parseAs: "blob",
+        } as never
       )
       if (error || !blob) {
         toast.error("Failed to generate combined end report PDF")
@@ -259,6 +283,52 @@ export default function CombinedEndReportPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ML Unattained CO Justification */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Unattained CO Justification (Module Leader)</CardTitle>
+          <CardDescription>
+            {data.unattained_cos.length > 0
+              ? `These COs have combined attainment below the ${data.co_threshold}% threshold. Provide your justification — it appears in Section 4 of the PDF.`
+              : "All COs meet the attainment threshold. The PDF will state that all COs are attained."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {data.unattained_cos.length === 0 ? (
+            <p className="text-sm text-green-600">All COs attained — no justification required.</p>
+          ) : (
+            data.unattained_cos.map((coCode) => (
+              <div key={coCode} className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive">{coCode}</Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {data.combined_co_attainment[coCode]}% attained
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Identified reasons behind CO &lt; {data.co_threshold}%</Label>
+                  <Textarea
+                    rows={2}
+                    value={justifications[coCode]?.reason ?? ""}
+                    onChange={(e) => setJustification(coCode, "reason", e.target.value)}
+                    placeholder="Why did this CO fall below the threshold?"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Suggestions for improvement</Label>
+                  <Textarea
+                    rows={2}
+                    value={justifications[coCode]?.suggestion ?? ""}
+                    onChange={(e) => setJustification(coCode, "suggestion", e.target.value)}
+                    placeholder="How can attainment of this CO be improved?"
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       {/* ML Feedback */}
       <Card>

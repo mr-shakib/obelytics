@@ -37,6 +37,11 @@ class Curriculum(Base):
         nullable=True,
     )
     status = Column(String(20), nullable=False, server_default="DRAFT")
+    # Attainment thresholds for this curriculum, set by the Program Coordinator.
+    # threshold_co_score_pct: a student attains a CO/PO when their score ≥ this %.
+    # threshold_student_pct: a CO is attained when ≥ this % of students attain it.
+    threshold_co_score_pct = Column(Numeric(5, 2), nullable=False, server_default=sa.text("50.00"))
+    threshold_student_pct = Column(Numeric(5, 2), nullable=False, server_default=sa.text("50.00"))
     archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(

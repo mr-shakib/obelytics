@@ -112,8 +112,6 @@ class ProgramCreate(BaseModel):
     total_credits: int = Field(ge=1, le=500)
     study_mode: str = Field(pattern="^(FULL_TIME|PART_TIME)$")
     description: str | None = None
-    threshold_co_score_pct: float = Field(default=50.0, ge=0, le=100)
-    threshold_student_pct: float = Field(default=50.0, ge=0, le=100)
 
 
 class ProgramUpdate(BaseModel):
@@ -124,8 +122,6 @@ class ProgramUpdate(BaseModel):
     total_credits: int | None = Field(default=None, ge=1, le=500)
     study_mode: str | None = Field(default=None, pattern="^(FULL_TIME|PART_TIME)$")
     description: str | None = None
-    threshold_co_score_pct: float | None = Field(default=None, ge=0, le=100)
-    threshold_student_pct: float | None = Field(default=None, ge=0, le=100)
 
 
 class ProgramResponse(BaseModel):
@@ -143,7 +139,5 @@ class ProgramResponse(BaseModel):
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
-    threshold_co_score_pct: float = 50.0
-    threshold_student_pct: float = 50.0
 
     model_config = {"from_attributes": True}

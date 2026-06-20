@@ -17,6 +17,14 @@ interface COResult {
   is_threshold_met: boolean
 }
 
+interface POResult {
+  po_code: string
+  po_statement?: string | null
+  attainment_percentage: number
+  threshold: number
+  is_threshold_met: boolean
+}
+
 interface CourseResult {
   course_code: string
   course_title: string
@@ -27,13 +35,14 @@ interface CourseResult {
   percentage: number
   grade?: string
   co_results: COResult[]
+  po_results: POResult[]
 }
 
 export function MyResultsClient() {
   const { data, isLoading } = useQuery({
     queryKey: ["student", "results"],
     queryFn: async () => {
-      const { data } = await apiClient.GET("/assessment/students/me/results" as never)
+      const { data } = await apiClient.GET("/students/me/results" as never)
       return (data as unknown) as CourseResult[]
     },
   })
@@ -117,6 +126,34 @@ export function MyResultsClient() {
                   </span>
                 ))}
               </div>
+
+              {course.po_results?.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    PO Attainment
+                  </p>
+                  <div className="space-y-1.5">
+                    {course.po_results.map((po) => (
+                      <div key={po.po_code} className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-semibold w-12 shrink-0">{po.po_code}</span>
+                        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              po.is_threshold_met ? "bg-green-500" : "bg-red-500"
+                            )}
+                            style={{ width: `${Math.min(100, Math.max(0, po.attainment_percentage))}%` }}
+                          />
+                        </div>
+                        <span className="text-xs tabular-nums w-12 text-right text-muted-foreground">
+                          {po.attainment_percentage.toFixed(1)}%
+                        </span>
+                        <span className="text-xs w-4">{po.is_threshold_met ? "✓" : "✗"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           )}
         </Card>

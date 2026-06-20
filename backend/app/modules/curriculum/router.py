@@ -53,6 +53,7 @@ from app.modules.curriculum.schemas import (
     PrerequisiteResponse,
     SectionCreate,
     SectionOfferingCreate,
+    SectionOfferingDependents,
     SectionOfferingResponse,
     SectionOfferingUpdate,
     SectionResponse,
@@ -679,15 +680,36 @@ async def add_batch_term_offering(
     )
 
 
+@router.get(
+    "/section-offerings/{offering_id}/dependents",
+    response_model=SectionOfferingDependents,
+)
+async def get_section_offering_dependents(
+    offering_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_any_permission("section_offering.create", "section_offering.manage_own"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = SectionOfferingService(db)
+    counts = await svc.get_dependents(offering_id, current_user.organization_id)
+    return SectionOfferingDependents(**counts)
+
+
 @router.delete("/section-offerings/{offering_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_section_offering(
     offering_id: UUID,
     manifest: Annotated[PermissionManifestResponse, Depends(require_any_permission("section_offering.create", "section_offering.manage_own"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    cascade: Annotated[bool, Query(description="Delete dependent records (enrollments, marks, results, reports) along with the section")] = False,
 ):
     svc = SectionOfferingService(db)
-    await svc.delete(offering_id, current_user.organization_id, acting_user_id=_scoped_user_id(manifest, current_user))
+    await svc.delete(
+        offering_id,
+        current_user.organization_id,
+        acting_user_id=_scoped_user_id(manifest, current_user),
+        cascade=cascade,
+    )
 
 
 @router.patch("/batches/{batch_id}", response_model=BatchResponse)
