@@ -36,11 +36,9 @@ class AttainmentConfigService:
         if config is not None:
             return config
 
-        # Create org-wide default with 50/50 thresholds
         default_config = AttainmentConfig(
             organization_id=org_id,
             program_id=None,
-            threshold_student_pct=Decimal("50.00"),
             threshold_co_score_pct=Decimal("50.00"),
         )
         result = await self._repo.create(default_config)
@@ -58,7 +56,6 @@ class AttainmentConfigService:
                 config = AttainmentConfig(
                     organization_id=org_id,
                     program_id=program_id,
-                    threshold_student_pct=Decimal("50.00"),
                     threshold_co_score_pct=Decimal("50.00"),
                 )
                 config = await self._repo.create(config)
@@ -68,7 +65,6 @@ class AttainmentConfigService:
                 config = AttainmentConfig(
                     organization_id=org_id,
                     program_id=None,
-                    threshold_student_pct=Decimal("50.00"),
                     threshold_co_score_pct=Decimal("50.00"),
                 )
                 config = await self._repo.create(config)

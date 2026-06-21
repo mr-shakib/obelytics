@@ -5,6 +5,7 @@ import {
   GraduationCap,
   Users,
   Shield,
+  ShieldCheck,
   Database,
   BookOpen,
   BookCopy,
@@ -27,6 +28,7 @@ import {
   FileSpreadsheet,
   IdCard,
   FileCheck2,
+  Wrench,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -75,6 +77,8 @@ export const NAV_ITEMS: NavItem[] = [
   // System
   { label: "Notifications", href: "/notifications", icon: Bell, permission: null, group: "System" },
   { label: "Roles", href: "/roles", icon: Shield, permission: "system.roles.create", group: "System" },
+  { label: "Permissions", href: "/role-permissions", icon: ShieldCheck, permission: "system.permissions.grant", group: "System" },
+  { label: "System Settings", href: "/system-settings", icon: Wrench, permission: "system.organization.configure", group: "System" },
   { label: "Reference Data", href: "/ref-data", icon: Database, permission: "config.bloom.manage", group: "System" },
   { label: "Audit Log", href: "/audit", icon: ScrollText, permission: "system.audit.read", group: "System" },
 ]

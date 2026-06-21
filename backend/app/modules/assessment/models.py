@@ -334,6 +334,7 @@ class CourseEndReport(Base):
     co_attainment = Column(JSONB, nullable=False, server_default=sa.text("'{}'::jsonb"))
     unattained_co_explanations = Column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
     teacher_feedback = Column(Text, nullable=True)
+    course_drive_link = Column(String(500), nullable=True)
     status = Column(String(20), nullable=False, server_default="DRAFT")
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))

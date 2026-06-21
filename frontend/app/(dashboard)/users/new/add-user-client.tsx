@@ -34,7 +34,7 @@ type CreatedCreds = Credentials
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const FACULTY_TYPES = ["Teaching", "Administrative", "Management"] as const
+const FACULTY_TYPES = ["Faculty", "Administrative", "Management"] as const
 const TITLES = ["Dr.", "Mr.", "Ms.", "Prof.", "Assoc. Prof."] as const
 const DESIGNATIONS = [
   "Professor", "Associate Professor", "Assistant Professor",
@@ -43,31 +43,31 @@ const DESIGNATIONS = [
 ] as const
 const SCOPE_TYPES = ["GLOBAL", "PROGRAM"] as const
 
-const BULK_TEMPLATE_COLUMNS = [
-  "first_name", "last_name", "middle_name", "title",
-  "faculty_type", "email", "contact_number", "nid",
-  "designation", "department_name", "qualification", "experience_years", "password",
+// Each column: key (field name), display (plain Excel header), required, description, example
+const BULK_COLUMN_GUIDE: {
+  key: string
+  display: string
+  required: boolean
+  description: string
+  example: string
+}[] = [
+  { key: "first_name",       display: "First Name",        required: true,  description: "User's first name",                                                             example: "John"                 },
+  { key: "last_name",        display: "Last Name",         required: false, description: "User's last name",                                                              example: "Smith"                },
+  { key: "title",            display: "Title",             required: false, description: "Honorific — e.g. Dr., Mr., Ms., Prof., Assoc. Prof.",                          example: "Dr."                  },
+  { key: "employee_id",      display: "Employee ID",       required: true,  description: "Unique employee or faculty ID assigned by the institution",                     example: "EMP-2024-001"         },
+  { key: "faculty_type",     display: "Faculty Type",      required: false, description: "Faculty category — Faculty, Administrative, or Management",                    example: "Faculty"              },
+  { key: "email",            display: "Email",             required: true,  description: "Valid, unique email address — this becomes the user's login",                  example: "john.smith@university.edu" },
+  { key: "contact_number",   display: "Contact Number",    required: false, description: "Phone number, including country code if applicable",                           example: "+8801XXXXXXXXX"       },
+  { key: "nid",              display: "NID",               required: false, description: "National ID number",                                                            example: "1234567890"           },
+  { key: "designation",      display: "Designation",       required: false, description: "Job title — e.g. Professor, Lecturer, Head of Department",                    example: "Lecturer"             },
+  { key: "department_name",  display: "Department",        required: false, description: "Must exactly match an existing department's name (case-insensitive)",          example: "Computer Science"     },
+  { key: "qualification",    display: "Qualification",     required: false, description: "Highest academic qualification",                                               example: "PhD"                  },
+  { key: "experience_years", display: "Experience (Years)",required: false, description: "Whole number from 0 to 99",                                                    example: "5"                    },
+  { key: "password",         display: "Password",          required: false, description: "At least 8 characters; leave blank to use the default password set on the import screen", example: "(leave blank)" },
 ]
 
-// Column-by-column guidance shown both in-app and inside the downloadable template's
-// "Instructions" sheet — keep these in sync with BULK_TEMPLATE_COLUMNS and the backend
-// UserCreate schema (only first_name, email and password are actually required server-side;
-// password is auto-generated here when left blank, so it reads as optional to the importer).
-const BULK_COLUMN_GUIDE: { key: string; required: boolean; description: string; example: string }[] = [
-  { key: "first_name", required: true, description: "User's first name", example: "John" },
-  { key: "last_name", required: false, description: "User's last name", example: "Smith" },
-  { key: "middle_name", required: false, description: "User's middle name", example: "A." },
-  { key: "title", required: false, description: "Honorific — e.g. Dr., Mr., Ms., Prof., Assoc. Prof.", example: "Dr." },
-  { key: "faculty_type", required: false, description: "Faculty category — e.g. Teaching, Administrative, Management", example: "Teaching" },
-  { key: "email", required: true, description: "Valid, unique email address — this becomes the user's login", example: "john.smith@university.edu" },
-  { key: "contact_number", required: false, description: "Phone number, including country code if applicable", example: "+8801XXXXXXXXX" },
-  { key: "nid", required: false, description: "National ID number", example: "1234567890" },
-  { key: "designation", required: false, description: "Job title — e.g. Professor, Lecturer, Head of Department", example: "Lecturer" },
-  { key: "department_name", required: false, description: "Must exactly match an existing department's name (case-insensitive); leave blank if unsure", example: "Computer Science" },
-  { key: "qualification", required: false, description: "Highest academic qualification", example: "PhD" },
-  { key: "experience_years", required: false, description: "Whole number from 0 to 99", example: "5" },
-  { key: "password", required: false, description: "At least 8 characters; leave blank to use the default password set on the import screen", example: "(leave blank)" },
-]
+// Map from plain display name → field key for reading uploaded files
+const DISPLAY_TO_KEY = Object.fromEntries(BULK_COLUMN_GUIDE.map((c) => [c.display, c.key]))
 
 // ── Schema ─────────────────────────────────────────────────────────────────────
 
@@ -76,8 +76,8 @@ const schema = z
     faculty_type: z.string().min(1, "Required"),
     title: z.string().optional(),
     first_name: z.string().min(1, "Required"),
-    middle_name: z.string().optional(),
     last_name: z.string().optional(),
+    employee_id: z.string().min(1, "Required"),
     email: z.string().email("Invalid email"),
     contact_number: z.string().optional(),
     nid: z.string().optional(),
@@ -148,9 +148,10 @@ function IndividualForm({
         body: {
           email: values.email,
           first_name: values.first_name,
-          middle_name: values.middle_name || null,
+          middle_name: null,
           last_name: values.last_name || null,
           title: values.title || null,
+          employee_id: values.employee_id,
           faculty_type: values.faculty_type,
           nid: values.nid || null,
           department_id: values.department_id || null,
@@ -164,7 +165,7 @@ function IndividualForm({
           scope_id: values.scope_type === "PROGRAM" ? values.scope_id : null,
         },
       } as never)
-      const parts = [values.title, values.first_name, values.middle_name, values.last_name].filter(Boolean)
+      const parts = [values.title, values.first_name, values.last_name].filter(Boolean)
       return { email: values.email, full_name: parts.join(" "), password: values.password }
     },
     onSuccess: (creds) => {
@@ -173,6 +174,7 @@ function IndividualForm({
       setPassword(next)
       reset({ scope_type: "GLOBAL", password: next })
       setSelFacultyType(""); setSelTitle(""); setSelDeptId(""); setSelDesignation("")
+
       setSelRoleId(""); setSelScopeType("GLOBAL"); setSelScopeId("")
       onCreated(creds)
     },
@@ -191,8 +193,8 @@ function IndividualForm({
             <SelectContent>{FACULTY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
-        <Field label="NID" error={errors.nid?.message}>
-          <Input placeholder="National ID number" {...register("nid")} />
+        <Field label="Employee ID" required error={errors.employee_id?.message}>
+          <Input placeholder="e.g. EMP-2024-001" {...register("employee_id")} />
         </Field>
       </div>
 
@@ -228,9 +230,6 @@ function IndividualForm({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Middle Name" error={errors.middle_name?.message}>
-          <Input placeholder="Middle name" {...register("middle_name")} />
-        </Field>
         <Field label="Role" required error={errors.role_id?.message}>
           <Select value={selRoleId} onValueChange={(v) => { if (v == null) return; setSelRoleId(v as string); setValue("role_id", v as string, { shouldValidate: true }) }}>
             <SelectTrigger className="w-full">
@@ -265,32 +264,37 @@ function IndividualForm({
         <Field label="Contact Number" error={errors.contact_number?.message}>
           <Input placeholder="+880 ..." {...register("contact_number")} />
         </Field>
+        <Field label="NID" error={errors.nid?.message}>
+          <Input placeholder="National ID number" {...register("nid")} />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
         <Field label="Scope" required>
           <Select value={selScopeType} onValueChange={(v) => { if (v == null) return; const val = v as "GLOBAL" | "PROGRAM"; setSelScopeType(val); setValue("scope_type", val, { shouldValidate: true }); setSelScopeId(""); setValue("scope_id", undefined) }}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{SCOPE_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
+        {selScopeType === "PROGRAM" && (
+          <Field label="Program" required error={errors.scope_id?.message}>
+            <Select value={selScopeId} onValueChange={(v) => { setSelScopeId((v as string | null) ?? ""); setValue("scope_id", (v as string | null) ?? undefined, { shouldValidate: true }) }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select program">
+                  {selScopeId ? (() => { const p = programs.find(p => p.id === selScopeId); return p ? (p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? "") : undefined })() : undefined}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {programs.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? p.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
       </div>
-
-      {selScopeType === "PROGRAM" && (
-        <Field label="Program" required error={errors.scope_id?.message}>
-          <Select value={selScopeId} onValueChange={(v) => { setSelScopeId((v as string | null) ?? ""); setValue("scope_id", (v as string | null) ?? undefined, { shouldValidate: true }) }}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select program">
-                {selScopeId ? (() => { const p = programs.find(p => p.id === selScopeId); return p ? (p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? "") : undefined })() : undefined}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {programs.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? p.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      )}
 
       <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Initial Password</p>
@@ -325,17 +329,25 @@ function IndividualForm({
 
 type BulkRow = Record<string, string | number | undefined>
 
-function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: Department[] }) {
+function BulkImportPanel({ departments }: { departments: Department[] }) {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [rows, setRows] = useState<BulkRow[]>([])
-  const [selRoleId, setSelRoleId] = useState("")
-  const [selScopeType, setSelScopeType] = useState<"GLOBAL" | "PROGRAM">("GLOBAL")
   const [sharedPassword, setSharedPassword] = useState(() => genPassword())
   const [importResult, setImportResult] = useState<{ created: number; errors: { row: number; email: string; error: string }[] } | null>(null)
 
   const deptByName = Object.fromEntries(departments.map((d) => [d.name.toLowerCase(), d.id]))
+
+  // Normalize a parsed row: accepts both display names ("First Name") and field keys ("first_name")
+  function normalizeRow(raw: BulkRow): BulkRow {
+    const out: BulkRow = {}
+    for (const [k, v] of Object.entries(raw)) {
+      const mapped = DISPLAY_TO_KEY[k] ?? k
+      out[mapped] = v
+    }
+    return out
+  }
 
   function handleFile(file: File) {
     const reader = new FileReader()
@@ -344,23 +356,47 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
       const wb = XLSX.read(data, { type: "array" })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const parsed = XLSX.utils.sheet_to_json<BulkRow>(ws, { defval: "" })
-      setRows(parsed.slice(0, 200))
+      setRows(parsed.slice(0, 200).map(normalizeRow))
       setImportResult(null)
     }
     reader.readAsArrayBuffer(file)
   }
 
   function downloadTemplate() {
-    const ws = XLSX.utils.aoa_to_sheet([BULK_TEMPLATE_COLUMNS])
-    ws["!cols"] = BULK_TEMPLATE_COLUMNS.map(() => ({ wch: 16 }))
     const wb = XLSX.utils.book_new()
+    const ws: XLSX.WorkSheet = {}
+
+    // Required columns get a red header; optional columns get a blue-grey header
+    const RED_FILL   = { patternType: "solid", fgColor: { rgb: "FFC0392B" } }
+    const BLUE_FILL  = { patternType: "solid", fgColor: { rgb: "FF2C3E50" } }
+    const WHITE_FONT = { bold: true, color: { rgb: "FFFFFFFF" }, sz: 11 }
+
+    BULK_COLUMN_GUIDE.forEach((col, idx) => {
+      const ref = XLSX.utils.encode_cell({ r: 0, c: idx })
+      ws[ref] = {
+        v: col.display,
+        t: "s",
+        s: {
+          fill: col.required ? RED_FILL : BLUE_FILL,
+          font: WHITE_FONT,
+          alignment: { horizontal: "center", vertical: "center", wrapText: false },
+          border: {
+            bottom: { style: "thin", color: { rgb: "FFFFFFFF" } },
+          },
+        },
+      }
+    })
+
+    ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: BULK_COLUMN_GUIDE.length - 1 } })
+    ws["!cols"] = BULK_COLUMN_GUIDE.map((c) => ({ wch: Math.max(c.display.length + 4, 18) }))
+    ws["!rows"] = [{ hpt: 22 }]
+
     XLSX.utils.book_append_sheet(wb, ws, "Users")
-    XLSX.writeFile(wb, "user_import_template.xlsx")
+    XLSX.writeFile(wb, "user_import_template.xlsx", { cellStyles: true })
   }
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!selRoleId) throw new Error("Select a role before importing")
       if (sharedPassword.trim().length < 8) throw new Error("Password must be at least 8 characters")
       const body = rows.map((r) => {
         const deptName = String(r["department_name"] ?? "").toLowerCase()
@@ -372,6 +408,7 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
           middle_name: String(r["middle_name"] ?? "") || null,
           last_name: String(r["last_name"] ?? "") || null,
           title: String(r["title"] ?? "") || null,
+          employee_id: String(r["employee_id"] ?? ""),
           faculty_type: String(r["faculty_type"] ?? "") || null,
           email: String(r["email"] ?? ""),
           contact_number: String(r["contact_number"] ?? "") || null,
@@ -381,8 +418,8 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
           qualification: String(r["qualification"] ?? "") || null,
           experience_years: r["experience_years"] ? Number(r["experience_years"]) : null,
           password: pw,
-          role_id: selRoleId,
-          scope_type: selScopeType,
+          role_id: null,
+          scope_type: "GLOBAL",
           scope_id: null,
         }
       })
@@ -400,6 +437,128 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
     },
     onError: (e: Error) => toast.error(e.message || "Import failed"),
   })
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  if (rows.length > 0) {
+    return (
+      <div className="flex flex-col gap-5">
+        {/* File loaded header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{rows.length} users ready to import</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Review the list below, then click Import.</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => { setRows([]); setImportResult(null); setTimeout(() => fileRef.current?.click(), 50) }}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Change file
+          </Button>
+        </div>
+
+        {/* Scrollable user list */}
+        <div className="rounded-xl border overflow-hidden">
+          <div className="overflow-y-auto max-h-[480px]">
+            <table className="w-full text-sm border-collapse">
+              <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur border-b">
+                <tr>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground w-8">#</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Name</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Employee ID</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Email</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Designation</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Contact</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const nameParts = [r["title"], r["first_name"], r["last_name"]].filter(Boolean)
+                  const fullName = nameParts.join(" ") || "—"
+                  const email = String(r["email"] ?? "")
+                  const empId = String(r["employee_id"] ?? "")
+                  const desig = String(r["designation"] ?? "") || "—"
+                  const phone = String(r["contact_number"] ?? "") || "—"
+                  const missingRequired = !email || !empId || !r["first_name"]
+                  return (
+                    <tr
+                      key={i}
+                      className={`border-b last:border-b-0 ${missingRequired ? "bg-destructive/5" : i % 2 === 0 ? "" : "bg-muted/20"}`}
+                    >
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{i + 1}</td>
+                      <td className="px-3 py-2">
+                        <span className={`text-sm font-medium ${missingRequired ? "text-destructive" : ""}`}>{fullName}</span>
+                      </td>
+                      <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{empId || <span className="text-destructive">missing</span>}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{email || <span className="text-destructive">missing</span>}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{desig}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{phone}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Password */}
+        <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Initial Password</p>
+          <Field label="Password" required>
+            <div className="flex gap-2">
+              <Input
+                className="font-mono flex-1"
+                value={sharedPassword}
+                onChange={(e) => setSharedPassword(e.target.value)}
+              />
+              <Button type="button" variant="outline" size="icon" title="Regenerate password" onClick={() => setSharedPassword(genPassword())}>
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            Applied to every user — unless a row provides its own value in the Password column.
+          </p>
+        </div>
+
+        {/* Import result */}
+        {importResult && (
+          <div className="rounded-lg border p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+              <span>{importResult.created} users created successfully</span>
+            </div>
+            {importResult.errors.map((e, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs text-destructive">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>Row {e.row} ({e.email}): {e.error}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="gap-2 px-8">
+            {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Import {rows.length} Users
+          </Button>
+        </div>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="sr-only"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+        />
+      </div>
+    )
+  }
+
+  // ── Upload state ─────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col gap-5">
@@ -424,10 +583,11 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
         </summary>
         <div className="space-y-3 px-4 pb-4">
           <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
-            <li>Click <span className="font-medium text-foreground">Template</span> to download a spreadsheet with the exact column headers the importer expects.</li>
+            <li>Click <span className="font-medium text-foreground">Template</span> to download a spreadsheet with the correct column headers.</li>
             <li>Add one row per user below the header row — don&apos;t rename, reorder, or remove columns.</li>
-            <li><span className="font-mono text-foreground">first_name</span> and <span className="font-mono text-foreground">email</span> are required for every row; everything else is optional and can be left blank.</li>
-            <li>The <span className="font-medium text-foreground">Assign Role</span>, <span className="font-medium text-foreground">Scope</span>, and <span className="font-medium text-foreground">Password</span> set below apply to every user in the file — they aren&apos;t read from the spreadsheet (unless a row sets its own password).</li>
+            <li>Columns with a <span className="font-medium text-destructive">red header</span> are required for every row; grey columns are optional.</li>
+            <li>The <span className="font-medium text-foreground">Password</span> set on the next screen applies to every imported user — unless a row provides its own value in the Password column.</li>
+            <li>Roles can be assigned to users after import from the user detail page.</li>
             <li>Save as .xlsx, .xls, or .csv and upload it (maximum 200 rows per import).</li>
           </ol>
           <div className="overflow-auto rounded-lg border">
@@ -443,10 +603,10 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
               <tbody>
                 {BULK_COLUMN_GUIDE.map((c) => (
                   <tr key={c.key} className="border-t">
-                    <td className="whitespace-nowrap px-2 py-1.5 font-mono">{c.key}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 font-medium">{c.display}</td>
                     <td className="whitespace-nowrap px-2 py-1.5">
                       {c.required
-                        ? <Badge variant="secondary" className="text-[10px]">Required</Badge>
+                        ? <Badge variant="destructive" className="text-[10px]">Required</Badge>
                         : <span className="text-muted-foreground">Optional</span>}
                     </td>
                     <td className="px-2 py-1.5 text-muted-foreground">{c.description}</td>
@@ -471,7 +631,6 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
           <p className="text-sm font-medium text-foreground">Drop your file here or click to browse</p>
           <p className="text-xs text-muted-foreground mt-1">Supports .xlsx, .xls, .csv</p>
         </div>
-        {rows.length > 0 && <Badge variant="secondary" className="mt-1">{rows.length} rows loaded</Badge>}
         <input
           ref={fileRef}
           type="file"
@@ -480,87 +639,6 @@ function BulkImportPanel({ roles, departments }: { roles: Role[]; departments: D
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
         />
       </button>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Assign Role" required>
-          <Select value={selRoleId} onValueChange={(v) => { if (v != null) setSelRoleId(v as string) }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select role for all" /></SelectTrigger>
-            <SelectContent>{roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Field label="Scope">
-          <Select value={selScopeType} onValueChange={(v) => { if (v != null) setSelScopeType(v as "GLOBAL" | "PROGRAM") }}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="GLOBAL">Global</SelectItem>
-              <SelectItem value="PROGRAM">Program</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-      </div>
-
-      <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Initial Password</p>
-        <Field label="Password" required>
-          <div className="flex gap-2">
-            <Input
-              className="font-mono flex-1"
-              value={sharedPassword}
-              onChange={(e) => setSharedPassword(e.target.value)}
-            />
-            <Button type="button" variant="outline" size="icon" title="Regenerate password" onClick={() => setSharedPassword(genPassword())}>
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
-        </Field>
-        <p className="text-xs text-muted-foreground">
-          Auto-generated. You can edit it or regenerate. This password is applied to every imported user
-          (rows that set their own value in the spreadsheet&apos;s “password” column use that instead).
-          Everyone will be required to change it on first login.
-        </p>
-      </div>
-
-      {rows.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Preview — first 5 rows</p>
-          <div className="rounded-lg border overflow-auto max-h-48">
-            <table className="text-xs w-full">
-              <thead className="bg-muted/50">
-                <tr>{Object.keys(rows[0]).map((k) => <th key={k} className="px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{k}</th>)}</tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 5).map((r, i) => (
-                  <tr key={i} className="border-t">
-                    {Object.values(r).map((v, j) => <td key={j} className="px-2 py-1.5 whitespace-nowrap max-w-[120px] truncate">{String(v)}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {importResult && (
-        <div className="rounded-lg border p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-            <span>{importResult.created} users created successfully</span>
-          </div>
-          {importResult.errors.map((e, i) => (
-            <div key={i} className="flex items-start gap-2 text-xs text-destructive">
-              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              <span>Row {e.row} ({e.email}): {e.error}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex justify-end gap-2 pt-1">
-        <Button onClick={() => mutation.mutate()} disabled={rows.length === 0 || !selRoleId || mutation.isPending} className="gap-2 px-8">
-          {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Import {rows.length > 0 ? `${rows.length} Users` : ""}
-        </Button>
-      </div>
     </div>
   )
 }
@@ -629,7 +707,7 @@ export function AddUserClient() {
         </TabsContent>
 
         <TabsContent value="bulk">
-          <BulkImportPanel roles={roles} departments={departments} />
+          <BulkImportPanel departments={departments} />
         </TabsContent>
       </Tabs>
 

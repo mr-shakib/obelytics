@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, Download, Loader2 } from "lucide-react"
+import { ArrowLeft, Download, ExternalLink, Loader2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -25,6 +25,7 @@ type EndReport = {
   co_attainment: Record<string, number>
   unattained_co_explanations: { co_code: string; reason: string; suggestion: string }[]
   teacher_feedback: string | null
+  course_drive_link: string | null
   status: string
   submitted_at: string | null
 }
@@ -168,6 +169,33 @@ export default function EndReportReviewPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Submit Course Link */}
+      {endReport.course_drive_link && (
+        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ExternalLink className="h-5 w-5 text-blue-600" />
+              Submit Course Link
+            </CardTitle>
+            <CardDescription>
+              The section teacher has attached a Google Drive link with course materials. Review the link before
+              submitting to the Program Coordinator.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              href={endReport.course_drive_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 hover:text-blue-900 underline underline-offset-2 break-all"
+            >
+              <ExternalLink className="h-4 w-4 shrink-0" />
+              {endReport.course_drive_link}
+            </a>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Course Outcomes */}
       <Card>

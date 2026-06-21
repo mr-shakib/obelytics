@@ -210,7 +210,7 @@ async def list_assessment_types(
 @router.post("/assessment-types", response_model=AssessmentTypeResponse, status_code=status.HTTP_201_CREATED)
 async def create_assessment_type(
     body: AssessmentTypeCreate,
-    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("assessment.configure"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):

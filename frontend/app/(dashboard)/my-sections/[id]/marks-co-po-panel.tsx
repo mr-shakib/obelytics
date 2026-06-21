@@ -53,6 +53,11 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
   if (isLoading) return <div className="h-64 animate-pulse bg-muted rounded-lg" />
   if (!data) return <p className="text-muted-foreground">Attainment data not available.</p>
 
+  const naturalSort = (a: string, b: string) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+  const cos = [...data.cos].sort((a, b) => naturalSort(a.co_code, b.co_code))
+  const pos = [...data.pos].sort((a, b) => naturalSort(a.po_code, b.po_code))
+
   if (data.students.length === 0) {
     return <p className="text-muted-foreground">No students enrolled in this section.</p>
   }
@@ -68,7 +73,7 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
             <TableRow>
               <TableHead>ID</TableHead>
               <TableHead>Name</TableHead>
-              {data.cos.map((co) => (
+              {cos.map((co) => (
                 <TableHead key={co.course_outcome_id} className="text-center bg-blue-50 dark:bg-blue-950/30">
                   {co.co_code}
                   <span className="block text-[10px] font-normal text-muted-foreground">
@@ -76,7 +81,7 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
                   </span>
                 </TableHead>
               ))}
-              {data.pos.map((po) => (
+              {pos.map((po) => (
                 <TableHead key={po.program_outcome_id} className="text-center bg-amber-50 dark:bg-amber-950/30">
                   {po.po_code}
                   <span className="block text-[10px] font-normal text-muted-foreground">
@@ -91,7 +96,7 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
               <TableRow key={student.enrollment_id}>
                 <TableCell className="font-mono text-xs">{student.student_id_number}</TableCell>
                 <TableCell>{student.full_name}</TableCell>
-                {data.cos.map((co) => (
+                {cos.map((co) => (
                   <TableCell key={co.course_outcome_id} className="text-center bg-blue-50/50 dark:bg-blue-950/20">
                     {Number(student.co_marks[co.co_code] ?? 0)} / {Number(co.max_marks)}
                     <span className="block text-[10px] text-muted-foreground">
@@ -99,7 +104,7 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
                     </span>
                   </TableCell>
                 ))}
-                {data.pos.map((po) => (
+                {pos.map((po) => (
                   <TableCell key={po.program_outcome_id} className="text-center bg-amber-50/50 dark:bg-amber-950/20">
                     {Number(student.po_marks[po.po_code] ?? 0)} / {Number(po.max_marks)}
                     <span className="block text-[10px] text-muted-foreground">

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Loader2, Plus, ShieldCheck, KeyRound } from "lucide-react"
+import { Loader2, Plus, ShieldCheck, KeyRound, Trash2 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -75,7 +76,7 @@ const roleSchema = z.object({
 })
 type RoleFormValues = z.infer<typeof roleSchema>
 
-const FACULTY_TYPES = ["Teaching", "Administrative", "Management"] as const
+const FACULTY_TYPES = ["Faculty", "Administrative", "Management"] as const
 const TITLES = ["Dr.", "Mr.", "Ms.", "Prof.", "Assoc. Prof."] as const
 const DESIGNATIONS = [
   "Professor", "Associate Professor", "Assistant Professor",
@@ -87,7 +88,6 @@ const editSchema = z.object({
   faculty_type: z.string().min(1, "Required"),
   title: z.string().optional(),
   first_name: z.string().min(1, "Required"),
-  middle_name: z.string().optional(),
   last_name: z.string().optional(),
   nid: z.string().optional(),
   department_id: z.string().optional(),
@@ -122,6 +122,7 @@ export function UserDetailClient({ id }: Props) {
   const [selectedRoleId, setSelectedRoleId] = useState("")
   const [selectedScopeId, setSelectedScopeId] = useState("")
   const qc = useQueryClient()
+  const router = useRouter()
   const isGlobal = useAuthStore((s) => s.manifest?.scope.is_global ?? false)
 
   const { data: user, isLoading } = useQuery({
@@ -179,6 +180,18 @@ export function UserDetailClient({ id }: Props) {
     onError: () => toast.error("Failed to update user status"),
   })
 
+  const deleteUser = useMutation({
+    mutationFn: async () => {
+      await apiClient.DELETE(`/users/${id}` as never, {} as never)
+    },
+    onSuccess: () => {
+      toast.success("User deleted")
+      qc.invalidateQueries({ queryKey: queryKeys.users.all })
+      router.push("/users")
+    },
+    onError: () => toast.error("Failed to delete user"),
+  })
+
   const [resetCreds, setResetCreds] = useState<Credentials | null>(null)
   const resetPassword = useMutation({
     mutationFn: async () => {
@@ -217,7 +230,6 @@ export function UserDetailClient({ id }: Props) {
       faculty_type: user.faculty_type ?? "",
       title: user.title ?? "",
       first_name: user.first_name ?? "",
-      middle_name: user.middle_name ?? "",
       last_name: user.last_name ?? "",
       nid: user.nid ?? "",
       department_id: user.department_id ?? "",
@@ -233,7 +245,6 @@ export function UserDetailClient({ id }: Props) {
       await apiClient.PATCH(`/users/${id}` as never, {
         body: {
           first_name: values.first_name,
-          middle_name: values.middle_name || null,
           last_name: values.last_name || null,
           title: values.title || null,
           faculty_type: values.faculty_type || null,
@@ -303,9 +314,9 @@ export function UserDetailClient({ id }: Props) {
                 Reset Password
               </Button>
             )}
-            <PermissionGate permission="user.deactivate">
+            {isGlobal && (
               <Button
-                variant={user.status === "ACTIVE" ? "destructive" : "outline"}
+                variant={user.status === "ACTIVE" ? "outline" : "default"}
                 size="sm"
                 onClick={() => toggleStatus.mutate()}
                 disabled={toggleStatus.isPending}
@@ -313,7 +324,21 @@ export function UserDetailClient({ id }: Props) {
                 {toggleStatus.isPending && <Loader2 className="animate-spin" />}
                 {user.status === "ACTIVE" ? "Deactivate" : "Activate"}
               </Button>
-            </PermissionGate>
+            )}
+            {isGlobal && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteUser.isPending}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete ${user.full_name}? This cannot be undone.`))
+                    deleteUser.mutate()
+                }}
+              >
+                {deleteUser.isPending ? <Loader2 className="animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </Button>
+            )}
           </div>
         }
       />
@@ -383,15 +408,6 @@ export function UserDetailClient({ id }: Props) {
                   <SelectTrigger className="w-full"><SelectValue placeholder="Select designation" /></SelectTrigger>
                   <SelectContent>{DESIGNATIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                 </Select>
-              </EditField>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <EditField label="Middle Name" error={editErrors.middle_name?.message}>
-                <Input placeholder="Middle name" {...registerEdit("middle_name")} />
-              </EditField>
-              <EditField label="Last Name" error={editErrors.last_name?.message}>
-                <Input placeholder="Last name" {...registerEdit("last_name")} />
               </EditField>
             </div>
 

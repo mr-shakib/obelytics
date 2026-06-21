@@ -9,7 +9,6 @@ class AttainmentConfigResponse(BaseModel):
     id: UUID
     organization_id: UUID
     program_id: UUID | None
-    threshold_student_pct: Decimal
     threshold_co_score_pct: Decimal
     created_at: datetime
     updated_at: datetime
@@ -17,7 +16,6 @@ class AttainmentConfigResponse(BaseModel):
 
 
 class AttainmentConfigUpdate(BaseModel):
-    threshold_student_pct: Decimal | None = None
     threshold_co_score_pct: Decimal | None = None
 
 

@@ -1,22 +1,3 @@
-  <!-- Roster -->
-  <div class="section">
-    <div class="section-header">Student Roster ({{ roster|length }})</div>
-    {% if roster %}
-    <table class="bordered">
-      <thead>
-        <tr><th style="width:8%">SL</th><th style="width:30%">Student ID</th><th>Name</th></tr>
-      </thead>
-      <tbody>
-        {% for s in roster %}
-        <tr><td style="text-align:center">{{ loop.index }}</td><td>{{ s.student_id_number }}</td><td>{{ s.full_name }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No students enrolled</p>
-    {% endif %}
-  </div>
-
   {% for grid in [mid_grid, final_grid] %}
   <!-- Marks Grid -->
   <div class="section">
@@ -159,5 +140,5 @@
   </div>
 
   <p style="font-size:8pt; margin-top:4px;">
-    Attainment thresholds: CO score &ge; {{ attainment.threshold_co_score_pct }}%, students above threshold &ge; {{ attainment.threshold_student_pct }}%.
+    Attainment threshold: &ge; {{ attainment.threshold_co_score_pct }}%
   </p>

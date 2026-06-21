@@ -40,7 +40,6 @@ type Curriculum = {
   id: string
   program_id: string
   name: string
-  code: string
   effective_year: number
   version_number: number
   status: string
@@ -64,7 +63,6 @@ type CourseSlot = {
   id: string
   curriculum_term_definition_id: string
   course_id: string
-  is_elective: boolean
 }
 
 type Course = {
@@ -86,15 +84,9 @@ const addTermSchema = z.object({
 })
 type AddTermValues = z.infer<typeof addTermSchema>
 
-const SLOT_TYPES = [
-  { value: "CORE", label: "Core", is_elective: false },
-  { value: "ELECTIVE", label: "Elective", is_elective: true },
-] as const
-
 const addCourseSlotSchema = z.object({
   curriculum_term_definition_id: z.string().min(1, "Semester is required"),
   course_id: z.string().min(1, "Course is required"),
-  type: z.enum(["CORE", "ELECTIVE"], { message: "Type is required" }),
 })
 type AddCourseSlotValues = z.infer<typeof addCourseSlotSchema>
 
@@ -194,11 +186,6 @@ export function CurriculumDetailClient({ id }: Props) {
       header: "Credits",
       cell: ({ row }) => courseById[row.original.course_id]?.credits ?? "—",
     },
-    {
-      id: "type",
-      header: "Type",
-      cell: ({ row }) => (row.original.is_elective ? "Elective" : "Core"),
-    },
   ]
 
   const editForm = useForm<EditValues>({
@@ -260,12 +247,11 @@ export function CurriculumDetailClient({ id }: Props) {
 
   const addSlotMutation = useMutation({
     mutationFn: async (values: AddCourseSlotValues) => {
-      const slotType = SLOT_TYPES.find((t) => t.value === values.type)
       await apiClient.POST(`/curricula/${id}/course-slots` as never, {
         body: {
           curriculum_term_definition_id: values.curriculum_term_definition_id,
           course_id: values.course_id,
-          is_elective: slotType?.is_elective ?? false,
+          is_elective: false,
         },
       } as never)
     },
@@ -294,7 +280,7 @@ export function CurriculumDetailClient({ id }: Props) {
     <div className="space-y-6">
       <PageHeader
         title={curriculum.name}
-        description={`${program ? programLabel(program) : "—"} — ${curriculum.code} — v${curriculum.version_number}`}
+        description={`${program ? programLabel(program) : "—"} — v${curriculum.version_number}`}
         actions={
           <div className="flex items-center gap-3">
             <StatusBadge status={curriculum.status} />
@@ -333,10 +319,6 @@ export function CurriculumDetailClient({ id }: Props) {
               <div>
                 <p className="text-muted-foreground">Program</p>
                 <p className="font-medium">{program ? programLabel(program) : "—"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Code</p>
-                <p className="font-medium">{curriculum.code}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Effective Year</p>
@@ -569,24 +551,7 @@ export function CurriculumDetailClient({ id }: Props) {
                           </p>
                         )}
                       </div>
-                      <div className="space-y-2">
-                        <Label>Type</Label>
-                        <Select onValueChange={(v) => v != null && addSlotForm.setValue("type", v as "CORE" | "ELECTIVE", { shouldValidate: true })}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SLOT_TYPES.map((t) => (
-                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {addSlotForm.formState.errors.type && (
-                          <p className="text-sm text-destructive">
-                            {addSlotForm.formState.errors.type.message}
-                          </p>
-                        )}
-                      </div>
+
                     </form>
                     <DialogFooter>
                       <Button

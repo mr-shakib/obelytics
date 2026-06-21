@@ -56,7 +56,7 @@ async def list_users(
 ):
     from app.modules.iam.repository.user_repository import UserRepository
     repo = UserRepository(db)
-    return await repo.list_by_org(current_user.organization_id)
+    return await repo.list_by_org(current_user.organization_id, include_inactive=True)
 
 
 @router.get("/faculty-roster", response_model=list[FacultyRosterEntry])
@@ -185,6 +185,26 @@ async def deactivate_user(
 ):
     svc = UserService(db)
     await svc.deactivate_user(user_id, current_user.id)
+
+
+@router.post("/{user_id}/activate", status_code=204)
+async def activate_user(
+    user_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = UserService(db)
+    await svc.activate_user(user_id)
+
+
+@router.delete("/{user_id}", status_code=204)
+async def delete_user(
+    user_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = UserService(db)
+    await svc.delete_user(user_id)
 
 
 @router.post("/{user_id}/roles", response_model=UserRoleAssignmentResponse, status_code=201)

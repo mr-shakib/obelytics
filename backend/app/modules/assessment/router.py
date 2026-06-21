@@ -47,6 +47,7 @@ from app.modules.assessment.schemas import (
     StudentResponse,
     StudentUpdate,
 )
+from app.modules.assessment.exceptions import MarksheetModuleLeaderScopeError
 from app.modules.assessment.service import (
     AssessmentService,
     CourseEndReportService,
@@ -59,6 +60,8 @@ from app.modules.assessment.service import (
     render_marksheet_course_report_pdf,
     render_marksheet_report_pdf,
 )
+from app.modules.curriculum.models import SectionOffering
+from app.modules.curriculum.repository import ModuleLeaderAssignmentRepository
 
 router = APIRouter(tags=["Assessment"])
 
@@ -575,6 +578,22 @@ async def replace_marksheet_questions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    # MLs (have assessment.configure but not curriculum.create) may only configure
+    # questions for courses they are the assigned Module Leader of.
+    is_org_admin = manifest.is_super_admin or "curriculum.create" in manifest.permissions
+    if not is_org_admin:
+        from sqlalchemy import select
+        offering = (await db.execute(
+            select(SectionOffering).where(SectionOffering.id == section_offering_id)
+        )).scalar_one_or_none()
+        if offering is not None:
+            ml_repo = ModuleLeaderAssignmentRepository(db)
+            assignment = await ml_repo.find_active(
+                offering.batch_id, offering.academic_term_id, offering.course_id
+            )
+            if assignment is None or assignment.user_id != current_user.id:
+                raise MarksheetModuleLeaderScopeError()
+
     svc = MarksheetService(db)
     return await svc.replace_questions(
         section_offering_id,

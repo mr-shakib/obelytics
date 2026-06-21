@@ -28,7 +28,10 @@ class UserRepository(BaseRepository[User]):
 
     async def list_by_org(self, organization_id: UUID, include_inactive: bool = False):
         stmt = select(User).where(User.organization_id == organization_id)
-        if not include_inactive:
+        if include_inactive:
+            # show ACTIVE + DEACTIVATED, hide DELETED
+            stmt = stmt.where(User.status != "DELETED")
+        else:
             stmt = stmt.where(User.status == "ACTIVE")
         result = await self._session.execute(stmt)
         return result.scalars().all()

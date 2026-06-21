@@ -68,10 +68,9 @@ export function CoPoMappingCard({
     queryKey: queryKeys.coPoMappings.byCourse(curriculumId, courseId),
     queryFn: async () => {
       try {
-        const { data, response } = await apiClient.GET(
+        const { data } = await apiClient.GET(
           `/mappings/co-po?curriculum_id=${curriculumId}&course_id=${courseId}` as never
-        ) as { data: unknown; response: Response }
-        if (response.status === 404) return null
+        ) as { data: unknown }
         return ((data as unknown) as MappingSet) ?? null
       } catch {
         return null

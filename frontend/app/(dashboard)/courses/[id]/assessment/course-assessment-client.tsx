@@ -41,6 +41,17 @@ interface Props {
 export function CourseAssessmentClient({ id }: Props) {
   const qc = useQueryClient()
   const canEditCourse = usePermission("course.update")
+  const canManageCurriculum = usePermission("curriculum.create") // PC / SA have this; MLs do not
+
+  const { data: myModuleAssignments = [] } = useQuery({
+    queryKey: queryKeys.moduleLeaderAssignments.mine,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/module-leader-assignments/mine" as never)
+      return ((data as unknown) as { course_id: string }[]) ?? []
+    },
+    enabled: !canManageCurriculum, // PCs/SAs don't need this check
+  })
+  const isMyModule = canManageCurriculum || myModuleAssignments.some((a) => a.course_id === id)
 
   const courseLocation = useResolveCourseLocation(id)
   const curriculumId = courseLocation?.curriculumId
@@ -469,12 +480,12 @@ export function CourseAssessmentClient({ id }: Props) {
         </CardContent>
       </Card>
 
-      {curriculumId && (
+      {curriculumId && isMyModule && (
         <QuestionConfigCard courseId={id} curriculumId={curriculumId} />
       )}
 
       <Card>
-        <CardHeader><CardTitle>CIE/SEE Bloom-wise Marks Breakdown</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Bloom-wise Marks Breakdown</CardTitle></CardHeader>
         <CardContent>
           {!curriculumId ? (
             <p className="text-sm text-muted-foreground">

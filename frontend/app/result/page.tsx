@@ -3,6 +3,10 @@
 import { useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ArrowRight, Loader2, Printer } from "lucide-react"
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine, Cell, LabelList,
+} from "recharts"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
@@ -43,23 +47,134 @@ function initials(name: string) {
     .join("")
 }
 
-/** Signature element: a 0–100 attainment track with a marker at the pass threshold.
- *  Fill is green when the outcome is met, rust when it falls short. */
-function Track({ code, pct, threshold, met, index }: {
+function Track({ code, pct, threshold, met }: {
   code: string; pct: number; threshold: number; met: boolean; index: number
 }) {
+  const w = Math.min(100, Math.max(0, pct))
   return (
-    <div className="rc-row">
-      <span className="rc-code">{code}</span>
-      <div className="rc-track">
-        <div
-          className={met ? "rc-fill rc-fill--met" : "rc-fill rc-fill--miss"}
-          style={{ ["--w" as string]: `${Math.min(100, Math.max(0, pct))}%`, animationDelay: `${index * 60}ms` }}
-        />
-        <span className="rc-thresh" style={{ left: `${threshold}%` }} aria-hidden />
+    <div style={{ display: "grid", gridTemplateColumns: "2.8rem 1fr 2.6rem 2.9rem", alignItems: "center", gap: "0.7rem", padding: "0.32rem 0" }}>
+      <span style={{ fontWeight: 700, fontSize: "0.8rem" }}>{code}</span>
+      <div style={{ position: "relative", height: "9px", borderRadius: "999px", background: "#E4EAE5", overflow: "hidden" }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0,
+          width: `${w}%`,
+          borderRadius: "999px",
+          background: met ? "linear-gradient(90deg,#1d7254,#25a876)" : "linear-gradient(90deg,#C85A2A,#B4521E)",
+        }} />
+        <span style={{ position: "absolute", top: 0, bottom: 0, left: `${threshold}%`, width: "2px", background: "rgba(20,33,28,0.35)" }} />
       </div>
-      <span className="rc-pct">{pct.toFixed(0)}%</span>
-      <span className={met ? "rc-tag rc-tag--met" : "rc-tag rc-tag--miss"}>{met ? "Met" : "Below"}</span>
+      <span style={{ fontFamily: "ui-monospace,monospace", fontSize: "0.82rem", fontWeight: 600, textAlign: "right" }}>{pct.toFixed(0)}%</span>
+      <span style={{
+        fontSize: "0.65rem", fontWeight: 700, textAlign: "center",
+        padding: "0.12rem 0.3rem", borderRadius: "6px",
+        background: met ? "rgba(29,114,84,0.12)" : "rgba(180,82,30,0.12)",
+        color: met ? "#1d7254" : "#B4521E",
+      }}>{met ? "Met" : "Below"}</span>
+    </div>
+  )
+}
+
+// ── PO aggregation ────────────────────────────────────────────────────────────
+
+interface POBar {
+  po_code: string
+  avg_pct: number
+  threshold: number
+  is_attained: boolean
+  contributions: { course_code: string; pct: number }[]
+}
+
+function aggregatePOs(results: CourseResult[]): POBar[] {
+  const map = new Map<string, { threshold: number; values: { course_code: string; pct: number }[] }>()
+  for (const course of results) {
+    for (const po of course.po_results ?? []) {
+      if (!map.has(po.po_code!)) map.set(po.po_code!, { threshold: po.threshold, values: [] })
+      map.get(po.po_code!)!.values.push({ course_code: course.course_code, pct: po.attainment_percentage })
+    }
+  }
+  return Array.from(map.entries())
+    .map(([po_code, { threshold, values }]) => {
+      const avg_pct = values.reduce((s, v) => s + v.pct, 0) / values.length
+      return { po_code, avg_pct, threshold, is_attained: avg_pct >= threshold, contributions: values }
+    })
+    .sort((a, b) => a.po_code.localeCompare(b.po_code, undefined, { numeric: true }))
+}
+
+// ── PO tooltip ────────────────────────────────────────────────────────────────
+
+function POTooltip({ active, payload }: { active?: boolean; payload?: { payload: POBar }[] }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  return (
+    <div style={{ background: "#fff", border: "1px solid #D7E0D9", borderRadius: 10, padding: "10px 14px", fontSize: 12, minWidth: 160, boxShadow: "0 4px 16px rgba(0,0,0,0.10)" }}>
+      <p style={{ fontWeight: 700, marginBottom: 4 }}>{d.po_code}</p>
+      {d.contributions.map((c) => (
+        <div key={c.course_code} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <span style={{ color: "#5B6862" }}>{c.course_code}</span>
+          <span style={{ fontWeight: 600, color: c.pct >= d.threshold ? "#1d7254" : "#B4521E" }}>{c.pct.toFixed(1)}%</span>
+        </div>
+      ))}
+      {d.contributions.length > 1 && (
+        <div style={{ borderTop: "1px solid #E4EAE5", marginTop: 4, paddingTop: 4, display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+          <span>Average</span>
+          <span style={{ color: d.is_attained ? "#1d7254" : "#B4521E" }}>{d.avg_pct.toFixed(1)}%</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── PO summary chart ──────────────────────────────────────────────────────────
+
+function POSummaryChart({ results }: { results: CourseResult[] }) {
+  const pos = aggregatePOs(results)
+  if (pos.length === 0) return null
+  const threshold = pos[0].threshold
+  const attained = pos.filter((p) => p.is_attained).length
+  return (
+    <div style={{ background: "#fff", border: "1px solid #D7E0D9", borderRadius: 18, padding: "1.2rem 1.4rem", marginBottom: "1rem" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#1d7254", marginBottom: 2 }}>Program Outcome Attainment</p>
+          <p style={{ fontSize: "0.85rem", color: "#5B6862" }}>Average attainment across all your courses</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.25rem 0.7rem", borderRadius: 8, background: "rgba(29,114,84,0.12)", color: "#1d7254" }}>
+            {attained}/{pos.length} attained
+          </span>
+          <span style={{ fontSize: "0.72rem", fontWeight: 600, padding: "0.25rem 0.7rem", borderRadius: 8, border: "1px solid #D7E0D9", color: "#5B6862" }}>
+            Threshold {threshold}%
+          </span>
+        </div>
+      </div>
+      <div style={{ height: 240, marginTop: 8 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={pos} margin={{ top: 20, right: 8, left: -24, bottom: 4 }} barSize={26}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E4EAE5" vertical={false} />
+            <XAxis dataKey="po_code" tick={{ fontSize: 11, fontWeight: 600, fill: "#14211C" }} axisLine={false} tickLine={false} />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#5B6862" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+            <Tooltip content={<POTooltip />} cursor={{ fill: "rgba(29,114,84,0.06)" }} />
+            <ReferenceLine y={threshold} stroke="#B4521E" strokeDasharray="5 3"
+              label={{ value: `${threshold}%`, fontSize: 9, fill: "#B4521E", position: "insideTopRight" }} />
+            <Bar dataKey="avg_pct" radius={[4, 4, 0, 0]}>
+              <LabelList dataKey="avg_pct" position="top"
+                formatter={(v: number) => `${v.toFixed(0)}%`}
+                style={{ fontSize: 10, fontWeight: 700, fill: "#14211C" }} />
+              {pos.map((p) => (
+                <Cell key={p.po_code} fill={p.is_attained ? "#25a876" : "#C85A2A"} fillOpacity={0.85} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ display: "flex", gap: 16, justifyContent: "flex-end", fontSize: "0.72rem", color: "#5B6862", marginTop: 4 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: "#25a876", display: "inline-block" }} /> Attained
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: "#C85A2A", display: "inline-block" }} /> Not attained
+        </span>
+      </div>
     </div>
   )
 }
@@ -233,23 +348,6 @@ export default function PublicResultPage() {
         }
         .rc-legend { font-weight: 500; letter-spacing: 0.02em; text-transform: none; color: #9AA8A0; }
 
-        /* Track rows (signature) */
-        .rc-row { display: grid; grid-template-columns: 2.8rem 1fr 2.6rem 2.9rem; align-items: center; gap: 0.7rem; padding: 0.32rem 0; }
-        .rc-code { font-weight: 700; font-size: 0.8rem; }
-        .rc-track { position: relative; height: 9px; border-radius: 999px; background: var(--track); }
-        .rc-fill {
-          position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px;
-          width: var(--w); animation: rc-grow 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
-        }
-        .rc-fill--met { background: linear-gradient(90deg, var(--green), var(--green-bright)); }
-        .rc-fill--miss { background: linear-gradient(90deg, #C85A2A, var(--rust)); }
-        .rc-thresh { position: absolute; top: -4px; bottom: -4px; width: 2px; background: rgba(20,33,28,0.4); border-radius: 2px; }
-        .rc-pct { font-family: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 0.82rem; font-weight: 600; text-align: right; }
-        .rc-tag { font-size: 0.65rem; font-weight: 700; text-align: center; padding: 0.12rem 0; border-radius: 6px; letter-spacing: 0.03em; }
-        .rc-tag--met { background: rgba(29,114,84,0.12); color: var(--green); }
-        .rc-tag--miss { background: rgba(180,82,30,0.12); color: var(--rust); }
-        @keyframes rc-grow { from { width: 0; } to { width: var(--w); } }
-
         .rc-empty {
           margin-top: 1.1rem; background: var(--card); border: 1px dashed var(--line); border-radius: 18px;
           padding: 2.5rem 1.5rem; text-align: center; color: var(--muted); font-size: 0.92rem;
@@ -334,8 +432,15 @@ export default function PublicResultPage() {
                 No published results yet. They&apos;ll appear here once your department publishes them.
               </div>
             ) : (
+              <>
+              <POSummaryChart results={data.results} />
               <div className="rc-courses">
-                {data.results.map((course) => (
+                {data.results.map((course) => {
+                  const naturalSort = (a: string, b: string) =>
+                    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+                  const sortedCOs = [...course.co_results].sort((a, b) => naturalSort(a.co_code ?? "", b.co_code ?? ""))
+                  const sortedPOs = [...course.po_results].sort((a, b) => naturalSort(a.po_code ?? "", b.po_code ?? ""))
+                  return (
                   <article className="rc-card" key={`${course.course_code}-${course.term_name}`}>
                     <div className="rc-card-head">
                       <div>
@@ -351,13 +456,13 @@ export default function PublicResultPage() {
                       </div>
                     </div>
 
-                    {course.co_results.length > 0 && (
+                    {sortedCOs.length > 0 && (
                       <div className="rc-section">
                         <div className="rc-section-label">
                           Course Outcomes
-                          <span className="rc-legend">pass line {course.co_results[0].threshold}%</span>
+                          <span className="rc-legend">pass line {sortedCOs[0].threshold}%</span>
                         </div>
-                        {course.co_results.map((co, i) => (
+                        {sortedCOs.map((co, i) => (
                           <Track
                             key={co.co_code}
                             code={co.co_code ?? ""}
@@ -370,13 +475,13 @@ export default function PublicResultPage() {
                       </div>
                     )}
 
-                    {course.po_results.length > 0 && (
+                    {sortedPOs.length > 0 && (
                       <div className="rc-section">
                         <div className="rc-section-label">
                           Program Outcomes
-                          <span className="rc-legend">pass line {course.po_results[0].threshold}%</span>
+                          <span className="rc-legend">pass line {sortedPOs[0].threshold}%</span>
                         </div>
-                        {course.po_results.map((po, i) => (
+                        {sortedPOs.map((po, i) => (
                           <Track
                             key={po.po_code}
                             code={po.po_code ?? ""}
@@ -389,8 +494,10 @@ export default function PublicResultPage() {
                       </div>
                     )}
                   </article>
-                ))}
+                  )
+                })}
               </div>
+              </>
             )}
           </>
         )}

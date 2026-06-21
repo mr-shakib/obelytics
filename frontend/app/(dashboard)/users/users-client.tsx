@@ -25,7 +25,6 @@ type User = {
   id: string
   full_name: string
   first_name: string | null
-  middle_name: string | null
   last_name: string | null
   email: string
   faculty_type: string | null
@@ -88,11 +87,6 @@ export function UsersClient() {
       cell: ({ row }) => (
         <span className="font-medium">{row.original.first_name ?? row.original.full_name}</span>
       ),
-    },
-    {
-      accessorKey: "middle_name",
-      header: "Middle Name",
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.middle_name ?? "—"}</span>,
     },
     {
       accessorKey: "last_name",
@@ -159,7 +153,9 @@ export function UsersClient() {
         </div>
         <Select value={deptFilter} onValueChange={(v) => { if (v != null) setDeptFilter(v as string) }}>
           <SelectTrigger className="w-56">
-            <SelectValue placeholder="All Departments" />
+            <SelectValue placeholder="All Departments">
+              {deptFilter === "__all__" ? "All Departments" : (departments.find((d) => d.id === deptFilter)?.name ?? "All Departments")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All Departments</SelectItem>

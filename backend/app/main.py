@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.middleware.correlation_id import CorrelationIDMiddleware
 from app.core.redis_client import close_redis, get_redis
+from app.modules.iam.router.admin_router import router as admin_router
 from app.modules.iam.router.auth_router import router as auth_router
 from app.modules.iam.router.role_router import router as role_router
 from app.modules.iam.router.user_router import router as user_router
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
     app.include_router(user_router, prefix=settings.API_V1_PREFIX)
     app.include_router(role_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
 
     # Phase 2 — Organization + Reference Data
     app.include_router(org_router, prefix=settings.API_V1_PREFIX)

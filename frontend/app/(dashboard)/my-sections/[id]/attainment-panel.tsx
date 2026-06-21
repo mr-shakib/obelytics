@@ -52,7 +52,6 @@ type StudentAttainmentRow = {
 
 type AttainmentResponse = {
   threshold_co_score_pct: number
-  threshold_student_pct: number
   cos: COAttainment[]
   pos: POAttainment[]
   students: StudentAttainmentRow[]
@@ -102,22 +101,30 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
   if (isLoading) return <div className="h-64 animate-pulse bg-muted rounded-lg" />
   if (!data) return <p className="text-muted-foreground">Attainment data not available.</p>
 
-  const coData = data.cos.map((c) => ({
+  const naturalSort = (a: string, b: string) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+  const sortedCos = [...data.cos].sort((a, b) => naturalSort(a.co_code, b.co_code))
+  const sortedPos = [...data.pos].sort((a, b) => naturalSort(a.po_code, b.po_code))
+
+  const coData = sortedCos.map((c) => ({
     code: c.co_code,
-    value: Math.round(c.average_attainment_pct * 10) / 10,
+    value: c.total_students > 0
+      ? Math.round((c.students_above_threshold / c.total_students) * 1000) / 10
+      : 0,
     attained: c.is_attained,
   }))
-  const poData = data.pos.map((p) => ({
+  const poData = sortedPos.map((p) => ({
     code: p.po_code,
-    value: Math.round(p.attainment_pct * 10) / 10,
+    value: p.total_students > 0
+      ? Math.round((p.students_above_threshold / p.total_students) * 1000) / 10
+      : 0,
     attained: p.is_attained,
   }))
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <Badge variant="outline">CO score threshold: {Number(data.threshold_co_score_pct)}%</Badge>
-        <Badge variant="outline">Students-above-threshold target: {Number(data.threshold_student_pct)}%</Badge>
+        <Badge variant="outline">Attainment threshold: {Number(data.threshold_co_score_pct)}%</Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -126,7 +133,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
             <CardTitle className="text-sm">Course Outcome Attainment</CardTitle>
           </CardHeader>
           <CardContent>
-            <AttainmentBar data={coData} threshold={Number(data.threshold_student_pct)} label="CO Attainment" />
+            <AttainmentBar data={coData} threshold={Number(data.threshold_co_score_pct)} label="% Students Achieved" />
           </CardContent>
         </Card>
 
@@ -135,12 +142,12 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
             <CardTitle className="text-sm">Program Outcome Attainment</CardTitle>
           </CardHeader>
           <CardContent>
-            <AttainmentBar data={poData} threshold={Number(data.threshold_co_score_pct)} label="PO Attainment" />
+            <AttainmentBar data={poData} threshold={Number(data.threshold_co_score_pct)} label="% Students Achieved" />
           </CardContent>
         </Card>
       </div>
 
-      {data.cos.length > 0 && (
+      {sortedCos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">CO Attainment Summary</CardTitle>
@@ -150,7 +157,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
               <TableHeader>
                 <TableRow>
                   <TableHead></TableHead>
-                  {data.cos.map((co) => (
+                  {sortedCos.map((co) => (
                     <TableHead key={co.course_outcome_id} className="text-center">{co.co_code}</TableHead>
                   ))}
                 </TableRow>
@@ -158,13 +165,13 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
               <TableBody>
                 <TableRow>
                   <TableCell className="font-medium">No. of Students Who Attempted</TableCell>
-                  {data.cos.map((co) => (
+                  {sortedCos.map((co) => (
                     <TableCell key={co.course_outcome_id} className="text-center">{co.total_students}</TableCell>
                   ))}
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Threshold Marks</TableCell>
-                  {data.cos.map((co) => (
+                  {sortedCos.map((co) => (
                     <TableCell key={co.course_outcome_id} className="text-center">
                       {(Number(co.max_marks) * Number(data.threshold_co_score_pct) / 100).toFixed(1)}
                     </TableCell>
@@ -172,13 +179,13 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Number of Students Achieved CO</TableCell>
-                  {data.cos.map((co) => (
+                  {sortedCos.map((co) => (
                     <TableCell key={co.course_outcome_id} className="text-center">{co.students_above_threshold}</TableCell>
                   ))}
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">% of Students Achieved CO</TableCell>
-                  {data.cos.map((co) => (
+                  {sortedCos.map((co) => (
                     <TableCell key={co.course_outcome_id} className="text-center">
                       {co.total_students > 0 ? Math.round((co.students_above_threshold / co.total_students) * 100) : 0}%
                     </TableCell>
@@ -186,7 +193,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">CO Attained?</TableCell>
-                  {data.cos.map((co) => (
+                  {sortedCos.map((co) => (
                     <TableCell key={co.course_outcome_id} className="text-center">
                       <Badge variant={co.is_attained ? "default" : "destructive"} className="text-xs">
                         {co.is_attained ? "Yes" : "No"}
@@ -200,7 +207,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
         </Card>
       )}
 
-      {data.pos.length > 0 && (
+      {sortedPos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">PO Attainment Summary</CardTitle>
@@ -210,7 +217,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
               <TableHeader>
                 <TableRow>
                   <TableHead></TableHead>
-                  {data.pos.map((po) => (
+                  {sortedPos.map((po) => (
                     <TableHead key={po.program_outcome_id} className="text-center">{po.po_code}</TableHead>
                   ))}
                 </TableRow>
@@ -218,13 +225,13 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
               <TableBody>
                 <TableRow>
                   <TableCell className="font-medium">No. of Students Who Attempted</TableCell>
-                  {data.pos.map((po) => (
+                  {sortedPos.map((po) => (
                     <TableCell key={po.program_outcome_id} className="text-center">{po.total_students}</TableCell>
                   ))}
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Threshold Marks</TableCell>
-                  {data.pos.map((po) => (
+                  {sortedPos.map((po) => (
                     <TableCell key={po.program_outcome_id} className="text-center">
                       {(Number(po.max_marks) * Number(data.threshold_co_score_pct) / 100).toFixed(1)}
                     </TableCell>
@@ -232,13 +239,13 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Number of Students Achieved PO</TableCell>
-                  {data.pos.map((po) => (
+                  {sortedPos.map((po) => (
                     <TableCell key={po.program_outcome_id} className="text-center">{po.students_above_threshold}</TableCell>
                   ))}
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">% of Students Achieved PO</TableCell>
-                  {data.pos.map((po) => (
+                  {sortedPos.map((po) => (
                     <TableCell key={po.program_outcome_id} className="text-center">
                       {po.total_students > 0 ? Math.round((po.students_above_threshold / po.total_students) * 100) : 0}%
                     </TableCell>
@@ -246,7 +253,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">PO Attained?</TableCell>
-                  {data.pos.map((po) => (
+                  {sortedPos.map((po) => (
                     <TableCell key={po.program_outcome_id} className="text-center">
                       <Badge variant={po.is_attained ? "default" : "destructive"} className="text-xs">
                         {po.is_attained ? "Yes" : "No"}
@@ -260,7 +267,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
         </Card>
       )}
 
-      {data.cos.length > 0 && (
+      {sortedCos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">CO Detail</CardTitle>
@@ -277,7 +284,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.cos.map((co) => (
+                {sortedCos.map((co) => (
                   <TableRow key={co.course_outcome_id}>
                     <TableCell className="font-medium">{co.co_code}</TableCell>
                     <TableCell className="text-right">{Number(co.max_marks)}</TableCell>
@@ -298,7 +305,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
         </Card>
       )}
 
-      {data.pos.length > 0 && (
+      {sortedPos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">PO Detail</CardTitle>
@@ -314,7 +321,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.pos.map((po) => (
+                {sortedPos.map((po) => (
                   <TableRow key={po.program_outcome_id}>
                     <TableCell className="font-medium">{po.po_code}</TableCell>
                     <TableCell className="text-right">{po.contributing_co_count}</TableCell>
@@ -343,10 +350,10 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Name</TableHead>
-                  {data.cos.map((co) => (
+                  {sortedCos.map((co) => (
                     <TableHead key={co.course_outcome_id} className="text-center">{co.co_code}</TableHead>
                   ))}
-                  {data.pos.map((po) => (
+                  {sortedPos.map((po) => (
                     <TableHead key={po.program_outcome_id} className="text-center">{po.po_code}</TableHead>
                   ))}
                 </TableRow>
@@ -356,14 +363,14 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                   <TableRow key={student.enrollment_id}>
                     <TableCell className="font-mono text-xs">{student.student_id_number}</TableCell>
                     <TableCell>{student.full_name}</TableCell>
-                    {data.cos.map((co) => (
+                    {sortedCos.map((co) => (
                       <TableCell key={co.course_outcome_id} className="text-center">
                         <Badge variant={student.co_results[co.co_code] ? "default" : "destructive"} className="text-xs">
                           {student.co_results[co.co_code] ? "Yes" : "No"}
                         </Badge>
                       </TableCell>
                     ))}
-                    {data.pos.map((po) => (
+                    {sortedPos.map((po) => (
                       <TableCell key={po.program_outcome_id} className="text-center">
                         <Badge variant={student.po_results[po.po_code] ? "default" : "destructive"} className="text-xs">
                           {student.po_results[po.po_code] ? "Yes" : "No"}

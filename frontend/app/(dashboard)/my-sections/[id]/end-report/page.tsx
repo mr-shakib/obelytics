@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { ArrowLeft, Download, Loader2, Save, Send } from "lucide-react"
+import { ArrowLeft, Download, ExternalLink, Loader2, Save, Send } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -53,6 +53,8 @@ type COAttainment = {
   course_outcome_id: string
   co_code: string
   average_attainment_pct: number
+  students_above_threshold: number
+  total_students: number
   is_attained: boolean
 }
 
@@ -67,6 +69,7 @@ type EndReport = {
   co_attainment: Record<string, number>
   unattained_co_explanations: { co_code: string; reason: string; suggestion: string }[]
   teacher_feedback: string | null
+  course_drive_link: string | null
   status: string
   submitted_at: string | null
 }
@@ -87,6 +90,7 @@ export default function EndReportPage() {
     { co_code: string; reason: string; suggestion: string }[]
   >([])
   const [teacherFeedback, setTeacherFeedback] = useState("")
+  const [driveLink, setDriveLink] = useState("")
 
   const { data: sections = [] } = useQuery({
     queryKey: queryKeys.facultyAssignments.mySections,
@@ -156,13 +160,16 @@ export default function EndReportPage() {
     setCoAttainment(existingReport.co_attainment ?? {})
     setUnattainedExplanations(existingReport.unattained_co_explanations ?? [])
     setTeacherFeedback(existingReport.teacher_feedback ?? "")
+    setDriveLink(existingReport.course_drive_link ?? "")
   }, [existingReport])
 
   useEffect(() => {
     if (attainment?.cos && Object.keys(coAttainment).length === 0) {
       const initial: Record<string, number> = {}
       for (const co of attainment.cos) {
-        initial[co.co_code] = Math.round(Number(co.average_attainment_pct) * 10) / 10
+        initial[co.co_code] = co.total_students > 0
+          ? Math.round((co.students_above_threshold / co.total_students) * 1000) / 10
+          : 0
       }
       setCoAttainment(initial)
     }
@@ -211,10 +218,6 @@ export default function EndReportPage() {
     setGradeDistribution((prev) => ({ ...prev, [grade]: parseInt(value) || 0 }))
   }
 
-  const handleCOAttainmentChange = (coCode: string, value: string) => {
-    setCoAttainment((prev) => ({ ...prev, [coCode]: parseFloat(value) || 0 }))
-  }
-
   const handleExplanationChange = (index: number, field: "reason" | "suggestion", value: string) => {
     setUnattainedExplanations((prev) => {
       const next = [...prev]
@@ -231,6 +234,7 @@ export default function EndReportPage() {
           co_attainment: coAttainment,
           unattained_co_explanations: unattainedExplanations,
           teacher_feedback: teacherFeedback || null,
+          course_drive_link: driveLink.trim() || null,
         },
       } as never)
     },
@@ -249,6 +253,7 @@ export default function EndReportPage() {
           co_attainment: coAttainment,
           unattained_co_explanations: unattainedExplanations,
           teacher_feedback: teacherFeedback || null,
+          course_drive_link: driveLink.trim() || null,
         },
       } as never)
     },
@@ -260,7 +265,13 @@ export default function EndReportPage() {
     onError: () => toast.error("Failed to submit end report"),
   })
 
+  const enrolledCount = section?.student_count ?? 0
   const totalStudents = Object.values(gradeDistribution).reduce((sum, n) => sum + n, 0)
+  const gradeOverEnrolled = enrolledCount > 0 && totalStudents > enrolledCount
+
+  const driveLinkTrimmed = driveLink.trim()
+  const driveLinkValid = driveLinkTrimmed.length > 0 && driveLinkTrimmed.includes("drive.google.com")
+  const driveLinkInvalid = driveLinkTrimmed.length > 0 && !driveLinkTrimmed.includes("drive.google.com")
 
   if (loadingReport) {
     return <div className="h-64 animate-pulse bg-muted rounded-lg" />
@@ -329,12 +340,17 @@ export default function EndReportPage() {
       )}
 
       {/* Grade Distribution */}
-      <Card>
+      <Card className={gradeOverEnrolled ? "border-destructive" : undefined}>
         <CardHeader>
           <CardTitle className="text-lg">Grade Distribution</CardTitle>
           <CardDescription>
-            Enter the number of students who received each grade.
-            {totalStudents > 0 && ` Total: ${totalStudents} students`}
+            Enter the number of students who received each grade. Enrolled: <strong>{enrolledCount}</strong> students.
+            {totalStudents > 0 && (
+              <span className={gradeOverEnrolled ? " text-destructive font-semibold" : ""}>
+                {" "}Total entered: {totalStudents}
+                {gradeOverEnrolled && ` — exceeds enrolled count by ${totalStudents - enrolledCount}`}
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -354,6 +370,11 @@ export default function EndReportPage() {
               </div>
             ))}
           </div>
+          {gradeOverEnrolled && (
+            <p className="mt-3 text-sm text-destructive font-medium">
+              Total grade count ({totalStudents}) exceeds the number of enrolled students ({enrolledCount}). Please correct before saving.
+            </p>
+          )}
           {totalStudents > 0 && (
             <div className="mt-4 overflow-auto rounded-lg border">
               <Table>
@@ -389,7 +410,7 @@ export default function EndReportPage() {
         <CardHeader>
           <CardTitle className="text-lg">CO Attainment</CardTitle>
           <CardDescription>
-            Attainment percentage for each course outcome. Auto-populated from marks data — adjust if needed.
+            Attainment percentage for each course outcome, calculated from marks data.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -398,29 +419,60 @@ export default function EndReportPage() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {courseOutcomes.map((co) => {
-                const value = coAttainment[co.code] ?? ""
-                const attained = (coAttainment[co.code] ?? 0) >= 50
+                const value = coAttainment[co.code] ?? 0
+                const attained = value >= 50
                 return (
                   <div key={co.id} className="space-y-1">
                     <Label className="text-xs text-center block font-semibold">{co.code}</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.1}
-                        value={value}
-                        onChange={(e) => handleCOAttainmentChange(co.code, e.target.value)}
-                        disabled={isSubmitted}
-                        className={`h-9 text-center pr-7 ${attained ? "border-green-300" : "border-red-300"}`}
-                        placeholder="0"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    <div className={`h-9 flex items-center justify-center rounded-md border text-sm font-medium ${attained ? "border-green-300 bg-green-50 text-green-800" : "border-red-300 bg-red-50 text-red-800"}`}>
+                      {Number(value).toFixed(1)}%
                     </div>
                   </div>
                 )
               })}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Submit Course Link */}
+      <Card className={driveLinkInvalid ? "border-destructive" : driveLinkValid ? "border-green-400" : undefined}>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ExternalLink className="h-5 w-5 text-muted-foreground" />
+            Submit Course Link
+          </CardTitle>
+          <CardDescription>
+            Provide a Google Drive link containing course materials (e.g., scanned marksheets, attendance). This is
+            required before you can submit the end report to the Module Leader.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Input
+            type="url"
+            value={driveLink}
+            onChange={(e) => setDriveLink(e.target.value)}
+            disabled={isSubmitted}
+            placeholder="https://drive.google.com/drive/folders/..."
+            className={driveLinkInvalid ? "border-destructive focus-visible:ring-destructive" : driveLinkValid ? "border-green-400" : undefined}
+          />
+          {driveLinkInvalid && (
+            <p className="text-sm text-destructive font-medium">
+              Please enter a valid Google Drive link (must contain &quot;drive.google.com&quot;).
+            </p>
+          )}
+          {driveLinkValid && (
+            <p className="text-sm text-green-700 font-medium flex items-center gap-1">
+              <ExternalLink className="h-3.5 w-3.5" />
+              <a href={driveLinkTrimmed} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                Open link to verify
+              </a>
+            </p>
+          )}
+          {!isSubmitted && !driveLinkTrimmed && (
+            <p className="text-xs text-muted-foreground">
+              You must provide this link to submit the end report.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -496,14 +548,15 @@ export default function EndReportPage() {
           <Button
             variant="outline"
             onClick={() => saveDraftMutation.mutate()}
-            disabled={saveDraftMutation.isPending}
+            disabled={saveDraftMutation.isPending || gradeOverEnrolled}
           >
             {saveDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save Draft
           </Button>
           <Button
             onClick={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending}
+            disabled={submitMutation.isPending || gradeOverEnrolled || !driveLinkValid}
+            title={!driveLinkValid ? "A valid Google Drive link is required to submit" : undefined}
           >
             {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Submit to Module Leader

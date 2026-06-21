@@ -126,6 +126,11 @@ function AddMissionDialog({ programId, existingCount }: { programId: string; exi
     defaultValues: { code: `M${existingCount + 1}`, statement: "" },
   })
 
+  const handleOpenChange = (next: boolean) => {
+    if (next) reset({ code: `M${existingCount + 1}`, statement: "" })
+    setOpen(next)
+  }
+
   const mutation = useMutation({
     mutationFn: async (values: AddItemValues) => {
       await apiClient.POST("/missions" as never, {
@@ -135,14 +140,13 @@ function AddMissionDialog({ programId, existingCount }: { programId: string; exi
     onSuccess: () => {
       toast.success("Mission added")
       qc.invalidateQueries({ queryKey: queryKeys.programMissions.byProgram(programId) })
-      reset()
       setOpen(false)
     },
     onError: () => toast.error("Failed to add mission"),
   })
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button size="sm" variant="outline" className="h-7 gap-1 text-xs"><Plus className="h-3 w-3" /> Add</Button>} />
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -183,6 +187,11 @@ function AddPEODialog({ programId, existingCount }: { programId: string; existin
     defaultValues: { code: `PEO${existingCount + 1}`, statement: "" },
   })
 
+  const handleOpenChange = (next: boolean) => {
+    if (next) reset({ code: `PEO${existingCount + 1}`, statement: "" })
+    setOpen(next)
+  }
+
   const mutation = useMutation({
     mutationFn: async (values: AddItemValues) => {
       await apiClient.POST("/peos" as never, {
@@ -194,14 +203,13 @@ function AddPEODialog({ programId, existingCount }: { programId: string; existin
       qc.invalidateQueries({ queryKey: queryKeys.peos.byProgram(programId) })
       qc.invalidateQueries({ queryKey: ["peo-po-all-mappings", programId] })
       qc.invalidateQueries({ queryKey: ["peo-mission-all-mappings", programId] })
-      reset()
       setOpen(false)
     },
     onError: () => toast.error("Failed to add PEO"),
   })
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button size="sm" variant="outline" className="h-7 gap-1 text-xs"><Plus className="h-3 w-3" /> Add</Button>} />
       <DialogContent className="max-w-md">
         <DialogHeader>

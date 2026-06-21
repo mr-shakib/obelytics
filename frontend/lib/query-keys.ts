@@ -27,6 +27,8 @@ export const queryKeys = {
     all: ["roles"] as const,
     list: () => ["roles", "list"] as const,
     detail: (id: string) => ["roles", id] as const,
+    withPermissions: ["roles", "with-permissions"] as const,
+    allPermissions: ["roles", "permissions", "all"] as const,
   },
 
   // Reference Data

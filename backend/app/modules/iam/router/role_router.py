@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -11,7 +12,7 @@ from app.core.dependencies import (
     require_super_admin,
 )
 from app.modules.iam.exceptions import RoleNotFoundError, SystemRoleProtectedError
-from app.modules.iam.models import Role, User
+from app.modules.iam.models import Role, RolePermission, User
 from app.modules.iam.repository.role_repository import PermissionRepository, RoleRepository
 from app.modules.iam.schemas import (
     AddPermissionRequest,
@@ -19,6 +20,8 @@ from app.modules.iam.schemas import (
     PermissionResponse,
     RoleCreate,
     RoleResponse,
+    RoleWithPermissionsResponse,
+    SetPermissionsRequest,
 )
 
 router = APIRouter(prefix="/roles", tags=["Roles"])
@@ -61,6 +64,30 @@ async def list_all_permissions(
 ):
     repo = PermissionRepository(db)
     return await repo.list_all()
+
+
+@router.get("/with-permissions", response_model=list[RoleWithPermissionsResponse])
+async def list_roles_with_permissions(
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Return all roles together with their current permission codes (super admin only)."""
+    role_repo = RoleRepository(db)
+    roles = await role_repo.list_by_org(current_user.organization_id)
+    result = []
+    for role in roles:
+        role_with_perms = await role_repo.get_by_id(role.id)
+        result.append(
+            RoleWithPermissionsResponse(
+                id=role.id,
+                name=role.name,
+                description=role.description,
+                is_system_role=role.is_system_role,
+                permission_codes=[p.code for p in (role_with_perms.permissions if role_with_perms else [])],
+            )
+        )
+    return result
 
 
 # ── Parameterised routes ──────────────────────────────────────────────────────
@@ -122,4 +149,24 @@ async def remove_permission_from_role(
     if role.is_system_role:
         raise SystemRoleProtectedError()
     await repo.remove_permission(role_id, permission_id)
+    await db.commit()
+
+
+@router.put("/{role_id}/permissions", status_code=204)
+async def set_role_permissions(
+    role_id: UUID,
+    body: SetPermissionsRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Replace the full permission set for any role (super admin only, bypasses system-role guard)."""
+    repo = RoleRepository(db)
+    role = await repo.get_by_id(role_id)
+    if not role:
+        raise RoleNotFoundError()
+
+    await db.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
+    for perm_id in body.permission_ids:
+        db.add(RolePermission(role_id=role_id, permission_id=perm_id))
+
     await db.commit()

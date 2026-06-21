@@ -182,7 +182,7 @@ export function CoursesClient() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { theory_hours: 0, lab_hours: 0 },
+    defaultValues: { code: "", title: "", credits: 0, theory_hours: 0, lab_hours: 0, description: "" },
   })
 
   const mutation = useMutation({
@@ -205,7 +205,8 @@ export function CoursesClient() {
       qc.invalidateQueries({ queryKey: queryKeys.courses.all })
       setOpen(false)
       setSelCategoryId("")
-      reset({ theory_hours: 0, lab_hours: 0 })
+      setSelCourseType("")
+      reset()
     },
     onError: () => toast.error("Failed to create course"),
   })
@@ -227,7 +228,7 @@ export function CoursesClient() {
                   setSelCourseType("")
                   setNewCategoryOpen(false)
                   setNewCategoryName("")
-                  reset({ theory_hours: 0, lab_hours: 0 })
+                  reset()
                 }
               }}
             >

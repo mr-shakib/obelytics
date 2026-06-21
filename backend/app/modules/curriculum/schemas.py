@@ -11,17 +11,14 @@ from pydantic import BaseModel, Field, computed_field
 class CurriculumCreate(BaseModel):
     program_id: UUID
     name: str = Field(min_length=1, max_length=255)
-    code: str = Field(min_length=1, max_length=50)
     effective_year: int = Field(ge=1900, le=2100)
     threshold_co_score_pct: Decimal = Field(default=Decimal("50"), ge=0, le=100)
-    threshold_student_pct: Decimal = Field(default=Decimal("50"), ge=0, le=100)
 
 
 class CurriculumUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     threshold_co_score_pct: Decimal | None = Field(default=None, ge=0, le=100)
-    threshold_student_pct: Decimal | None = Field(default=None, ge=0, le=100)
 
 
 class CurriculumResponse(BaseModel):
@@ -29,13 +26,11 @@ class CurriculumResponse(BaseModel):
     organization_id: UUID
     program_id: UUID
     name: str
-    code: str
     effective_year: int
     version_number: int
     parent_curriculum_id: UUID | None
     status: str
     threshold_co_score_pct: Decimal
-    threshold_student_pct: Decimal
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime

@@ -29,6 +29,7 @@ class User(Base):
     first_name = Column(String(100), nullable=True)
     middle_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
+    employee_id = Column(String(100), nullable=True)
     faculty_type = Column(String(50), nullable=True)
     nid = Column(String(50), nullable=True)
     department_id = Column(PGUUID(as_uuid=True), nullable=True)  # FK to org.departments — no ORM rel to avoid cross-schema coupling

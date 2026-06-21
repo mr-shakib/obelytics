@@ -51,9 +51,8 @@ class AttainmentEngine:
         curriculum_id = section_offering.curriculum_id
         course_id = section_offering.course_id
 
-        # 2. Load attainment thresholds from the curriculum (set by the Program
-        #    Coordinator), falling back to 50/50 if the curriculum is missing.
-        threshold_co_score_pct, threshold_student_pct = await self._load_thresholds(curriculum_id)
+        # 2. Load attainment threshold from the curriculum (set by the Program Coordinator).
+        threshold_co_score_pct = await self._load_thresholds(curriculum_id)
 
         # 3. Load LOCKED assessments for this offering
         assessments_result = await self._session.execute(
@@ -166,7 +165,7 @@ class AttainmentEngine:
             )
             is_attained = (
                 Decimal(str(above_threshold)) / Decimal(str(total_students)) * Decimal("100")
-                >= threshold_student_pct
+                >= threshold_co_score_pct
             ) if total_students > 0 else False
 
             co_avg_attainment[co_id] = avg
@@ -245,9 +244,9 @@ class AttainmentEngine:
             )
             await self._po_repo.upsert(po_result)
 
-    async def _load_thresholds(self, curriculum_id: UUID) -> tuple[Decimal, Decimal]:
-        """Attainment thresholds (CO-score %, student %) for a curriculum, set by the
-        Program Coordinator. Falls back to 50/50 if the curriculum can't be found."""
+    async def _load_thresholds(self, curriculum_id: UUID) -> Decimal:
+        """Attainment threshold for a curriculum, set by the Program Coordinator.
+        Falls back to 50% if the curriculum can't be found."""
         from app.modules.curriculum.models import Curriculum
 
         curriculum = (await self._session.execute(
@@ -255,9 +254,6 @@ class AttainmentEngine:
         )).scalar_one_or_none()
 
         if curriculum is not None:
-            return (
-                Decimal(str(curriculum.threshold_co_score_pct)),
-                Decimal(str(curriculum.threshold_student_pct)),
-            )
+            return Decimal(str(curriculum.threshold_co_score_pct))
 
-        return Decimal("50.00"), Decimal("50.00")
+        return Decimal("50.00")

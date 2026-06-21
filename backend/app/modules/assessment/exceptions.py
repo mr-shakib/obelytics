@@ -129,6 +129,14 @@ class MarksheetSectionTeacherScopeError(HTTPException):
         )
 
 
+class MarksheetModuleLeaderScopeError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Question configuration is only allowed for the Module Leader of this course",
+        )
+
+
 class MarksheetLockedError(HTTPException):
     def __init__(self):
         super().__init__(

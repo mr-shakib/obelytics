@@ -233,7 +233,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 alembic upgrade head
 ```
 
-This creates all 13 Postgres schemas and 51 tables across 14 migration files (`0001` → `0014`).
+This creates all schemas and tables across 29 migration files (`0001` → `0029`).
 
 Verify the migration ran cleanly:
 
@@ -250,17 +250,13 @@ alembic history
 
 ### 3e. Seed reference data and the first admin user
 
-Load built-in reference data (permissions, assessment types, course types, etc.):
-
-```powershell
-python -m scripts.seed_reference_data
-```
-
-Create the first super-admin user:
+**Step 1 — create the organization and super-admin user:**
 
 ```powershell
 python -m scripts.seed_superadmin
 ```
+
+The script prints an `--org-id` on first run. Copy it — you need it for step 2.
 
 Default credentials created:
 
@@ -269,10 +265,18 @@ Default credentials created:
 | Email | `admin@obelytics.local` |
 | Password | `Admin@123` |
 
-**Create a second superadmin** (pass the `--org-id` printed on first run):
+**Step 2 — load built-in reference data** (replace `<org-id>` with the value printed above):
 
 ```powershell
-python -m scripts.seed_superadmin --email you@example.com --password "YourPassword123" --org-id <printed-org-id>
+python -m scripts.seed_reference_data --org-id <org-id>
+```
+
+This seeds Bloom taxonomy domains/levels, delivery methods, course categories, assessment types, and CO-PO mapping weights.
+
+**Create a second superadmin** (pass the same `--org-id`):
+
+```powershell
+python -m scripts.seed_superadmin --email you@example.com --password "YourPassword123" --org-id <org-id>
 ```
 
 **Use a custom password on first run:**
@@ -466,8 +470,8 @@ docker exec backend-postgres-1 psql -U obelytics -d obelytics -c "
 BEGIN;
 TRUNCATE org.department_head_history, org.departments, org.programs CASCADE;
 TRUNCATE curriculum.course_lesson_plan_item_cos, curriculum.course_lesson_plan_item_pos, curriculum.course_lesson_plan_items, curriculum.course_co_marks, curriculum.course_bloom_marks, curriculum.course_bloom_domains, curriculum.course_assessment_tools, curriculum.course_learning_materials, curriculum.course_objectives, curriculum.course_prerequisites, curriculum.faculty_assignments, curriculum.module_leader_assignments, curriculum.section_offerings, curriculum.sections, curriculum.curriculum_course_slots, curriculum.curriculum_term_definitions, curriculum.batch_term_calendar, curriculum.batches, curriculum.courses, curriculum.curricula, curriculum.academic_terms CASCADE;
-TRUNCATE obe.co_ca_mappings, obe.co_cp_mappings, obe.co_delivery_methods, obe.co_kp_mappings, obe.co_po_mapping_entries, obe.co_po_mapping_sets, obe.course_outcome_bloom_levels, obe.course_outcomes, obe.po_knowledge_profiles, obe.program_outcomes CASCADE;
-TRUNCATE assessment.student_marks, assessment.marksheet_marks, assessment.marksheet_questions, assessment.result_publications, assessment.assessment_co_weights, assessment.assessments, assessment.student_enrollments, assessment.students CASCADE;
+TRUNCATE obe.peo_mission_mappings, obe.peo_po_mappings, obe.program_educational_objectives, obe.program_missions, obe.co_ca_mappings, obe.co_cp_mappings, obe.co_delivery_methods, obe.co_kp_mappings, obe.co_po_mapping_entries, obe.co_po_mapping_sets, obe.course_outcome_bloom_levels, obe.course_outcomes, obe.po_knowledge_profiles, obe.program_outcomes CASCADE;
+TRUNCATE assessment.course_end_reports, assessment.student_marks, assessment.marksheet_marks, assessment.marksheet_questions, assessment.result_publications, assessment.assessment_co_weights, assessment.assessments, assessment.student_enrollments, assessment.students CASCADE;
 TRUNCATE attainment.co_attainment_results, attainment.po_attainment_results, attainment.attainment_configs CASCADE;
 TRUNCATE accreditation.criterion_po_mappings, accreditation.accreditation_criteria, accreditation.accreditation_cycles CASCADE;
 TRUNCATE approval.review_comments CASCADE;

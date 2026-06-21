@@ -39,7 +39,6 @@ type Curriculum = {
   id: string
   program_id: string
   name: string
-  code: string
   effective_year: number
   version_number: number
   status: string
@@ -55,14 +54,12 @@ function programLabel(p: Program) {
 }
 
 const schema = z.object({
-  code: z.string().min(1, "Code is required").max(50),
   program_id: z.string().min(1, "Program is required"),
   effective_year: z.number().int().min(1900).max(2100),
   version_number: z.number().int().min(1, "Version must be at least 1").max(99),
   batch_name: z.string().min(1, "Batch is required").max(100),
   semester_count: z.number().int().min(1, "At least 1 semester is required").max(20),
   threshold_co_score_pct: z.number().min(0, "0–100").max(100, "0–100"),
-  threshold_student_pct: z.number().min(0, "0–100").max(100, "0–100"),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -127,7 +124,7 @@ export function CurriculaClient() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { semester_count: 12, version_number: 1, threshold_co_score_pct: 50, threshold_student_pct: 50 },
+    defaultValues: { semester_count: 12, version_number: 1, threshold_co_score_pct: 50 },
   })
 
   const watchedYear = watch("effective_year")
@@ -145,7 +142,6 @@ export function CurriculaClient() {
 
   const columns: ColumnDef<Curriculum>[] = [
     { accessorKey: "name", header: "Name" },
-    { accessorKey: "code", header: "Code" },
     {
       id: "program",
       header: "Program",
@@ -174,11 +170,9 @@ export function CurriculaClient() {
       const { data: curriculum } = await apiClient.POST("/curricula" as never, {
         body: {
           name: autoName,
-          code: values.code,
           program_id: values.program_id,
           effective_year: values.effective_year,
           threshold_co_score_pct: values.threshold_co_score_pct,
-          threshold_student_pct: values.threshold_student_pct,
         },
       } as never)
       const created = (curriculum as unknown) as { id: string }
@@ -206,7 +200,7 @@ export function CurriculaClient() {
       setOpen(false)
       setSelProgramId("")
       setSelBatchName("")
-      reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50, threshold_student_pct: 50 })
+      reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50 })
     },
     onError: () => toast.error("Failed to create curriculum"),
   })
@@ -215,7 +209,7 @@ export function CurriculaClient() {
     setOpen(false)
     setSelProgramId("")
     setSelBatchName("")
-    reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50, threshold_student_pct: 50 })
+    reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50 })
   }
 
   return (
@@ -230,17 +224,23 @@ export function CurriculaClient() {
                 <Plus className="h-4 w-4" />
                 New Curriculum
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle>Create Curriculum</DialogTitle>
                 </DialogHeader>
                 <form
                   id="create-curriculum-form"
                   onSubmit={handleSubmit((v) => mutation.mutate(v))}
-                  className="space-y-4 py-2"
+                  className="space-y-4 py-1"
                 >
+                  {/* Generated name — prominent preview at the top */}
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-primary/60 mb-0.5">Curriculum Name</p>
+                    <p className="font-mono text-sm font-semibold text-primary truncate">{generatedName}</p>
+                  </div>
+
                   {/* Program */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Program</Label>
                     <Select
                       value={selProgramId}
@@ -266,34 +266,27 @@ export function CurriculaClient() {
                       </SelectContent>
                     </Select>
                     {errors.program_id && (
-                      <p className="text-sm text-destructive">{errors.program_id.message}</p>
+                      <p className="text-xs text-destructive">{errors.program_id.message}</p>
                     )}
                   </div>
 
-                  {/* Code / Year / Version */}
+                  {/* Year / Version / Threshold */}
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="code">Code</Label>
-                      <Input id="code" placeholder="CSE-2024" {...register("code")} />
-                      {errors.code && (
-                        <p className="text-sm text-destructive">{errors.code.message}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="effective_year">Year</Label>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="effective_year">Effective Year</Label>
                       <Input
                         id="effective_year"
                         type="number"
                         min={1900}
                         max={2100}
-                        placeholder="2024"
+                        placeholder={String(new Date().getFullYear())}
                         {...register("effective_year", { valueAsNumber: true })}
                       />
                       {errors.effective_year && (
-                        <p className="text-sm text-destructive">{errors.effective_year.message}</p>
+                        <p className="text-xs text-destructive">{errors.effective_year.message}</p>
                       )}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="version_number">Version</Label>
                       <Input
                         id="version_number"
@@ -304,118 +297,75 @@ export function CurriculaClient() {
                         {...register("version_number", { valueAsNumber: true })}
                       />
                       {errors.version_number && (
-                        <p className="text-sm text-destructive">{errors.version_number.message}</p>
+                        <p className="text-xs text-destructive">{errors.version_number.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="threshold_co_score_pct">Threshold (%)</Label>
+                      <Input
+                        id="threshold_co_score_pct"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="1"
+                        placeholder="50"
+                        {...register("threshold_co_score_pct", { valueAsNumber: true })}
+                      />
+                      {errors.threshold_co_score_pct && (
+                        <p className="text-xs text-destructive">{errors.threshold_co_score_pct.message}</p>
                       )}
                     </div>
                   </div>
 
-                  {/* Auto-generated name preview */}
-                  <div className="rounded-xl border bg-muted/30 px-4 py-3">
-                    <p className="text-xs text-muted-foreground mb-1">Generated curriculum name</p>
-                    <p className="font-mono text-sm font-medium">{generatedName}</p>
-                  </div>
-
-                  {/* Batch */}
-                  <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
-                    <Label>Batch</Label>
-                    {uniqueBatchNames.length > 0 ? (
-                      <Select
-                        value={selBatchName}
-                        onValueChange={(v) => {
-                          if (v == null) return
-                          setSelBatchName(v as string)
-                          setValue("batch_name", v as string, { shouldValidate: true })
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select batch">
-                            {(value: string) => value || null}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {uniqueBatchNames.map((b) => (
-                            <SelectItem key={b.id} value={b.name}>
-                              {b.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        placeholder="e.g. Batch 61"
-                        {...register("batch_name")}
-                      />
-                    )}
-                    {errors.batch_name && (
-                      <p className="text-sm text-destructive">{errors.batch_name.message}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Creates the curriculum&apos;s first batch (cohort), with its intake year set to the
-                      effective year above.
-                    </p>
-                  </div>
-
-                  {/* Semester count */}
-                  <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
-                    <Label htmlFor="semester_count">Number of Semesters</Label>
-                    <Input
-                      id="semester_count"
-                      type="number"
-                      min={1}
-                      max={20}
-                      placeholder="8"
-                      {...register("semester_count", { valueAsNumber: true })}
-                    />
-                    {errors.semester_count && (
-                      <p className="text-sm text-destructive">{errors.semester_count.message}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Automatically creates this many semesters (Semester 1, Semester 2, …) for the
-                      curriculum, ready for courses to be placed into.
-                    </p>
-                  </div>
-
-                  {/* Attainment thresholds */}
-                  <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-                    <Label>Attainment Thresholds</Label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="threshold_co_score_pct" className="text-xs font-normal text-muted-foreground">
-                          CO/PO pass mark (%)
-                        </Label>
-                        <Input
-                          id="threshold_co_score_pct"
-                          type="number"
-                          min={0}
-                          max={100}
-                          step="0.01"
-                          {...register("threshold_co_score_pct", { valueAsNumber: true })}
-                        />
-                        {errors.threshold_co_score_pct && (
-                          <p className="text-sm text-destructive">{errors.threshold_co_score_pct.message}</p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="threshold_student_pct" className="text-xs font-normal text-muted-foreground">
-                          Students attaining (%)
-                        </Label>
-                        <Input
-                          id="threshold_student_pct"
-                          type="number"
-                          min={0}
-                          max={100}
-                          step="0.01"
-                          {...register("threshold_student_pct", { valueAsNumber: true })}
-                        />
-                        {errors.threshold_student_pct && (
-                          <p className="text-sm text-destructive">{errors.threshold_student_pct.message}</p>
-                        )}
-                      </div>
+                  {/* Batch + Semesters side by side */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>First Batch</Label>
+                      {uniqueBatchNames.length > 0 ? (
+                        <Select
+                          value={selBatchName}
+                          onValueChange={(v) => {
+                            if (v == null) return
+                            setSelBatchName(v as string)
+                            setValue("batch_name", v as string, { shouldValidate: true })
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select batch">
+                              {(value: string) => value || null}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {uniqueBatchNames.map((b) => (
+                              <SelectItem key={b.id} value={b.name}>
+                                {b.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input placeholder="e.g. Batch 61" {...register("batch_name")} />
+                      )}
+                      {errors.batch_name && (
+                        <p className="text-xs text-destructive">{errors.batch_name.message}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">First student cohort for this curriculum.</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      A student attains a CO/PO when their score reaches the pass mark. A CO is
-                      considered attained when at least this share of students attain it. Defaults to 50% each.
-                    </p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="semester_count">Semesters</Label>
+                      <Input
+                        id="semester_count"
+                        type="number"
+                        min={1}
+                        max={20}
+                        placeholder="12"
+                        {...register("semester_count", { valueAsNumber: true })}
+                      />
+                      {errors.semester_count && (
+                        <p className="text-xs text-destructive">{errors.semester_count.message}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Auto-creates semester slots (1 – N).</p>
+                    </div>
                   </div>
                 </form>
                 <DialogFooter>

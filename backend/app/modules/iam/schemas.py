@@ -38,6 +38,7 @@ class UserCreate(BaseModel):
     middle_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
     title: str | None = Field(default=None, max_length=20)
+    employee_id: str = Field(min_length=1, max_length=100)
     faculty_type: str | None = Field(default=None, max_length=50)
     nid: str | None = Field(default=None, max_length=50)
     department_id: UUID | None = None
@@ -46,8 +47,8 @@ class UserCreate(BaseModel):
     qualification: str | None = Field(default=None, max_length=255)
     experience_years: int | None = Field(default=None, ge=0, le=99)
     password: str = Field(min_length=8)
-    role_id: UUID
-    scope_type: str = Field(pattern="^(GLOBAL|PROGRAM)$")
+    role_id: UUID | None = None
+    scope_type: str = Field(default="GLOBAL", pattern="^(GLOBAL|PROGRAM)$")
     scope_id: UUID | None = None
 
 
@@ -56,6 +57,7 @@ class UserUpdate(BaseModel):
     middle_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
     title: str | None = Field(default=None, max_length=20)
+    employee_id: str | None = Field(default=None, max_length=100)
     faculty_type: str | None = Field(default=None, max_length=50)
     nid: str | None = Field(default=None, max_length=50)
     department_id: UUID | None = None
@@ -84,6 +86,7 @@ class UserResponse(BaseModel):
     first_name: str | None
     middle_name: str | None
     last_name: str | None
+    employee_id: str | None
     faculty_type: str | None
     nid: str | None
     department_id: UUID | None
@@ -152,6 +155,20 @@ class PermissionResponse(BaseModel):
 
 class AddPermissionRequest(BaseModel):
     permission_id: UUID
+
+
+class SetPermissionsRequest(BaseModel):
+    permission_ids: list[UUID]
+
+
+class RoleWithPermissionsResponse(BaseModel):
+    id: UUID
+    name: str
+    description: str | None
+    is_system_role: bool
+    permission_codes: list[str]
+
+    model_config = {"from_attributes": True}
 
 
 # ── Permission Manifest ───────────────────────────────────────────────────────

@@ -118,19 +118,19 @@ class CurriculumService:
         self._repo = CurriculumRepository(session)
 
     async def create(self, body: CurriculumCreate, org_id: UUID) -> Curriculum:
-        existing = await self._repo.find_by_code(body.code, body.program_id, version=1)
+        auto_code = body.name[:50]
+        existing = await self._repo.find_by_code(auto_code, body.program_id, version=1)
         if existing:
             raise CurriculumCodeConflictError()
         curriculum = Curriculum(
             organization_id=org_id,
             program_id=body.program_id,
             name=body.name,
-            code=body.code,
+            code=auto_code,
             effective_year=body.effective_year,
             version_number=1,
             status="DRAFT",
             threshold_co_score_pct=body.threshold_co_score_pct,
-            threshold_student_pct=body.threshold_student_pct,
         )
         result = await self._repo.create(curriculum)
         await self._session.commit()

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { useHasAnyPermission } from "@/hooks/use-permission"
+import { useHasAnyPermission, usePermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { ExamGrid } from "./exam-grid"
@@ -63,6 +63,7 @@ interface Props {
 export function MarksheetClient({ sectionOfferingId }: Props) {
   const router = useRouter()
   const canSubmit = useHasAnyPermission(["result.submit"])
+  const canManageCurriculum = usePermission("curriculum.create") // PC / SA
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDownloadingEndReport, setIsDownloadingEndReport] = useState(false)
 
@@ -83,6 +84,17 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
       return (data as unknown) as SectionOffering
     },
   })
+
+  const { data: myModuleAssignments = [] } = useQuery({
+    queryKey: queryKeys.moduleLeaderAssignments.mine,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/module-leader-assignments/mine" as never)
+      return ((data as unknown) as { course_id: string }[]) ?? []
+    },
+    enabled: !canManageCurriculum,
+  })
+
+  const isMyModule = canManageCurriculum || myModuleAssignments.some((a) => a.course_id === offering?.course_id)
 
   const { data: courseOutcomes = [] } = useQuery({
     queryKey: queryKeys.courseOutcomes.list(offering?.curriculum_id, offering?.course_id),
@@ -252,7 +264,7 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
         </Alert>
       )}
 
-      {offering && (
+      {offering && isMyModule && (
         <QuestionConfigCard courseId={offering.course_id} curriculumId={offering.curriculum_id} />
       )}
 

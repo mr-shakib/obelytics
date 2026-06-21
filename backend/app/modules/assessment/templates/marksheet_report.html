@@ -199,11 +199,11 @@
   <!-- Signatures -->
   <div class="signature-row">
     <div class="signature-block">
-      <p><strong>Section Teacher</strong></p>
+      <p><strong>Section Teacher</strong>{% if section_teacher_name %}<br>{{ section_teacher_name }}{% endif %}</p>
       <div class="signature-line">Signature</div>
     </div>
     <div class="signature-block">
-      <p><strong>Module Leader</strong></p>
+      <p><strong>Module Leader</strong>{% if module_leader_name %}<br>{{ module_leader_name }}{% endif %}</p>
       <div class="signature-line">Signature</div>
     </div>
   </div>

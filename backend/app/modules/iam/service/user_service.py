@@ -32,9 +32,10 @@ class UserService:
         if existing:
             raise UserAlreadyExistsError()
 
-        role = await self._roles.get_by_id(data.role_id)
-        if role is None:
-            raise RoleNotFoundError()
+        if data.role_id is not None:
+            role = await self._roles.get_by_id(data.role_id)
+            if role is None:
+                raise RoleNotFoundError()
 
         name_parts = [p for p in [data.title, data.first_name, data.middle_name, data.last_name] if p]
         full_name = " ".join(name_parts)
@@ -47,6 +48,7 @@ class UserService:
             first_name=data.first_name,
             middle_name=data.middle_name,
             last_name=data.last_name,
+            employee_id=data.employee_id,
             faculty_type=data.faculty_type,
             nid=data.nid,
             department_id=data.department_id,
@@ -66,14 +68,15 @@ class UserService:
         )
         self._session.add(cred)
 
-        assignment = UserRoleAssignment(
-            user_id=user.id,
-            role_id=data.role_id,
-            scope_type=data.scope_type,
-            scope_id=data.scope_id,
-            assigned_by=created_by,
-        )
-        self._session.add(assignment)
+        if data.role_id is not None:
+            assignment = UserRoleAssignment(
+                user_id=user.id,
+                role_id=data.role_id,
+                scope_type=data.scope_type,
+                scope_id=data.scope_id,
+                assigned_by=created_by,
+            )
+            self._session.add(assignment)
         await self._session.commit()
         # Refresh to populate server-default columns (created_at, updated_at)
         await self._session.refresh(user)
@@ -84,7 +87,7 @@ class UserService:
         if user is None:
             raise UserNotFoundError(user_id)
 
-        updatable = ["first_name", "middle_name", "last_name", "title", "faculty_type",
+        updatable = ["first_name", "middle_name", "last_name", "title", "employee_id", "faculty_type",
                      "nid", "department_id", "designation", "contact_number", "qualification", "experience_years"]
         changed = False
         for field in updatable:
@@ -126,6 +129,30 @@ class UserService:
             raise UserNotFoundError(user_id)
 
         user.status = "DEACTIVATED"
+        self._session.add(user)
+        await self._session.commit()
+
+        builder = PermissionManifestBuilder(self._session)
+        await builder.invalidate(user_id)
+
+    async def activate_user(self, user_id: UUID) -> None:
+        user = await self._users.find_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id)
+
+        user.status = "ACTIVE"
+        self._session.add(user)
+        await self._session.commit()
+
+        builder = PermissionManifestBuilder(self._session)
+        await builder.invalidate(user_id)
+
+    async def delete_user(self, user_id: UUID) -> None:
+        user = await self._users.find_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id)
+
+        user.status = "DELETED"
         self._session.add(user)
         await self._session.commit()
 

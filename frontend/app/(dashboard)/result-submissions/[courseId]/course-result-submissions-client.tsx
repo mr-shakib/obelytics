@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
-import { ArrowLeft, ArrowRight, Check, Download, FileText, Loader2, Send } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, Download, ExternalLink, FileText, Loader2, Send } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,6 +36,7 @@ type ResultSubmission = {
   ml_rejection_comment: string | null
   student_count: number
   end_report_status: string | null
+  course_drive_link: string | null
 }
 
 function SubmittedAt({ value }: { value: string | null }) {
@@ -73,6 +74,12 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
   const canSubmitToPC = useHasAnyPermission(["result.approve.ml"])
   const canApprovePC = useHasAnyPermission(["result.approve.pc"])
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
+  const [viewedLinks, setViewedLinks] = useState<Set<string>>(new Set())
+
+  function handleOpenDriveLink(offeringId: string, url: string) {
+    window.open(url, "_blank", "noopener,noreferrer")
+    setViewedLinks((prev) => new Set(prev).add(offeringId))
+  }
 
   const { data: submissions = [], isLoading } = useQuery({
     queryKey: queryKeys.results.submissions({ course_id: courseId }),
@@ -191,6 +198,12 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
             bulkApprovePCMutation.variables?.academicTermId === group.academic_term_id
           const isDownloading = downloadingKey === group.label
 
+          // Sections that have been submitted with a drive link but ML hasn't opened yet
+          const unviewedDriveLinks = group.items.filter(
+            (i) => i.status === "SUBMITTED" && i.end_report_status === "SUBMITTED" && i.course_drive_link && !viewedLinks.has(i.section_offering_id)
+          )
+          const allDriveLinksViewed = unviewedDriveLinks.length === 0
+
           return (
           <div key={group.label} className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -220,16 +233,24 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                   Download Combined Report
                 </Button>
                 {canSubmitToPC && reviewCount > 0 && (
-                  <Button
-                    size="sm"
-                    disabled={isSubmitting}
-                    onClick={() =>
-                      bulkApproveMutation.mutate({ batchId: group.batch_id, academicTermId: group.academic_term_id })
-                    }
-                  >
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Send />}
-                    Submit {reviewCount} section{reviewCount === 1 ? "" : "s"} to Program Coordinator
-                  </Button>
+                  <div className="flex flex-col items-end gap-1">
+                    <Button
+                      size="sm"
+                      disabled={isSubmitting || !allDriveLinksViewed}
+                      title={!allDriveLinksViewed ? `Open the Drive link${unviewedDriveLinks.length > 1 ? "s" : ""} for all submitted sections first` : undefined}
+                      onClick={() =>
+                        bulkApproveMutation.mutate({ batchId: group.batch_id, academicTermId: group.academic_term_id })
+                      }
+                    >
+                      {isSubmitting ? <Loader2 className="animate-spin" /> : <Send />}
+                      Submit {reviewCount} section{reviewCount === 1 ? "" : "s"} to Program Coordinator
+                    </Button>
+                    {!allDriveLinksViewed && (
+                      <p className="text-xs text-muted-foreground">
+                        Open the Drive link{unviewedDriveLinks.length > 1 ? "s" : ""} for {unviewedDriveLinks.length} section{unviewedDriveLinks.length > 1 ? "s" : ""} to enable
+                      </p>
+                    )}
+                  </div>
                 )}
                 {canApprovePC && pcReviewCount > 0 && (
                   <Button
@@ -267,6 +288,18 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                     <p className="text-xs text-muted-foreground"><SubmittedAt value={item.submitted_at} /></p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {item.end_report_status === "SUBMITTED" && item.course_drive_link && (
+                      <Button
+                        size="sm"
+                        variant={viewedLinks.has(item.section_offering_id) ? "outline" : "default"}
+                        className={viewedLinks.has(item.section_offering_id) ? "text-green-700 border-green-300" : "bg-blue-600 hover:bg-blue-700"}
+                        onClick={() => handleOpenDriveLink(item.section_offering_id, item.course_drive_link!)}
+                        title="Open Drive link submitted by section teacher"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {viewedLinks.has(item.section_offering_id) ? "Drive Link ✓" : "Open Drive Link"}
+                      </Button>
+                    )}
                     {item.end_report_status === "SUBMITTED" && (
                       <Button
                         size="sm"

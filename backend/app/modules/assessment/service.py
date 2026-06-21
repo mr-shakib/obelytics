@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -81,7 +82,7 @@ from app.modules.assessment.schemas import (
     StudentUpdate,
 )
 from app.modules.curriculum.exceptions import SectionOfferingNotFoundError
-from app.modules.curriculum.models import AcademicTerm, Batch, Course, Curriculum, Section, SectionOffering
+from app.modules.curriculum.models import AcademicTerm, Batch, Course, Curriculum, FacultyAssignment, ModuleLeaderAssignment, Section, SectionOffering
 from app.modules.curriculum.repository import (
     FacultyAssignmentRepository,
     ModuleLeaderAssignmentRepository,
@@ -991,6 +992,7 @@ class ResultPublicationService:
         offering_ids = [row.section_offering_id for row in rows]
         counts: dict[UUID, int] = {}
         end_report_statuses: dict[UUID, str] = {}
+        end_report_drive_links: dict[UUID, str | None] = {}
         if offering_ids:
             count_result = await self._session.execute(
                 select(StudentEnrollment.section_offering_id, func.count(StudentEnrollment.id))
@@ -1000,17 +1002,19 @@ class ResultPublicationService:
             counts = dict(count_result.all())
 
             er_rows = (await self._session.execute(
-                select(CourseEndReport.section_offering_id, CourseEndReport.status)
+                select(CourseEndReport.section_offering_id, CourseEndReport.status, CourseEndReport.course_drive_link)
                 .where(CourseEndReport.section_offering_id.in_(offering_ids))
             )).all()
             for er_row in er_rows:
                 end_report_statuses[er_row[0]] = er_row[1]
+                end_report_drive_links[er_row[0]] = er_row[2]
 
         return [
             {
                 **row._mapping,
                 "status": row.status or "DRAFT",
                 "end_report_status": end_report_statuses.get(row.section_offering_id),
+                "course_drive_link": end_report_drive_links.get(row.section_offering_id),
                 "student_count": counts.get(row.section_offering_id, 0),
             }
             for row in rows
@@ -1193,9 +1197,9 @@ class MarksheetService:
         await self._session.commit()
         return result
 
-    async def _load_thresholds(self, org_id: UUID, curriculum_id: UUID) -> tuple[Decimal, Decimal]:
-        """Attainment thresholds are set per-curriculum by the Program Coordinator.
-        Falls back to 50/50 only when the curriculum can't be found."""
+    async def _load_thresholds(self, org_id: UUID, curriculum_id: UUID) -> Decimal:
+        """Attainment threshold is set per-curriculum by the Program Coordinator.
+        Falls back to 50% only when the curriculum can't be found."""
         from app.modules.curriculum.models import Curriculum
 
         curriculum = (await self._session.execute(
@@ -1203,12 +1207,9 @@ class MarksheetService:
         )).scalar_one_or_none()
 
         if curriculum is not None:
-            return (
-                Decimal(str(curriculum.threshold_co_score_pct)),
-                Decimal(str(curriculum.threshold_student_pct)),
-            )
+            return Decimal(str(curriculum.threshold_co_score_pct))
 
-        return Decimal("50.00"), Decimal("50.00")
+        return Decimal("50.00")
 
     async def get_grade_distribution(self, offering_id: UUID, org_id: UUID) -> dict[str, int]:
         offering = await self._offering_repo.get_by_id(offering_id, org_id)
@@ -1245,7 +1246,7 @@ class MarksheetService:
         if offering is None:
             raise SectionOfferingNotFoundError()
 
-        threshold_co_score_pct, threshold_student_pct = await self._load_thresholds(
+        threshold_co_score_pct = await self._load_thresholds(
             org_id, offering.curriculum_id
         )
 
@@ -1292,7 +1293,7 @@ class MarksheetService:
             avg = sum(scores) / total_students if total_students > 0 else Decimal("0")
             above = sum(1 for s in scores if s >= threshold_co_score_pct)
             is_attained = (
-                (Decimal(str(above)) / Decimal(str(total_students)) * Decimal("100")) >= threshold_student_pct
+                (Decimal(str(above)) / Decimal(str(total_students)) * Decimal("100")) >= threshold_co_score_pct
                 if total_students > 0 else False
             )
             co_avg_attainment[co_id] = avg
@@ -1436,9 +1437,14 @@ class MarksheetService:
                 )
             )
 
+        def _natural(s: str) -> list:
+            return [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", s)]
+
+        co_previews.sort(key=lambda c: _natural(c.co_code))
+        po_previews.sort(key=lambda p: _natural(p.po_code))
+
         return MarksheetAttainmentResponse(
             threshold_co_score_pct=threshold_co_score_pct,
-            threshold_student_pct=threshold_student_pct,
             cos=co_previews,
             pos=po_previews,
             students=students,
@@ -1601,6 +1607,30 @@ class MarksheetService:
         if org and org.logo_file_key:
             logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
 
+        section_teacher_name = (await self._session.execute(
+            select(User.full_name)
+            .join(FacultyAssignment, FacultyAssignment.user_id == User.id)
+            .where(
+                FacultyAssignment.section_offering_id == offering_id,
+                FacultyAssignment.role_in_course == "SECTION_TEACHER",
+                FacultyAssignment.removed_at.is_(None),
+            )
+            .limit(1)
+        )).scalar_one_or_none() or ""
+
+        module_leader_name = (await self._session.execute(
+            select(User.full_name)
+            .join(ModuleLeaderAssignment, ModuleLeaderAssignment.user_id == User.id)
+            .where(
+                ModuleLeaderAssignment.organization_id == org_id,
+                ModuleLeaderAssignment.batch_id == offering.batch_id,
+                ModuleLeaderAssignment.academic_term_id == offering.academic_term_id,
+                ModuleLeaderAssignment.course_id == offering.course_id,
+                ModuleLeaderAssignment.removed_at.is_(None),
+            )
+            .limit(1)
+        )).scalar_one_or_none() or ""
+
         return {
             "section": {
                 "course_code": info.course_code,
@@ -1615,6 +1645,8 @@ class MarksheetService:
             "mid_grid": mid_grid,
             "final_grid": final_grid,
             "attainment": attainment,
+            "section_teacher_name": section_teacher_name,
+            "module_leader_name": module_leader_name,
             "org": {
                 "name": org.name if org else "",
                 "short_name": org.short_name if org else "",
@@ -1779,6 +1811,7 @@ class CourseEndReportService:
         report.co_attainment = body.co_attainment
         report.unattained_co_explanations = [e.model_dump() for e in body.unattained_co_explanations]
         report.teacher_feedback = body.teacher_feedback
+        report.course_drive_link = body.course_drive_link or None
         await self._session.flush()
         await self._session.refresh(report)
         return report
@@ -1795,10 +1828,21 @@ class CourseEndReportService:
         elif report.status == "SUBMITTED":
             from app.modules.assessment.exceptions import ResultAlreadySubmittedError
             raise ResultAlreadySubmittedError()
+
+        # Drive link is required for submission
+        drive_link = (body.course_drive_link or "").strip()
+        if not drive_link or "drive.google.com" not in drive_link:
+            from fastapi import HTTPException, status as http_status
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A valid Google Drive link is required to submit the end report.",
+            )
+
         report.grade_distribution = body.grade_distribution
         report.co_attainment = body.co_attainment
         report.unattained_co_explanations = [e.model_dump() for e in body.unattained_co_explanations]
         report.teacher_feedback = body.teacher_feedback
+        report.course_drive_link = drive_link
         report.status = "SUBMITTED"
         report.submitted_at = datetime.now(timezone.utc)
 
@@ -2076,6 +2120,7 @@ class CourseEndReportService:
             "program_acronym": program_acronym,
             "department_name": department_name,
             "teacher": teacher_info,
+            "ml": None,
             "course_outcomes": course_outcomes,
             "grades": GRADES,
             "grade_distribution": grade_distribution,
@@ -2254,6 +2299,24 @@ class CourseEndReportService:
         if org and org.logo_file_key:
             logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
 
+        ml_user = (await self._session.execute(
+            select(User)
+            .join(ModuleLeaderAssignment, ModuleLeaderAssignment.user_id == User.id)
+            .where(
+                ModuleLeaderAssignment.organization_id == org_id,
+                ModuleLeaderAssignment.batch_id == batch_id,
+                ModuleLeaderAssignment.academic_term_id == academic_term_id,
+                ModuleLeaderAssignment.course_id == course_id,
+                ModuleLeaderAssignment.removed_at.is_(None),
+            )
+            .limit(1)
+        )).scalar_one_or_none()
+        ml_info = {
+            "full_name": ml_user.full_name,
+            "designation": getattr(ml_user, "designation", "") or "",
+            "email": ml_user.email or "",
+        } if ml_user else None
+
         course_outcomes = await self._build_co_outcome_rows(curriculum_id, course_id)
 
         co_attainment_entries = [
@@ -2305,6 +2368,7 @@ class CourseEndReportService:
             "program_acronym": program_acronym,
             "department_name": department_name,
             "teacher": None,
+            "ml": ml_info,
             "course_outcomes": course_outcomes,
             "grades": GRADES,
             "grade_distribution": data["combined_grade_distribution"],

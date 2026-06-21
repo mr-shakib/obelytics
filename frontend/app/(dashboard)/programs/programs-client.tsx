@@ -275,7 +275,9 @@ export function ProgramsClient() {
                       render={({ field }) => (
                         <Select value={field.value ?? ""} onValueChange={field.onChange}>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select mode" />
+                            <SelectValue placeholder="Select mode">
+                              {field.value ? (STUDY_MODES.find((m) => m.value === field.value)?.label ?? field.value) : undefined}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {STUDY_MODES.map((m) => (

@@ -225,6 +225,7 @@ class ResultSubmissionListItem(BaseModel):
     ml_rejection_comment: Optional[str]
     student_count: int
     end_report_status: Optional[str] = None
+    course_drive_link: Optional[str] = None
 
 
 class BulkApproveMLRequest(BaseModel):
@@ -385,7 +386,6 @@ class StudentAttainmentRow(BaseModel):
 
 class MarksheetAttainmentResponse(BaseModel):
     threshold_co_score_pct: Decimal
-    threshold_student_pct: Decimal
     cos: list[COAttainmentPreview]
     pos: list[POAttainmentPreview]
     students: list[StudentAttainmentRow]
@@ -418,6 +418,7 @@ class CourseEndReportCreate(BaseModel):
     co_attainment: dict[str, float] = Field(default_factory=dict)
     unattained_co_explanations: list[UnattainedCOExplanation] = Field(default_factory=list)
     teacher_feedback: str | None = None
+    course_drive_link: str | None = None
 
 
 class CourseEndReportSubmit(BaseModel):
@@ -425,6 +426,7 @@ class CourseEndReportSubmit(BaseModel):
     co_attainment: dict[str, float] = Field(default_factory=dict)
     unattained_co_explanations: list[UnattainedCOExplanation] = Field(default_factory=list)
     teacher_feedback: str | None = None
+    course_drive_link: str | None = None
 
 
 class CourseEndReportResponse(BaseModel):
@@ -436,6 +438,7 @@ class CourseEndReportResponse(BaseModel):
     co_attainment: dict[str, float]
     unattained_co_explanations: list[UnattainedCOExplanation]
     teacher_feedback: str | None
+    course_drive_link: str | None
     status: str
     submitted_at: datetime | None
     created_at: datetime

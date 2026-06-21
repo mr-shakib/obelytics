@@ -80,7 +80,7 @@ async function interceptedFetch(
 
     if (res.status === 403) {
       toast.error(detail ?? "You don't have permission for this action")
-    } else if (res.status === 400 || res.status === 404 || res.status === 409 || res.status === 422) {
+    } else if (res.status === 400 || res.status === 409 || res.status === 422) {
       toast.error(detail ?? "Please check the information and try again.")
     } else if (res.status >= 500) {
       toast.error("Something went wrong. Please try again.")

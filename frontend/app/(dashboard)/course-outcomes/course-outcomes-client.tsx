@@ -37,7 +37,6 @@ import {
 } from "@/components/ui/select"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
-import { truncate } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -280,7 +279,9 @@ export function CourseOutcomesClient() {
       accessorKey: "statement",
       header: "Statement",
       cell: ({ row }) => (
-        <span title={row.original.statement}>{truncate(row.original.statement, 80)}</span>
+        <span className="whitespace-normal break-words max-w-[420px] block">
+          {row.original.statement}
+        </span>
       ),
     },
     {
