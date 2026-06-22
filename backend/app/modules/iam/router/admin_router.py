@@ -3,22 +3,22 @@ Super-admin only: DB backup export and restore.
 
 Backup  → GET  /admin/backup           → downloads a JSON snapshot
 Restore → POST /admin/restore          → uploads a JSON snapshot and re-populates
+Verify  → POST /admin/restore/verify   → validates a backup file without restoring
 """
 import io
 import json
+import re
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import delete, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin
-from app.modules.iam.models import RolePermission
-from app.modules.iam.repository.role_repository import PermissionRepository, RoleRepository
 from app.modules.iam.schemas import PermissionManifestResponse
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -26,17 +26,21 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 # ── Table list (dependency order — children come after parents) ───────────────
 
 BACKUP_TABLES: list[tuple[str, str]] = [
+    # Org — organizations must come first (root of FK tree)
+    ("org", "organizations"),
+    ("org", "departments"),
+    ("org", "programs"),
+    # IAM — core identity tables
+    ("iam", "users"),
+    ("iam", "password_credentials"),
+    ("iam", "roles"),
+    ("iam", "permissions"),
+    ("iam", "role_permissions"),
+    ("iam", "user_role_assignments"),
     # Config (user-managed reference data)
     ("config", "po_types"),
     ("config", "complex_problems"),
     ("config", "complex_activities"),
-    # Org
-    ("org", "departments"),
-    ("org", "programs"),
-    # IAM — users before credentials/assignments
-    ("iam", "users"),
-    ("iam", "password_credentials"),
-    ("iam", "user_role_assignments"),
     # Curriculum
     ("curriculum", "academic_terms"),
     ("curriculum", "curricula"),
@@ -105,7 +109,45 @@ def _serialize(value: object) -> object:
     return value
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
+
+def _deserialize_row(row: dict) -> dict:
+    out: dict = {}
+    for k, v in row.items():
+        if isinstance(v, str):
+            if "T" in v:
+                try:
+                    out[k] = datetime.fromisoformat(v)
+                    continue
+                except (ValueError, TypeError):
+                    pass
+            if len(v) == 36 and v.count("-") == 4 and _UUID_RE.match(v):
+                try:
+                    out[k] = UUID(v)
+                    continue
+                except (ValueError, TypeError):
+                    pass
+        out[k] = v
+    return out
+
+
+def _validate_backup(tables: dict) -> None:
+    """Reject backups that are missing critical tables."""
+    required = {"org.organizations", "iam.users", "iam.roles", "iam.permissions"}
+    missing = required - set(tables.keys())
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Backup is missing required tables: {', '.join(sorted(missing))}. "
+            "Please create a fresh backup from this version before restoring.",
+        )
+
+
 # ── Export ────────────────────────────────────────────────────────────────────
+
 
 @router.get("/backup")
 async def export_backup(
@@ -121,6 +163,8 @@ async def export_backup(
     }
 
     # Role-permission assignments stored by name/code so they are portable
+    from app.modules.iam.repository.role_repository import PermissionRepository, RoleRepository
+
     role_repo = RoleRepository(db)
     perm_repo = PermissionRepository(db)
 
@@ -155,6 +199,7 @@ async def export_backup(
 
 # ── Restore ───────────────────────────────────────────────────────────────────
 
+
 @router.post("/restore", status_code=status.HTTP_204_NO_CONTENT)
 async def import_backup(
     file: UploadFile = File(...),
@@ -175,9 +220,9 @@ async def import_backup(
         raise HTTPException(status_code=400, detail="Unsupported backup version")
 
     tables: dict = payload.get("tables", {})
-    role_permissions_map: dict = payload.get("role_permissions", {})
+    _validate_backup(tables)
 
-    # Truncate in reverse order so FK constraints are satisfied
+    # Truncate in reverse order — CASCADE handles cross-schema FK references
     truncate_order = list(reversed(BACKUP_TABLES))
 
     try:
@@ -195,36 +240,71 @@ async def import_backup(
             val_list = ", ".join(f":{c}" for c in cols)
             stmt = text(f'INSERT INTO "{schema}"."{table}" ({col_list}) VALUES ({val_list})')
             for row in rows:
-                await db.execute(stmt, row)
-
-        # Restore role-permission assignments by name/code (portable across envs)
-        if role_permissions_map:
-            role_repo = RoleRepository(db)
-            perm_repo = PermissionRepository(db)
-
-            org_id_result = await db.execute(text("SELECT id FROM org.organizations LIMIT 1"))
-            org_id = org_id_result.scalar()
-
-            all_roles = await role_repo.list_by_org(org_id)
-            role_by_name = {r.name: r for r in all_roles}
-
-            all_perms = await perm_repo.list_all()
-            perm_by_code = {p.code: p for p in all_perms}
-
-            # Clear all existing role_permissions
-            await db.execute(delete(RolePermission))
-
-            for role_name, perm_codes in role_permissions_map.items():
-                role = role_by_name.get(role_name)
-                if not role:
-                    continue
-                for code in perm_codes:
-                    perm = perm_by_code.get(code)
-                    if perm:
-                        db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+                await db.execute(stmt, _deserialize_row(row))
 
         await db.commit()
 
     except Exception as exc:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Restore failed: {str(exc)}")
+
+
+# ── Verify ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/restore/verify")
+async def verify_backup(
+    file: UploadFile = File(...),
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())] = None,
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
+):
+    """
+    Validate a backup file and report what it contains.
+    Does NOT modify the database.
+    """
+    raw = await file.read()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON file")
+
+    if payload.get("version") != 1:
+        raise HTTPException(status_code=400, detail="Unsupported backup version")
+
+    tables: dict = payload.get("tables", {})
+    _validate_backup(tables)
+
+    # Count current DB rows for comparison
+    current_counts: dict[str, int] = {}
+    for schema, table in BACKUP_TABLES:
+        try:
+            result = await db.execute(text(f'SELECT count(*) FROM "{schema}"."{table}"'))
+            current_counts[f"{schema}.{table}"] = result.scalar()
+        except Exception:
+            current_counts[f"{schema}.{table}"] = -1
+
+    # Count backup rows
+    backup_counts: dict[str, int] = {}
+    for schema, table in BACKUP_TABLES:
+        key = f"{schema}.{table}"
+        backup_counts[key] = len(tables.get(key, []))
+
+    # Check role-permission map
+    role_permissions_map: dict = payload.get("role_permissions", {})
+    roles_count = len(role_permissions_map)
+    total_perms = sum(len(v) for v in role_permissions_map.values())
+
+    return {
+        "valid": True,
+        "exported_at": payload.get("exported_at"),
+        "roles_in_map": roles_count,
+        "total_role_permissions": total_perms,
+        "tables": {
+            key: {"backup_rows": backup_counts[key], "current_rows": current_counts.get(key, 0)}
+            for key in sorted(
+                {f"{s}.{t}" for s, t in BACKUP_TABLES}
+                | set(backup_counts.keys())
+                | set(current_counts.keys())
+            )
+        },
+    }
