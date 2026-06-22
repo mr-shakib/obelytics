@@ -181,11 +181,8 @@ async def import_backup(
     truncate_order = list(reversed(BACKUP_TABLES))
 
     try:
-        # Disable FK triggers for the session so we can truncate/insert freely
-        await db.execute(text("SET LOCAL session_replication_role = 'replica'"))
-
         for schema, table in truncate_order:
-            await db.execute(text(f'TRUNCATE TABLE "{schema}"."{table}"'))
+            await db.execute(text(f'TRUNCATE TABLE "{schema}"."{table}" CASCADE'))
 
         # Re-insert in forward (dependency) order
         for schema, table in BACKUP_TABLES:
