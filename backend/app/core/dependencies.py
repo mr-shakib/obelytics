@@ -60,7 +60,7 @@ def require_permission(code: str):
         if code not in manifest.permissions:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission '{code}' required",
+                detail="You do not have permission to perform this action",
             )
         return manifest
     return gate
@@ -75,7 +75,7 @@ def require_any_permission(*codes: str):
         if not any(code in manifest.permissions for code in codes):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"One of these permissions is required: {', '.join(codes)}",
+                detail="You do not have permission to perform this action",
             )
         return manifest
     return gate
@@ -88,7 +88,7 @@ def require_super_admin():
         if not manifest.is_super_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Super admin access required",
+                detail="You do not have permission to perform this action",
             )
         return manifest
     return gate

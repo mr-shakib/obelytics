@@ -184,118 +184,132 @@ function IndividualForm({
   return (
     <form
       onSubmit={handleSubmit((v) => mutation.mutate(v))}
-      className="flex flex-col gap-5"
+      className="flex flex-col gap-6"
     >
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Faculty Type" required error={errors.faculty_type?.message}>
-          <Select value={selFacultyType} onValueChange={(v) => { if (v == null) return; setSelFacultyType(v as string); setValue("faculty_type", v as string, { shouldValidate: true }) }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select type" /></SelectTrigger>
-            <SelectContent>{FACULTY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Field label="Employee ID" required error={errors.employee_id?.message}>
-          <Input placeholder="e.g. EMP-2024-001" {...register("employee_id")} />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Title">
-          <Select value={selTitle} onValueChange={(v) => { if (v == null) return; setSelTitle(v as string); setValue("title", v as string) }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select title" /></SelectTrigger>
-            <SelectContent>{TITLES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Field label="Department" error={errors.department_id?.message}>
-          <Select value={selDeptId} onValueChange={(v) => { if (v == null) return; setSelDeptId(v as string); setValue("department_id", v as string) }}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select department">
-                {selDeptId ? departments.find(d => d.id === selDeptId)?.name : undefined}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>{departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="First Name" required error={errors.first_name?.message}>
-          <Input placeholder="First name" {...register("first_name")} />
-        </Field>
-        <Field label="Designation" error={errors.designation?.message}>
-          <Select value={selDesignation} onValueChange={(v) => { if (v == null) return; setSelDesignation(v as string); setValue("designation", v as string) }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select designation" /></SelectTrigger>
-            <SelectContent>{DESIGNATIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Role" required error={errors.role_id?.message}>
-          <Select value={selRoleId} onValueChange={(v) => { if (v == null) return; setSelRoleId(v as string); setValue("role_id", v as string, { shouldValidate: true }) }}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select role">
-                {selRoleId ? roles.find(r => r.id === selRoleId)?.name : undefined}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>{roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Last Name" error={errors.last_name?.message}>
-          <Input placeholder="Last name" {...register("last_name")} />
-        </Field>
-        <Field label="Highest Qualification" error={errors.qualification?.message}>
-          <Input placeholder="e.g. PhD, MSc, MBA" {...register("qualification")} />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Email" required error={errors.email?.message}>
-          <Input type="email" placeholder="name@university.edu" {...register("email")} />
-        </Field>
-        <Field label="Experience (Years)" error={errors.experience_years?.message}>
-          <Input type="number" min={0} max={99} placeholder="0" {...register("experience_years")} />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Contact Number" error={errors.contact_number?.message}>
-          <Input placeholder="+880 ..." {...register("contact_number")} />
-        </Field>
-        <Field label="NID" error={errors.nid?.message}>
-          <Input placeholder="National ID number" {...register("nid")} />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Scope" required>
-          <Select value={selScopeType} onValueChange={(v) => { if (v == null) return; const val = v as "GLOBAL" | "PROGRAM"; setSelScopeType(val); setValue("scope_type", val, { shouldValidate: true }); setSelScopeId(""); setValue("scope_id", undefined) }}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>{SCOPE_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        {selScopeType === "PROGRAM" && (
-          <Field label="Program" required error={errors.scope_id?.message}>
-            <Select value={selScopeId} onValueChange={(v) => { setSelScopeId((v as string | null) ?? ""); setValue("scope_id", (v as string | null) ?? undefined, { shouldValidate: true }) }}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select program">
-                  {selScopeId ? (() => { const p = programs.find(p => p.id === selScopeId); return p ? (p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? "") : undefined })() : undefined}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {programs.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? p.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+      {/* Personal Information */}
+      <div className="space-y-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Personal Information</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Title">
+            <Select value={selTitle} onValueChange={(v) => { if (v == null) return; setSelTitle(v as string); setValue("title", v as string) }}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select title" /></SelectTrigger>
+              <SelectContent>{TITLES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
+          <Field label="Faculty Type" required error={errors.faculty_type?.message}>
+            <Select value={selFacultyType} onValueChange={(v) => { if (v == null) return; setSelFacultyType(v as string); setValue("faculty_type", v as string, { shouldValidate: true }) }}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select type" /></SelectTrigger>
+              <SelectContent>{FACULTY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="First Name" required error={errors.first_name?.message}>
+            <Input placeholder="First name" {...register("first_name")} />
+          </Field>
+          <Field label="Last Name" error={errors.last_name?.message}>
+            <Input placeholder="Last name" {...register("last_name")} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Employee ID" required error={errors.employee_id?.message}>
+            <Input placeholder="e.g. EMP-2024-001" {...register("employee_id")} />
+          </Field>
+          <Field label="Email" required error={errors.email?.message}>
+            <Input type="email" placeholder="name@university.edu" {...register("email")} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Professional Information */}
+      <div className="space-y-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Professional Information</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Department" error={errors.department_id?.message}>
+            <Select value={selDeptId} onValueChange={(v) => { if (v == null) return; setSelDeptId(v as string); setValue("department_id", v as string) }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select department">
+                  {selDeptId ? departments.find(d => d.id === selDeptId)?.name : undefined}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>{departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label="Designation" error={errors.designation?.message}>
+            <Select value={selDesignation} onValueChange={(v) => { if (v == null) return; setSelDesignation(v as string); setValue("designation", v as string) }}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select designation" /></SelectTrigger>
+              <SelectContent>{DESIGNATIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Highest Qualification" error={errors.qualification?.message}>
+            <Input placeholder="e.g. PhD, MSc, MBA" {...register("qualification")} />
+          </Field>
+          <Field label="Experience (Years)" error={errors.experience_years?.message}>
+            <Input type="number" min={0} max={99} placeholder="0" {...register("experience_years")} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Contact Information */}
+      <div className="space-y-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Contact Information</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Contact Number" error={errors.contact_number?.message}>
+            <Input placeholder="+880 ..." {...register("contact_number")} />
+          </Field>
+          <Field label="NID" error={errors.nid?.message}>
+            <Input placeholder="National ID number" {...register("nid")} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Access & Permissions */}
+      <div className="space-y-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Access & Permissions</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Role" required error={errors.role_id?.message}>
+            <Select value={selRoleId} onValueChange={(v) => { if (v == null) return; setSelRoleId(v as string); setValue("role_id", v as string, { shouldValidate: true }) }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select role">
+                  {selRoleId ? roles.find(r => r.id === selRoleId)?.name : undefined}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>{roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label="Scope" required>
+            <Select value={selScopeType} onValueChange={(v) => { if (v == null) return; const val = v as "GLOBAL" | "PROGRAM"; setSelScopeType(val); setValue("scope_type", val, { shouldValidate: true }); setSelScopeId(""); setValue("scope_id", undefined) }}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>{SCOPE_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+        </div>
+        {selScopeType === "PROGRAM" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div />
+            <Field label="Program" required error={errors.scope_id?.message}>
+              <Select value={selScopeId} onValueChange={(v) => { setSelScopeId((v as string | null) ?? ""); setValue("scope_id", (v as string | null) ?? undefined, { shouldValidate: true }) }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select program">
+                    {selScopeId ? (() => { const p = programs.find(p => p.id === selScopeId); return p ? (p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? "") : undefined })() : undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {programs.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.acronym ? `${p.acronym} — ${p.title ?? p.name ?? ""}` : p.title ?? p.name ?? p.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
         )}
       </div>
 
+      {/* Password */}
       <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Initial Password</p>
         <Field label="Password" required error={errors.password?.message}>

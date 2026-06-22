@@ -76,6 +76,12 @@ type ProgramOutcome = {
 type PEOPOMapping = { id: string; peo_id: string; program_outcome_id: string }
 type PEOMissionMapping = { id: string; peo_id: string; mission_id: string }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function byCode<T extends { code: string }>(a: T, b: T): number {
+  return a.code.localeCompare(b.code, undefined, { numeric: true })
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PROGRAM_TYPES = [
@@ -284,7 +290,7 @@ function MissionsCard({ programId }: { programId: string }) {
           <p className="text-sm text-muted-foreground">No missions defined yet.</p>
         ) : (
           <ul className="space-y-2">
-            {missions.map((m) => (
+            {[...missions].sort(byCode).map((m) => (
               <li key={m.id} className="flex items-start gap-2 rounded-md border p-2.5">
                 <Badge variant="secondary" className="mt-0.5 shrink-0 font-mono text-xs">
                   {m.code}
@@ -356,7 +362,7 @@ function PEOsCard({ programId }: { programId: string }) {
           <p className="text-sm text-muted-foreground">No PEOs defined yet.</p>
         ) : (
           <ul className="space-y-2">
-            {peos.map((p) => (
+            {[...peos].sort(byCode).map((p) => (
               <li key={p.id} className="flex items-start gap-2 rounded-md border p-2.5">
                 <Badge variant="secondary" className="mt-0.5 shrink-0 font-mono text-xs">
                   {p.code}
@@ -471,7 +477,7 @@ function PEOPOMappingCard({ programId }: { programId: string }) {
             <thead>
               <tr>
                 <th className="pb-2 pr-3 text-left font-medium text-muted-foreground">PEO</th>
-                {pos.map((po) => (
+                {[...pos].sort(byCode).map((po) => (
                   <th key={po.id} className="pb-2 px-2 text-center font-mono font-medium">
                     {po.code}
                   </th>
@@ -479,12 +485,12 @@ function PEOPOMappingCard({ programId }: { programId: string }) {
               </tr>
             </thead>
             <tbody>
-              {peos.map((peo) => (
+              {[...peos].sort(byCode).map((peo) => (
                 <tr key={peo.id} className="border-t">
                   <td className="py-2 pr-3">
                     <span className="font-mono font-medium">{peo.code}</span>
                   </td>
-                  {pos.map((po) => (
+                  {[...pos].sort(byCode).map((po) => (
                     <td key={po.id} className="py-2 px-2 text-center">
                       <PermissionGate permission="peo.update" fallback={
                         <input
@@ -604,7 +610,7 @@ function PEOMissionMappingCard({ programId }: { programId: string }) {
             <thead>
               <tr>
                 <th className="pb-2 pr-3 text-left font-medium text-muted-foreground">PEO</th>
-                {missions.map((m) => (
+                {[...missions].sort(byCode).map((m) => (
                   <th key={m.id} className="pb-2 px-2 text-center font-mono font-medium">
                     {m.code}
                   </th>
@@ -612,12 +618,12 @@ function PEOMissionMappingCard({ programId }: { programId: string }) {
               </tr>
             </thead>
             <tbody>
-              {peos.map((peo) => (
+              {[...peos].sort(byCode).map((peo) => (
                 <tr key={peo.id} className="border-t">
                   <td className="py-2 pr-3">
                     <span className="font-mono font-medium">{peo.code}</span>
                   </td>
-                  {missions.map((m) => (
+                  {[...missions].sort(byCode).map((m) => (
                     <td key={m.id} className="py-2 px-2 text-center">
                       <PermissionGate permission="peo.update" fallback={
                         <input

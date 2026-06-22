@@ -197,7 +197,9 @@ export function ProgramsClient() {
                       render={({ field }) => (
                         <Select value={field.value ?? ""} onValueChange={field.onChange}>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select department" />
+                            <SelectValue placeholder="Select department">
+                              {field.value ? (departments ?? []).find((d) => d.id === field.value)?.name ?? field.value : undefined}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {(departments ?? []).map((d) => (

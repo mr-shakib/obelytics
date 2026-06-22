@@ -128,6 +128,8 @@ ROLES: list[dict] = [
             "curriculum.create", "curriculum.update", "curriculum.version", "curriculum.read",
             "course.create", "course.update",
             "batch.create", "section_offering.create", "faculty_assignment.create",
+            "mission.create", "mission.update", "mission.read",
+            "peo.create", "peo.update", "peo.read",
             "po.create", "po.update", "po.archive", "po.read",
             "co.approve", "co.reject", "co.publish", "co.read",
             "mapping.co_po.create", "mapping.co_po.update", "mapping.co_po.publish", "mapping.co_po.read",
