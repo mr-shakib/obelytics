@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
   // 6. Store refresh_token in HttpOnly cookie
   res.cookies.set("refresh_token", refresh_token, {
     httpOnly: true,
+    secure: true,
     sameSite: "lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60,

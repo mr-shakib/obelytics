@@ -158,7 +158,7 @@ function POSummaryChart({ results }: { results: CourseResult[] }) {
               label={{ value: `${threshold}%`, fontSize: 9, fill: "#B4521E", position: "insideTopRight" }} />
             <Bar dataKey="avg_pct" radius={[4, 4, 0, 0]}>
               <LabelList dataKey="avg_pct" position="top"
-                formatter={(v: number) => `${v.toFixed(0)}%`}
+                formatter={(v) => `${Number(v).toFixed(0)}%`}
                 style={{ fontSize: 10, fontWeight: 700, fill: "#14211C" }} />
               {pos.map((p) => (
                 <Cell key={p.po_code} fill={p.is_attained ? "#25a876" : "#C85A2A"} fillOpacity={0.85} />

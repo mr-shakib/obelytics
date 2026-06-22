@@ -162,7 +162,7 @@ function POSummarySection({ courses }: { courses: CourseResult[] }) {
                 <LabelList
                   dataKey="avg_pct"
                   position="top"
-                  formatter={(v: number) => `${v.toFixed(0)}%`}
+                  formatter={(v) => `${Number(v).toFixed(0)}%`}
                   style={{ fontSize: 10, fontWeight: 700 }}
                 />
                 {pos.map((entry) => (

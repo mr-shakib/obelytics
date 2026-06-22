@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import { LoginForm } from "./login-form"
 
 export const metadata: Metadata = { title: "Sign In" }
@@ -10,7 +11,9 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold tracking-tight">Obelytics</h1>
         <p className="text-sm text-muted-foreground">Sign in to your account</p>
       </div>
-      <LoginForm />
+      <Suspense>
+        <LoginForm />
+      </Suspense>
     </div>
   )
 }

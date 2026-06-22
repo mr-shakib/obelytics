@@ -18,8 +18,8 @@ export async function POST(req: NextRequest) {
 
   if (!backendRes.ok) {
     const res = NextResponse.json({ error: "refresh_failed" }, { status: 401 })
-    res.cookies.set("refresh_token", "", { maxAge: 0, path: "/" })
-    res.cookies.set("auth-status", "", { maxAge: 0, path: "/" })
+    res.cookies.set("refresh_token", "", { maxAge: 0, secure: true, path: "/" })
+    res.cookies.set("auth-status", "", { maxAge: 0, secure: true, path: "/" })
     return res
   }
 
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
   // Rotate the refresh token cookie
   res.cookies.set("refresh_token", newRefreshToken, {
     httpOnly: true,
+    secure: true,
     sameSite: "lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60,
