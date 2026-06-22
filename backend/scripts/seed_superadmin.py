@@ -50,6 +50,11 @@ async def seed(
         )
         org = result.scalar_one_or_none()
         if org is None:
+            result = await session.execute(
+                select(Organization).where(Organization.short_name == org_short_name)
+            )
+            org = result.scalar_one_or_none()
+        if org is None:
             org = Organization(id=org_id, name=org_name, short_name=org_short_name)
             session.add(org)
             await session.flush()
