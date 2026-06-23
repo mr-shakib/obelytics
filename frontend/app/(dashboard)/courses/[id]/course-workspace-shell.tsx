@@ -15,6 +15,8 @@ import {
   Download,
   Loader2,
   Users,
+  CheckCircle2,
+  Circle,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -75,6 +77,63 @@ export function CourseWorkspaceShell({ id, children }: Props) {
 
   const curriculumId = courseLocation?.curriculumId
 
+  const { data: courseOutcomes = [] } = useQuery({
+    queryKey: queryKeys.courseOutcomes.list(curriculumId, id),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(
+        `/course-outcomes?curriculum_id=${curriculumId}&course_id=${id}` as never
+      )
+      return ((data as unknown) as { id: string }[]) ?? []
+    },
+    enabled: !!curriculumId,
+  })
+
+  const { data: objectives = [] } = useQuery({
+    queryKey: queryKeys.courseObjectives.byCourse(id),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/courses/${id}/objectives` as never)
+      return ((data as unknown) as { statement: string }[]) ?? []
+    },
+  })
+
+  const { data: lessonPlan = [] } = useQuery({
+    queryKey: queryKeys.courseLessonPlan.byCourse(id, curriculumId ?? ""),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(
+        `/courses/${id}/lesson-plan?curriculum_id=${curriculumId}` as never
+      )
+      return ((data as unknown) as { id: string }[]) ?? []
+    },
+    enabled: !!curriculumId,
+  })
+
+  const { data: mappingSet } = useQuery({
+    queryKey: queryKeys.coPoMappings.byCourse(curriculumId ?? "", id),
+    queryFn: async () => {
+      try {
+        const { data } = await apiClient.GET(
+          `/mappings/co-po?curriculum_id=${curriculumId}&course_id=${id}` as never
+        ) as { data: unknown }
+        return ((data as unknown) as { id: string } | null) ?? null
+      } catch {
+        return null
+      }
+    },
+    enabled: !!curriculumId,
+    retry: false,
+  })
+
+  const { data: courseCOMarks = [] } = useQuery({
+    queryKey: queryKeys.courseAssessmentPattern.byCourse(id, curriculumId ?? ""),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(
+        `/courses/${id}/assessment-pattern?curriculum_id=${curriculumId}` as never
+      )
+      return ((data as unknown) as { marks: number }[]) ?? []
+    },
+    enabled: !!curriculumId,
+  })
+
   const { data: assessmentTools = [] } = useQuery({
     queryKey: queryKeys.courseAssessmentTools.byCourse(id, curriculumId ?? ""),
     queryFn: async () => {
@@ -83,8 +142,22 @@ export function CourseWorkspaceShell({ id, children }: Props) {
       )
       return ((data as unknown) as CourseAssessmentTool[]) ?? []
     },
-    enabled: !!curriculumId && showOutlineDialog,
+    enabled: !!curriculumId,
   })
+
+  // ── Completion tracking ─────────────────────────────────────────────────
+  const assessmentToolsForCheck = assessmentTools.length > 0 ? assessmentTools : []
+  const checks: { label: string; done: boolean }[] = []
+  checks.push({ label: "Course description", done: !!(data as Course).description })
+  checks.push({ label: "Course objectives", done: objectives.length > 0 })
+  checks.push({ label: "Course outcomes (COs)", done: courseOutcomes.length > 0 })
+  checks.push({ label: "Assessment tools", done: assessmentToolsForCheck.length > 0 })
+  checks.push({ label: "CO-PO mapping", done: !!mappingSet })
+  checks.push({ label: "Delivery plan", done: lessonPlan.length > 0 })
+
+  const completedCount = checks.filter((c) => c.done).length
+  const completionPct = Math.round((completedCount / checks.length) * 100)
+  const isComplete = completionPct === 100
 
   if (isLoading) return <div className="animate-pulse h-40 bg-muted rounded-md" />
   if (!data) return <p className="text-muted-foreground">Course not found.</p>
@@ -150,15 +223,15 @@ export function CourseWorkspaceShell({ id, children }: Props) {
         <PageHeader
           title={`${data.code} — ${data.title}`}
           description={`${data.credits} credits · ${categoryName} · ${courseTypeLabel} · ${data.theory_hours} theory hrs · ${data.lab_hours} lab hrs`}
-          actions={
+           actions={
             <div className="flex items-center gap-3">
               <StatusBadge status={data.status} />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={openOutlineDialog}
-                disabled={!curriculumId}
-                title={!curriculumId ? "Course is not part of any curriculum yet" : undefined}
+                disabled={!curriculumId || !isComplete}
+                title={!curriculumId ? "Course is not part of any curriculum yet" : !isComplete ? `Course is ${completionPct}% complete — fill all required fields first` : undefined}
               >
                 <Download />
                 Download Course Outline
@@ -170,6 +243,38 @@ export function CourseWorkspaceShell({ id, children }: Props) {
           }
         />
       </div>
+
+      {curriculumId && (
+        <Card className={cn(isComplete ? "border-green-200 bg-green-50/50 dark:border-green-900/40 dark:bg-green-950/10" : "border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/10")}>
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium">
+                Course Customization {isComplete ? "Complete" : `${completionPct}%`}
+              </p>
+              <span className="text-xs text-muted-foreground">{completedCount}/{checks.length} done</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden mb-3">
+              <div
+                className={cn("h-full rounded-full transition-all", isComplete ? "bg-green-500" : "bg-amber-500")}
+                style={{ width: `${completionPct}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {checks.map((c) => (
+                <div key={c.label} className="flex items-center gap-1.5 text-xs">
+                  {c.done
+                    ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                    : <Circle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                  }
+                  <span className={cn(c.done ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400 font-medium")}>
+                    {c.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isMyModule && (
         <Card className="border-primary/30 bg-primary/5">
