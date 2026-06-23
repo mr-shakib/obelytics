@@ -65,7 +65,7 @@ export function OrgSettingsClient() {
     mutationFn: async (file: File) => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch("/api/v1/organization/logo", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/organization/logo`, {
         method: "POST",
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         body: form,

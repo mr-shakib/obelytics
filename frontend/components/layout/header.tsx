@@ -84,7 +84,7 @@ export function Header() {
   const { data: fetchedUnreadCount = 0 } = useQuery({
     queryKey: queryKeys.notifications.unreadCount,
     queryFn: async () => {
-      const res = await fetchWithTimeout("/api/v1/notifications/me/count", {
+      const res = await fetchWithTimeout(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/notifications/me/count`, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       })
       if (!res.ok) return 0

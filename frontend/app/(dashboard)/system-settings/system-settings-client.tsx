@@ -15,7 +15,7 @@ export function SystemSettingsClient() {
 
   async function handleBackupDownload() {
     try {
-      const res = await fetch("/api/v1/admin/backup", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/admin/backup`, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       })
       if (!res.ok) throw new Error("backup_failed")
@@ -47,7 +47,7 @@ export function SystemSettingsClient() {
     try {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch("/api/v1/admin/restore", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/admin/restore`, {
         method: "POST",
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         body: form,

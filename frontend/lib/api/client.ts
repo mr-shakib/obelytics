@@ -4,12 +4,15 @@ import { useAuthStore } from "@/lib/stores/auth-store"
 import { useAppStore } from "@/lib/stores/app-store"
 import { toast } from "sonner"
 
-// Client-side: use relative URLs so Next.js rewrites proxy to the backend.
-// Server-side (BFF): import rawApiClient which uses BACKEND_URL directly.
+// Server-side (BFF): use BACKEND_URL directly.
+// Client-side: use NEXT_PUBLIC_API_URL to call the backend without a proxy hop.
 const BACKEND_URL = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 // Raw client used by BFF route handlers (server-side, no interceptors)
 export const rawApiClient = createClient<paths>({ baseUrl: `${BACKEND_URL}/api/v1` })
+
+// Public backend URL baked into the client bundle at build time
+export const PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 // ─── Fetch with timeout ──────────────────────────────────────────────────────
 
@@ -109,6 +112,6 @@ async function interceptedFetch(
 }
 
 export const apiClient = createClient<paths>({
-  baseUrl: "/api/v1",
+  baseUrl: `${PUBLIC_API_URL}/api/v1`,
   fetch: interceptedFetch,
 })

@@ -35,4 +35,4 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python -m alembic upgrade head && python -m scripts.seed_superadmin && gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
+CMD ["sh", "-c", "gunicorn app.main:app --preload --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]

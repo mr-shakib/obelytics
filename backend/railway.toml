@@ -7,3 +7,4 @@ healthcheckPath = "/health/live"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
+preDeployCommand = "python -m alembic upgrade head && python -m scripts.seed_superadmin"
