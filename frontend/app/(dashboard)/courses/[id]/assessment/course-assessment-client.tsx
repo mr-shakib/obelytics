@@ -27,6 +27,7 @@ import type {
   CourseAssessmentTool,
   CourseCOMark,
   CourseBloomMark,
+  Course,
 } from "../course-types"
 
 const TOTAL_COL = "TOTAL"
@@ -56,6 +57,15 @@ export function CourseAssessmentClient({ id }: Props) {
   const courseLocation = useResolveCourseLocation(id)
   const curriculumId = courseLocation?.curriculumId
 
+  const { data: course } = useQuery({
+    queryKey: queryKeys.courses.detail(id),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/courses/${id}` as never)
+      return (data as unknown) as Course
+    },
+  })
+  const courseType = course?.course_type
+
   const { data: bloomDomains = [] } = useQuery({
     queryKey: queryKeys.refData.bloomDomains,
     queryFn: async () => {
@@ -81,6 +91,14 @@ export function CourseAssessmentClient({ id }: Props) {
       return ((data as unknown) as CourseAssessmentTool[]) ?? []
     },
     enabled: !!curriculumId,
+  })
+
+  const bloomBreakdownTools = assessmentTools.filter((tool) => {
+    const name = tool.assessment_type_name.toLowerCase()
+    if (courseType === "LAB") return name.includes("lab final") || name.includes("final")
+    if (courseType === "THEORY") return name.includes("mid") || name.includes("final")
+    if (courseType === "THEORY_LAB") return name.includes("mid") || name.includes("lab final") || (name.includes("final") && !name.includes("lab"))
+    return name.includes("mid") || name.includes("final")
   })
 
   const setToolsMutation = useMutation({
@@ -197,7 +215,7 @@ export function CourseAssessmentClient({ id }: Props) {
   }
 
   const bloomMarksDefaults: Record<string, number> = {}
-  for (const tool of assessmentTools) {
+  for (const tool of bloomBreakdownTools) {
     for (const level of cognitiveBloomLevels) {
       const key = bloomMarkCellKey(tool.assessment_type_id, level.id)
       bloomMarksDefaults[key] = bloomMarkByKey[key] ?? 0
@@ -282,7 +300,7 @@ export function CourseAssessmentClient({ id }: Props) {
   const bloomCells = bloomMarksForm.watch("cells") ?? {}
   let cieTotal = 0
   let seeTotal = 0
-  for (const tool of assessmentTools) {
+  for (const tool of bloomBreakdownTools) {
     for (const level of cognitiveBloomLevels) {
       const v = Number(bloomCells[bloomMarkCellKey(tool.assessment_type_id, level.id)] ?? 0)
       if (tool.is_sessional) cieTotal += v
@@ -514,7 +532,7 @@ export function CourseAssessmentClient({ id }: Props) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {assessmentTools.map((tool) => (
+                    {bloomBreakdownTools.map((tool) => (
                       <TableRow key={tool.id}>
                         <TableCell className="align-top">{tool.assessment_type_name}</TableCell>
                         {cognitiveBloomLevels.map((level) => (
@@ -564,7 +582,7 @@ export function CourseAssessmentClient({ id }: Props) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {assessmentTools.map((tool) => (
+                  {bloomBreakdownTools.map((tool) => (
                     <TableRow key={tool.id}>
                       <TableCell>{tool.assessment_type_name}</TableCell>
                       {cognitiveBloomLevels.map((level) => (
