@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -7,22 +8,23 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.database import engine
 from app.core.middleware.correlation_id import CorrelationIDMiddleware
+from app.core.middleware.timing import TimingMiddleware
 from app.core.redis_client import close_redis, get_redis
+from app.modules.accreditation.router import router as accreditation_router
+from app.modules.approval.router import router as approval_router
+from app.modules.assessment.router import router as assessment_router
+from app.modules.attainment.router import router as attainment_router
+from app.modules.audit.router import router as audit_router
+from app.modules.curriculum.router import router as curriculum_router
 from app.modules.iam.router.admin_router import router as admin_router
 from app.modules.iam.router.auth_router import router as auth_router
 from app.modules.iam.router.role_router import router as role_router
 from app.modules.iam.router.user_router import router as user_router
+from app.modules.notification.router import router as notification_router
+from app.modules.obe.router import router as obe_router
 from app.modules.org.router import router as org_router
 from app.modules.ref_data.router import router as ref_data_router
-from app.modules.curriculum.router import router as curriculum_router
-from app.modules.obe.router import router as obe_router
-from app.modules.assessment.router import router as assessment_router
-from app.modules.attainment.router import router as attainment_router
-from app.modules.approval.router import router as approval_router
-from app.modules.audit.router import router as audit_router
-from app.modules.notification.router import router as notification_router
 from app.modules.reporting.router import router as reporting_router
-from app.modules.accreditation.router import router as accreditation_router
 
 
 @asynccontextmanager
@@ -34,6 +36,8 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+
     app = FastAPI(
         title=settings.APP_NAME,
         version="1.0.0",
@@ -44,6 +48,7 @@ def create_app() -> FastAPI:
     )
 
     # Middleware — outermost added last, processed first on request
+    app.add_middleware(TimingMiddleware)
     app.add_middleware(CorrelationIDMiddleware)
     app.add_middleware(
         CORSMiddleware,
