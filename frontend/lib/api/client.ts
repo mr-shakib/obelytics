@@ -4,10 +4,26 @@ import { useAuthStore } from "@/lib/stores/auth-store"
 import { useAppStore } from "@/lib/stores/app-store"
 import { toast } from "sonner"
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+// Client-side: use relative URLs so Next.js rewrites proxy to the backend.
+// Server-side (BFF): import rawApiClient which uses BACKEND_URL directly.
+const BACKEND_URL = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 // Raw client used by BFF route handlers (server-side, no interceptors)
-export const rawApiClient = createClient<paths>({ baseUrl: `${BASE_URL}/api/v1` })
+export const rawApiClient = createClient<paths>({ baseUrl: `${BACKEND_URL}/api/v1` })
+
+// ─── Fetch with timeout ──────────────────────────────────────────────────────
+
+const FETCH_TIMEOUT_MS = 15_000
+
+export function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit & { timeoutMs?: number }
+): Promise<Response> {
+  const timeoutMs = init?.timeoutMs ?? FETCH_TIMEOUT_MS
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
 
 // ─── Intercepted fetch for client-side calls ──────────────────────────────────
 
@@ -15,7 +31,7 @@ let isRefreshing = false
 let refreshQueue: Array<(token: string) => void> = []
 
 async function refreshToken(): Promise<string> {
-  const res = await fetch("/api/auth/refresh", { method: "POST" })
+  const res = await fetchWithTimeout("/api/auth/refresh", { method: "POST" })
   if (!res.ok) throw new Error("refresh_failed")
   const data = await res.json()
   return data.access_token as string
@@ -36,7 +52,7 @@ async function interceptedFetch(
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`)
   if (activeProgramId) headers.set("X-Program-Id", activeProgramId)
 
-  let res = await fetch(input, { ...init, headers })
+  let res = await fetchWithTimeout(input, { ...init, headers })
 
   if (res.status === 401) {
     if (!isRefreshing) {
@@ -49,7 +65,7 @@ async function interceptedFetch(
         isRefreshing = false
 
         headers.set("Authorization", `Bearer ${newToken}`)
-        res = await fetch(input, { ...init, headers })
+        res = await fetchWithTimeout(input, { ...init, headers })
       } catch {
         isRefreshing = false
         refreshQueue = []
@@ -63,7 +79,7 @@ async function interceptedFetch(
       // queue while refresh is in flight
       const newToken = await new Promise<string>((resolve) => refreshQueue.push(resolve))
       headers.set("Authorization", `Bearer ${newToken}`)
-      res = await fetch(input, { ...init, headers })
+      res = await fetchWithTimeout(input, { ...init, headers })
     }
   }
 
@@ -93,6 +109,6 @@ async function interceptedFetch(
 }
 
 export const apiClient = createClient<paths>({
-  baseUrl: `${BASE_URL}/api/v1`,
+  baseUrl: "/api/v1",
   fetch: interceptedFetch,
 })

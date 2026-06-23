@@ -664,7 +664,7 @@ async def get_marksheet_report_pdf(
 ):
     svc = MarksheetService(db)
     context = await svc.build_report_context(section_offering_id, current_user.organization_id)
-    pdf_bytes = render_marksheet_report_pdf(context)
+    pdf_bytes = await render_marksheet_report_pdf(context)
     filename = f"{context['section']['course_code']}_{context['section']['section_name']}_section_report.pdf"
     return Response(
         content=pdf_bytes,
@@ -687,7 +687,7 @@ async def get_marksheet_course_report_pdf(
 ):
     svc = MarksheetService(db)
     context = await svc.build_course_report_context(course_id, batch_id, academic_term_id, current_user.organization_id)
-    pdf_bytes = render_marksheet_course_report_pdf(context)
+    pdf_bytes = await render_marksheet_course_report_pdf(context)
     filename = f"{context['course']['course_code']}_combined_section_report.pdf"
     return Response(
         content=pdf_bytes,
@@ -737,7 +737,7 @@ async def download_combined_end_report_pdf(
         body.ml_feedback,
         [j.model_dump() for j in body.unattained_justifications],
     )
-    pdf_bytes = render_end_report_pdf(context)
+    pdf_bytes = await render_end_report_pdf(context)
     course_code = context["section"]["course_code"]
     filename = f"{course_code}_Combined_End_Report.pdf"
     return Response(
@@ -807,7 +807,7 @@ async def download_end_report_pdf(
 ):
     svc = CourseEndReportService(db)
     context = await svc.build_end_report_context(section_offering_id, current_user.organization_id)
-    pdf_bytes = render_end_report_pdf(context)
+    pdf_bytes = await render_end_report_pdf(context)
     course_code = context["section"]["course_code"]
     section_name = context["section"]["section_name"]
     filename = f"{course_code}_Section_{section_name}_End_Report.pdf"

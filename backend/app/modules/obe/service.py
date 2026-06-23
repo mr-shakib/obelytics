@@ -2,6 +2,7 @@ import re
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.writer import write_audit_log
@@ -509,11 +510,16 @@ class MappingSetService:
             raise MappingSetNotFoundError()
         entries = await self._entry_repo.list_by_set(set_id)
 
-        po_codes: dict[UUID, str] = {}
-        for po_id in {e.program_outcome_id for e in entries}:
-            po = await self._po_repo.get_by_id(po_id, org_id)
-            if po is not None:
-                po_codes[po_id] = po.code
+        # Batch-fetch all POs
+        po_ids = {e.program_outcome_id for e in entries}
+        po_map: dict[UUID, ProgramOutcome] = {}
+        if po_ids:
+            po_result = await self._session.execute(
+                select(ProgramOutcome).where(ProgramOutcome.id.in_(po_ids))
+            )
+            po_map = {po.id: po for po in po_result.scalars().all()}
+
+        po_codes: dict[UUID, str] = {po_id: po.code for po_id, po in po_map.items()}
 
         co_to_po_numbers: dict[UUID, set[int]] = {}
         for e in entries:
@@ -522,17 +528,52 @@ class MappingSetService:
                 continue
             co_to_po_numbers.setdefault(e.course_outcome_id, set()).add(int(match.group(1)))
 
+        co_ids_needing_check = set()
+        for co_id, po_numbers in co_to_po_numbers.items():
+            needs_cep = any(1 <= n <= 7 for n in po_numbers)
+            needs_cea = 10 in po_numbers
+            if needs_cep or needs_cea:
+                co_ids_needing_check.add(co_id)
+
+        # Batch-fetch CEP and CEA mappings for all COs that need checking
+        cep_by_co: dict[UUID, bool] = {}
+        cea_by_co: dict[UUID, bool] = {}
+        if co_ids_needing_check:
+            cep_result = await self._session.execute(
+                select(COCPMapping.course_outcome_id).where(
+                    COCPMapping.course_outcome_id.in_(co_ids_needing_check)
+                )
+            )
+            cep_co_ids = {row[0] for row in cep_result.all()}
+            cea_result = await self._session.execute(
+                select(COCAMapping.course_outcome_id).where(
+                    COCAMapping.course_outcome_id.in_(co_ids_needing_check)
+                )
+            )
+            cea_co_ids = {row[0] for row in cea_result.all()}
+            for co_id in co_ids_needing_check:
+                cep_by_co[co_id] = co_id in cep_co_ids
+                cea_by_co[co_id] = co_id in cea_co_ids
+
+        # Batch-fetch COs for issue reporting
+        co_map: dict[UUID, CourseOutcome] = {}
+        if co_ids_needing_check:
+            co_result = await self._session.execute(
+                select(CourseOutcome).where(CourseOutcome.id.in_(co_ids_needing_check))
+            )
+            co_map = {co.id: co for co in co_result.scalars().all()}
+
         issues: list[COMappingValidationIssue] = []
         for co_id, po_numbers in co_to_po_numbers.items():
             needs_cep = any(1 <= n <= 7 for n in po_numbers)
             needs_cea = 10 in po_numbers
             if not needs_cep and not needs_cea:
                 continue
-            missing_cep = needs_cep and not await self._cp_repo.list_by_co(co_id)
-            missing_cea = needs_cea and not await self._ca_repo.list_by_co(co_id)
+            missing_cep = needs_cep and not cep_by_co.get(co_id, False)
+            missing_cea = needs_cea and not cea_by_co.get(co_id, False)
             if not missing_cep and not missing_cea:
                 continue
-            co = await self._co_repo.get_by_id(co_id, org_id)
+            co = co_map.get(co_id)
             issues.append(COMappingValidationIssue(
                 course_outcome_id=co_id,
                 course_outcome_code=co.code if co else "",

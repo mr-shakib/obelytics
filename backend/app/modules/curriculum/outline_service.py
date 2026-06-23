@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
+import anyio
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -383,9 +384,13 @@ class CourseOutlineService:
         }
 
 
-def render_course_outline_pdf(context: dict) -> bytes:
+async def render_course_outline_pdf(context: dict) -> bytes:
     from weasyprint import HTML
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     html = env.get_template("course_outline.html").render(**context)
-    return HTML(string=html).write_pdf()
+
+    def _render():
+        return HTML(string=html).write_pdf()
+
+    return await anyio.to_thread.run_sync(_render)

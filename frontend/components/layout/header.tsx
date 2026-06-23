@@ -29,7 +29,7 @@ import { useNotificationStore } from "@/lib/stores/notification-store"
 import { usePermissions } from "@/hooks/use-permission"
 import { logoutApi } from "@/lib/api/auth"
 import { queryKeys } from "@/lib/query-keys"
-import { apiClient } from "@/lib/api/client"
+import { fetchWithTimeout } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import {
   NAV_GROUPS,
@@ -37,8 +37,6 @@ import {
   getActiveNavGroup,
   getVisibleNavItems,
 } from "@/lib/navigation"
-
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 function GroupSwitcher() {
   const pathname = usePathname()
@@ -86,7 +84,7 @@ export function Header() {
   const { data: fetchedUnreadCount = 0 } = useQuery({
     queryKey: queryKeys.notifications.unreadCount,
     queryFn: async () => {
-      const res = await fetch(`${BACKEND}/api/v1/notifications/me/count`, {
+      const res = await fetchWithTimeout("/api/v1/notifications/me/count", {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       })
       if (!res.ok) return 0

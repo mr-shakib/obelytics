@@ -8,8 +8,6 @@ import {
   ResponsiveContainer, ReferenceLine, Cell, LabelList,
 } from "recharts"
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
-
 interface Outcome {
   co_code?: string
   po_code?: string
@@ -193,7 +191,7 @@ export default function PublicResultPage() {
     setError(null)
     setData(null)
     try {
-      const res = await fetch(`${BASE_URL}/api/v1/public/student-results?uid=${encodeURIComponent(trimmed)}`)
+      const res = await fetch(`/api/v1/public/student-results?uid=${encodeURIComponent(trimmed)}`)
       if (res.status === 404) {
         setError("We couldn't find a student with that ID. Check the number and try again.")
         return

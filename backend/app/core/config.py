@@ -1,5 +1,6 @@
 from typing import Literal
-from pydantic import computed_field
+
+from pydantic import computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,7 +13,7 @@ class Settings(BaseSettings):
 
     # Application
     ENV: Literal["development", "staging", "production"] = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     APP_NAME: str = "Obelytics"
     API_V1_PREFIX: str = "/api/v1"
     SECRET_KEY: str = "change-me-in-production"
@@ -26,8 +27,9 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "obelytics"
     POSTGRES_PASSWORD: str = "obelytics_dev"
     DATABASE_URL_OVERRIDE: str = ""
-    DB_POOL_SIZE: int = 20
-    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 3
+    DB_POOL_RECYCLE: int = 1800
 
     @computed_field
     @property
@@ -80,8 +82,17 @@ class Settings(BaseSettings):
     MINIO_BUCKET_LOGOS: str = "logos"
     MINIO_BUCKET_ACCREDITATION: str = "accreditation"
 
-    # CORS
+    # CORS — set ALLOWED_ORIGINS env var as JSON array or comma-separated:
+    # ALLOWED_ORIGINS=["https://your-app.vercel.app","http://localhost:3000"]
+    # ALLOWED_ORIGINS=https://your-app.vercel.app,http://localhost:3000
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_origins(cls, v):
+        if isinstance(v, str):
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v
 
     # Rate limiting
     RATE_LIMIT_REQUESTS: int = 100

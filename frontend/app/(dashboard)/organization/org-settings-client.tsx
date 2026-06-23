@@ -18,8 +18,6 @@ import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { useAuthStore } from "@/lib/stores/auth-store"
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
-
 const schema = z.object({
   name: z.string().min(2),
   short_name: z.string().optional(),
@@ -67,7 +65,7 @@ export function OrgSettingsClient() {
     mutationFn: async (file: File) => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch(`${BACKEND}/api/v1/organization/logo`, {
+      const res = await fetch("/api/v1/organization/logo", {
         method: "POST",
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         body: form,

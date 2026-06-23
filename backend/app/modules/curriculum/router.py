@@ -431,7 +431,7 @@ async def get_course_outline_pdf(
         course_id, curriculum_id, current_user.organization_id,
         excluded_tool_ids=excluded_tool_ids or [],
     )
-    pdf_bytes = render_course_outline_pdf(context)
+    pdf_bytes = await render_course_outline_pdf(context)
     filename = f"{context['course']['code']}_course_outline.pdf"
     return Response(
         content=pdf_bytes,

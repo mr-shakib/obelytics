@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
+import anyio
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import and_, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1467,65 +1468,170 @@ class MarksheetService:
             .order_by(AcademicTerm.year.desc(), Course.code)
         )).all()
 
+        if not rows:
+            return []
+
+        offering_ids = [offering.id for _, offering, _, _ in rows]
+        course_ids = list({offering.course_id for _, offering, _, _ in rows})
+        curriculum_ids = list({offering.curriculum_id for _, offering, _, _ in rows if offering.curriculum_id})
+
+        # Batch-fetch all data needed for attainment computation
+        all_co_result = await self._session.execute(
+            select(CourseOutcome).where(CourseOutcome.course_id.in_(course_ids))
+        )
+        cos_by_course: dict[UUID, list[CourseOutcome]] = defaultdict(list)
+        for co in all_co_result.scalars().all():
+            cos_by_course[co.course_id].append(co)
+
+        all_questions = (await self._session.execute(
+            select(MarksheetQuestion).where(MarksheetQuestion.section_offering_id.in_(offering_ids))
+        )).scalars().all()
+        questions_by_offering: dict[UUID, list[MarksheetQuestion]] = defaultdict(list)
+        for q in all_questions:
+            questions_by_offering[q.section_offering_id].append(q)
+
+        all_marks = (await self._session.execute(
+            select(MarksheetMark).where(MarksheetMark.organization_id == org_id)
+        )).scalars().all()
+        marks_by_offering: dict[UUID, list[MarksheetMark]] = defaultdict(list)
+        mark_map_by_offering: dict[UUID, dict[tuple[UUID, UUID], MarksheetMark]] = {}
+        for m in all_marks:
+            # Filter to relevant offerings by checking question_id
+            for off_id, qs in questions_by_offering.items():
+                if any(q.id == m.question_id for q in qs):
+                    marks_by_offering[off_id].append(m)
+                    if off_id not in mark_map_by_offering:
+                        mark_map_by_offering[off_id] = {}
+                    mark_map_by_offering[off_id][(m.question_id, m.student_enrollment_id)] = m
+
+        # Batch-fetch mapping sets and entries
+        mapping_sets_result = await self._session.execute(
+            select(COPOMappingSet).where(
+                and_(
+                    COPOMappingSet.curriculum_id.in_(curriculum_ids),
+                    COPOMappingSet.course_id.in_(course_ids),
+                )
+            )
+        )
+        mapping_sets = mapping_sets_result.scalars().all()
+        best_mapping: dict[tuple[UUID, UUID], COPOMappingSet] = {}
+        for ms in mapping_sets:
+            key = (ms.curriculum_id, ms.course_id)
+            if key not in best_mapping or ms.created_at > best_mapping[key].created_at:
+                best_mapping[key] = ms
+
+        mapping_set_ids = [ms.id for ms in best_mapping.values()]
+        all_entries: list[COPOMappingEntry] = []
+        if mapping_set_ids:
+            entries_result = await self._session.execute(
+                select(COPOMappingEntry).where(COPOMappingEntry.mapping_set_id.in_(mapping_set_ids))
+            )
+            all_entries = list(entries_result.scalars().all())
+        entries_by_ms: dict[UUID, list[COPOMappingEntry]] = defaultdict(list)
+        for e in all_entries:
+            entries_by_ms[e.mapping_set_id].append(e)
+
+        # Batch-fetch POs
+        po_ids = {e.program_outcome_id for e in all_entries}
+        po_map: dict[UUID, ProgramOutcome] = {}
+        if po_ids:
+            po_result = await self._session.execute(
+                select(ProgramOutcome).where(ProgramOutcome.id.in_(po_ids))
+            )
+            po_map = {po.id: po for po in po_result.scalars().all()}
+
+        # Batch-fetch program_ids for curricula
+        program_id_by_curriculum: dict[UUID, UUID] = {}
+        if curriculum_ids:
+            cur_result = await self._session.execute(
+                select(Curriculum.id, Curriculum.program_id).where(Curriculum.id.in_(curriculum_ids))
+            )
+            for cid, pid in cur_result.all():
+                if pid:
+                    program_id_by_curriculum[cid] = pid
+
+        # Batch-fetch thresholds
+        threshold_by_curriculum: dict[UUID, Decimal] = {}
+        for cur_id in curriculum_ids:
+            threshold_by_curriculum[cur_id] = await self._load_thresholds(org_id, cur_id)
+
+        # Fetch the student's enrollments to match against
+        student_enrollment_ids = {enrollment.id for enrollment, _, _, _ in rows}
+
         results: list[dict] = []
         for enrollment, offering, course, term in rows:
-            attainment = await self.get_attainment(offering.id, org_id)
-            student_row = next(
-                (s for s in attainment.students if s.enrollment_id == enrollment.id), None
-            )
-            if student_row is None:
-                continue
-            threshold = float(attainment.threshold_co_score_pct)
+            threshold = float(threshold_by_curriculum.get(offering.curriculum_id, Decimal("60")))
+            cos = cos_by_course.get(offering.course_id, [])
+            questions = questions_by_offering.get(offering.id, [])
+            co_questions = [q for q in questions if q.course_outcome_id is not None]
+            mark_map = mark_map_by_offering.get(offering.id, {})
 
-            co_stmt = {
-                co.code: co.statement
-                for co in (await self._session.execute(
-                    select(CourseOutcome).where(CourseOutcome.course_id == offering.course_id)
-                )).scalars().all()
-            }
-            co_results = [
-                {
+            # Compute CO attainment for this student
+            co_max_marks: dict[UUID, Decimal] = defaultdict(Decimal)
+            for q in co_questions:
+                co_max_marks[q.course_outcome_id] += Decimal(str(q.max_marks))
+
+            co_obtained: dict[UUID, Decimal] = defaultdict(Decimal)
+            for q in co_questions:
+                mark = mark_map.get((q.id, enrollment.id))
+                if mark is not None and not mark.is_absent and mark.marks_obtained is not None:
+                    co_obtained[q.course_outcome_id] += Decimal(str(mark.marks_obtained))
+
+            co_code_map = {co.id: co.code for co in cos}
+            co_stmt_map = {co.id: co.statement for co in cos}
+
+            co_results = []
+            for co_id, max_marks in co_max_marks.items():
+                code = co_code_map.get(co_id, str(co_id))
+                pct = float(co_obtained[co_id] / max_marks * Decimal("100")) if max_marks > 0 else 0.0
+                co_results.append({
                     "co_code": code,
-                    "co_statement": co_stmt.get(code, ""),
-                    "attainment_percentage": round(float(student_row.co_pct.get(code, 0)), 2),
+                    "co_statement": co_stmt_map.get(co_id, ""),
+                    "attainment_percentage": round(pct, 2),
                     "threshold": threshold,
-                    "is_threshold_met": bool(student_row.co_results.get(code, False)),
-                }
-                for code in student_row.co_pct
-            ]
+                    "is_threshold_met": pct >= threshold,
+                })
 
-            po_codes = list(student_row.po_pct.keys())
-            po_stmt: dict[str, str] = {}
-            if po_codes:
-                program_id = (await self._session.execute(
-                    select(Curriculum.program_id).where(Curriculum.id == offering.curriculum_id)
-                )).scalar_one_or_none()
-                if program_id:
-                    po_stmt = {
-                        po.code: po.statement
-                        for po in (await self._session.execute(
-                            select(ProgramOutcome).where(
-                                ProgramOutcome.program_id == program_id,
-                                ProgramOutcome.code.in_(po_codes),
-                            )
-                        )).scalars().all()
-                    }
-            po_results = [
-                {
-                    "po_code": code,
-                    "po_statement": po_stmt.get(code),
-                    "attainment_percentage": round(float(student_row.po_pct.get(code, 0)), 2),
+            # Compute PO attainment for this student
+            ms_key = (offering.curriculum_id, offering.course_id)
+            mapping_set = best_mapping.get(ms_key)
+            entries = entries_by_ms.get(mapping_set.id, []) if mapping_set else []
+
+            po_entries: dict[UUID, list[COPOMappingEntry]] = defaultdict(list)
+            for entry in entries:
+                if entry.course_outcome_id in {co.id for co in cos}:
+                    po_entries[entry.program_outcome_id].append(entry)
+
+            po_results = []
+            for po_id, po_ents in po_entries.items():
+                weighted_sum = Decimal("0")
+                weight_sum = Decimal("0")
+                for entry in po_ents:
+                    if entry.course_outcome_id in co_max_marks:
+                        max_marks = co_max_marks[entry.course_outcome_id]
+                        if max_marks > 0:
+                            pct = co_obtained[entry.course_outcome_id] / max_marks * Decimal("100")
+                        else:
+                            pct = Decimal("0")
+                        w = Decimal(str(entry.weight))
+                        weighted_sum += pct * w
+                        weight_sum += w
+                student_po_pct = float(weighted_sum / weight_sum) if weight_sum > 0 else 0.0
+                po = po_map.get(po_id)
+                po_results.append({
+                    "po_code": po.code if po else str(po_id),
+                    "po_statement": po.statement if po else None,
+                    "attainment_percentage": round(student_po_pct, 2),
                     "threshold": threshold,
-                    "is_threshold_met": bool(student_row.po_results.get(code, False)),
-                }
-                for code in po_codes
-            ]
+                    "is_threshold_met": student_po_pct >= threshold,
+                })
 
-            # Overall marks + grade from the marksheet
-            questions = await self._question_repo.list_by_offering(offering.id)
+            po_results.sort(key=lambda p: p["po_code"])
+
+            # Overall marks + grade
             total_max = sum((Decimal(str(q.max_marks)) for q in questions), Decimal("0"))
             obtained = Decimal("0")
-            for m in await self._mark_repo.list_by_offering(offering.id):
+            for m in marks_by_offering.get(offering.id, []):
                 if (
                     m.student_enrollment_id == enrollment.id
                     and not m.is_absent
@@ -1725,28 +1831,40 @@ class MarksheetService:
         }
 
 
-def render_marksheet_report_pdf(context: dict) -> bytes:
+async def render_marksheet_report_pdf(context: dict) -> bytes:
     from weasyprint import HTML
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     html = env.get_template("marksheet_report.html").render(**context)
-    return HTML(string=html).write_pdf()
+
+    def _render():
+        return HTML(string=html).write_pdf()
+
+    return await anyio.to_thread.run_sync(_render)
 
 
-def render_marksheet_course_report_pdf(context: dict) -> bytes:
+async def render_marksheet_course_report_pdf(context: dict) -> bytes:
     from weasyprint import HTML
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     html = env.get_template("marksheet_course_report.html").render(**context)
-    return HTML(string=html).write_pdf()
+
+    def _render():
+        return HTML(string=html).write_pdf()
+
+    return await anyio.to_thread.run_sync(_render)
 
 
-def render_end_report_pdf(context: dict) -> bytes:
+async def render_end_report_pdf(context: dict) -> bytes:
     from weasyprint import HTML
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     html = env.get_template("end_report.html").render(**context)
-    return HTML(string=html).write_pdf()
+
+    def _render():
+        return HTML(string=html).write_pdf()
+
+    return await anyio.to_thread.run_sync(_render)
 
 
 GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"]

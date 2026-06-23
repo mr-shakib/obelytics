@@ -48,14 +48,21 @@ class AssessmentSummaryService:
             )
         ).scalars().all()
 
-        # 3. Compute stats per assessment
+        # 3. Batch-fetch all marks for these assessments
+        assessment_ids = [a.id for a in assessments]
+        all_marks = (
+            await self._session.execute(
+                select(StudentMark).where(StudentMark.assessment_id.in_(assessment_ids))
+            )
+        ).scalars().all()
+        marks_by_assessment: dict[UUID, list[StudentMark]] = defaultdict(list)
+        for m in all_marks:
+            marks_by_assessment[m.assessment_id].append(m)
+
+        # 4. Compute stats per assessment
         rows = []
         for a in assessments:
-            marks = (
-                await self._session.execute(
-                    select(StudentMark).where(StudentMark.assessment_id == a.id)
-                )
-            ).scalars().all()
+            marks = marks_by_assessment.get(a.id, [])
 
             marks_entered = len(marks)
             absent = sum(1 for m in marks if m.is_absent)

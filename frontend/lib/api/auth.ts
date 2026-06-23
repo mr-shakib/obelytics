@@ -1,6 +1,8 @@
 import type { MeResponse, UserProfile, PermissionManifest } from "@/types"
+import { fetchWithTimeout } from "@/lib/api/client"
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+// Client-side calls use relative URLs (proxied by Next.js rewrites to the backend).
+// Server-side BFF routes use BACKEND_URL env var directly.
 
 // Login goes through the BFF so it can set the HttpOnly refresh_token cookie
 export async function loginApi(email: string, password: string): Promise<{
@@ -10,7 +12,7 @@ export async function loginApi(email: string, password: string): Promise<{
   scope: PermissionManifest["scope"]
   offering_ids: string[]
 }> {
-  const res = await fetch("/api/auth/login", {
+  const res = await fetchWithTimeout("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -26,11 +28,11 @@ export async function loginApi(email: string, password: string): Promise<{
 // Used by AuthProvider after silent refresh — calls backend directly with the new access token
 export async function getMeApi(accessToken: string): Promise<MeResponse> {
   const [meRes, permsRes] = await Promise.all([
-    fetch(`${BACKEND}/api/v1/users/me`, {
+    fetchWithTimeout("/api/v1/users/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     }),
-    fetch(`${BACKEND}/api/v1/users/me/permissions`, {
+    fetchWithTimeout("/api/v1/users/me/permissions", {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     }),
@@ -67,9 +69,9 @@ export async function getMeApi(accessToken: string): Promise<MeResponse> {
 
 export async function logoutApi(accessToken: string) {
   // Clear the HttpOnly refresh_token cookie via BFF
-  await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {})
+  await fetchWithTimeout("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {})
   // Also tell the backend to revoke the token (best-effort)
-  await fetch(`${BACKEND}/api/v1/auth/logout`, {
+  await fetchWithTimeout("/api/v1/auth/logout", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}` },
     credentials: "include",
@@ -77,7 +79,7 @@ export async function logoutApi(accessToken: string) {
 }
 
 export async function requestPasswordReset(email: string) {
-  const res = await fetch(`${BACKEND}/api/v1/auth/password-reset-request`, {
+  const res = await fetchWithTimeout("/api/v1/auth/password-reset-request", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -86,7 +88,7 @@ export async function requestPasswordReset(email: string) {
 }
 
 export async function confirmPasswordReset(token: string, password: string) {
-  const res = await fetch(`${BACKEND}/api/v1/auth/password-reset-confirm`, {
+  const res = await fetchWithTimeout("/api/v1/auth/password-reset-confirm", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password }),
