@@ -97,7 +97,7 @@ function ConfigureQuestionsDialog({
   const updateRow = (index: number, patch: Partial<DraftQuestion>) =>
     setDraft((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)))
 
-  const addRow = () => setDraft((prev) => [...prev, { ...EMPTY_QUESTION }])
+  const addRow = () => setDraft((prev) => [...prev, { ...EMPTY_QUESTION, label: `Q${prev.length + 1}` }])
   const removeRow = (index: number) => setDraft((prev) => prev.filter((_, i) => i !== index))
 
   const total = draft.reduce((sum, row) => sum + (Number(row.max_marks) || 0), 0)
