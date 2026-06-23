@@ -2,9 +2,9 @@
 
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Grid3x3, Check } from "lucide-react"
+import { Grid3x3, Check, Loader2 } from "lucide-react"
 import { usePermission } from "@/hooks/use-permission"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
@@ -143,26 +143,65 @@ export function ComplexMappingCard({
 
   const createMutation = useMutation({
     mutationFn: async ({ coId, optionId }: { coId: string; optionId: string }) => {
-      await apiClient.POST(config.mappingsPath as never, {
+      const { data } = await apiClient.POST(config.mappingsPath as never, {
         body: { course_outcome_id: coId, [config.optionField]: optionId },
-      } as never)
+      } as never) as { data: unknown }
+      return data as ComplexMapping
     },
-    onSuccess: (_data, vars) => invalidateCo(vars.coId),
-    onError: () => toast.error("Failed to add mapping"),
+    onMutate: async ({ coId, optionId }) => {
+      const queryKey = queryKeys.complexMappings.byCo(kind, coId)
+      await qc.cancelQueries({ queryKey })
+      const prev = qc.getQueryData<ComplexMapping[]>(queryKey) ?? []
+      const optimisticId = `optimistic-${coId}-${optionId}`
+      const optimisticMapping: ComplexMapping = {
+        id: optimisticId,
+        course_outcome_id: coId,
+        status: "active",
+        [config.optionField]: optionId,
+      } as ComplexMapping
+      qc.setQueryData<ComplexMapping[]>(queryKey, [...prev, optimisticMapping])
+      return { prev, queryKey }
+    },
+    onError: (_err, _vars, context) => {
+      if (context) {
+        qc.setQueryData(context.queryKey, context.prev)
+        toast.error("Failed to add mapping")
+      }
+    },
+    onSettled: (_data, _err, vars) => {
+      invalidateCo(vars.coId)
+    },
   })
 
   const deleteMutation = useMutation({
     mutationFn: async (vars: { mappingId: string; coId: string }) => {
       await apiClient.DELETE(`${config.mappingsPath}/${vars.mappingId}` as never)
     },
-    onSuccess: (_data, vars) => invalidateCo(vars.coId),
-    onError: () => toast.error("Failed to remove mapping"),
+    onMutate: async ({ mappingId, coId }) => {
+      const queryKey = queryKeys.complexMappings.byCo(kind, coId)
+      await qc.cancelQueries({ queryKey })
+      const prev = qc.getQueryData<ComplexMapping[]>(queryKey) ?? []
+      qc.setQueryData<ComplexMapping[]>(
+        queryKey,
+        prev.filter((m) => m.id !== mappingId)
+      )
+      return { prev, queryKey }
+    },
+    onError: (_err, _vars, context) => {
+      if (context) {
+        qc.setQueryData(context.queryKey, context.prev)
+        toast.error("Failed to remove mapping")
+      }
+    },
+    onSettled: (_data, _err, vars) => {
+      invalidateCo(vars.coId)
+    },
   })
 
   const isMutating = createMutation.isPending || deleteMutation.isPending
 
   function handleCellClick(co: CourseOutcome, option: ComplexOption) {
-    if (!canManage || isMutating) return
+    if (!canManage) return
     const mappings = mappingsByCo.get(co.id) ?? []
     const existing = mappings.find((m) => getOptionId(m, kind) === option.id)
 
@@ -180,6 +219,14 @@ export function ComplexMappingCard({
       <CardHeader>
         <CardTitle>{config.title}</CardTitle>
         <CardDescription>{config.description}</CardDescription>
+        {isMutating && (
+          <CardAction>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Saving...
+            </div>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Legend */}
@@ -264,9 +311,8 @@ export function ComplexMappingCard({
                           {canManage ? (
                             <button
                               type="button"
-                              className="w-full h-9 flex items-center justify-center hover:bg-accent/50 transition-colors disabled:opacity-50"
+                              className="w-full h-9 flex items-center justify-center hover:bg-accent/50 transition-colors"
                               onClick={() => handleCellClick(co, option)}
-                              disabled={isMutating}
                               title={cellTitle}
                             >
                               {badge}

@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Loader2, Save, Grid3x3, AlertTriangle, CheckCircle2, ArrowRight, Check } from "lucide-react"
+import { Grid3x3, AlertTriangle, CheckCircle2, ArrowRight, Check, Loader2 } from "lucide-react"
 import { PermissionGate } from "@/components/shared/permission-gate"
-import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api/client"
@@ -60,7 +59,9 @@ export function CoPoMappingCard({
 
   const [setId,  setSetId]  = useState<string | null>(null)
   const [matrix, setMatrix] = useState<Set<string>>(new Set())
-  const [dirty,  setDirty]  = useState(false)
+  const [saving, setSaving] = useState(false)
+  const pendingRef = useRef<Set<string>>(new Set())
+  const matrixRef = useRef<Set<string>>(new Set())
 
   // ── Existing mapping set ─────────────────────────────────────────────────
 
@@ -112,7 +113,7 @@ export function CoPoMappingCard({
       m.add(matrixKey(e.course_outcome_id, e.program_outcome_id))
     }
     setMatrix(m)
-    setDirty(false)
+    matrixRef.current = m
   }, [existingEntries])
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -121,47 +122,79 @@ export function CoPoMappingCard({
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
+  const flushMatrix = useCallback(async (resolvedSetId: string, matrixSnapshot: Set<string>) => {
+    const entries = Array.from(matrixSnapshot).map((key) => {
+      const [course_outcome_id, program_outcome_id] = key.split(":")
+      return { course_outcome_id, program_outcome_id, weight: DEFAULT_WEIGHT }
+    })
+
+    await apiClient.PUT(`/mappings/co-po/${resolvedSetId}/entries` as never, {
+      body: entries,
+    } as never)
+
+    qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.entries(resolvedSetId) })
+    qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.validation(resolvedSetId) })
+  }, [qc])
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ nextMatrix }: { nextMatrix: Set<string> }) => {
+      let resolvedSetId = setId
+      if (!resolvedSetId) {
+        const { data: setData } = await apiClient.POST("/mappings/co-po" as never, {
+          body: { curriculum_id: curriculumId, course_id: courseId },
+        } as never) as { data: unknown }
+        resolvedSetId = (setData as MappingSet).id
+        setSetId(resolvedSetId)
+        qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.byCourse(curriculumId, courseId) })
+      }
+      await flushMatrix(resolvedSetId, nextMatrix)
+      return resolvedSetId
+    },
+    onSuccess: () => {
+      setSaving(false)
+    },
+    onError: () => {
+      toast.error("Failed to save mapping")
+      setSaving(false)
+    },
+  })
+
   function toggleCell(coId: string, poId: string) {
     const key = matrixKey(coId, poId)
     setMatrix((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
+
+      matrixRef.current = next
+
+      // Optimistically update the react-query cache so the summary card reflects instantly
+      if (setId) {
+        const entries: MappingEntry[] = Array.from(next).map((k) => {
+          const [course_outcome_id, program_outcome_id] = k.split(":")
+          return {
+            id: `optimistic-${k}`,
+            mapping_set_id: setId,
+            course_outcome_id,
+            program_outcome_id,
+            weight: DEFAULT_WEIGHT as 1 | 2 | 3,
+          }
+        })
+        qc.setQueryData(queryKeys.coPoMappings.entries(setId), entries)
+      }
+
+      if (!pendingRef.current.has("co-po")) {
+        pendingRef.current.add("co-po")
+        setSaving(true)
+        setTimeout(() => {
+          pendingRef.current.delete("co-po")
+          saveMutation.mutate({ nextMatrix: matrixRef.current })
+        }, 300)
+      }
+
       return next
     })
-    setDirty(true)
   }
-
-  // ── Save ─────────────────────────────────────────────────────────────────
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const { data: setData } = await apiClient.POST("/mappings/co-po" as never, {
-        body: { curriculum_id: curriculumId, course_id: courseId },
-      } as never) as { data: unknown }
-      const resolvedSetId = (setData as MappingSet).id
-
-      const entries = Array.from(matrix).map((key) => {
-        const [course_outcome_id, program_outcome_id] = key.split(":")
-        return { course_outcome_id, program_outcome_id, weight: DEFAULT_WEIGHT }
-      })
-
-      await apiClient.PUT(`/mappings/co-po/${resolvedSetId}/entries` as never, {
-        body: entries,
-      } as never)
-
-      return resolvedSetId
-    },
-    onSuccess: (resolvedSetId: string) => {
-      toast.success("CO-PO mapping saved")
-      setSetId(resolvedSetId)
-      setDirty(false)
-      qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.entries(resolvedSetId) })
-      qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.byCourse(curriculumId, courseId) })
-      qc.invalidateQueries({ queryKey: queryKeys.coPoMappings.validation(resolvedSetId) })
-    },
-    onError: () => toast.error("Failed to save mapping"),
-  })
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -170,16 +203,14 @@ export function CoPoMappingCard({
       <CardHeader>
         <CardTitle>CO-PO Mapping</CardTitle>
         <CardDescription>
-          Map course outcomes to program outcomes. Click a cell to toggle the mapping on or off.
+          Map course outcomes to program outcomes. Click a cell to toggle the mapping on or off. Changes save automatically.
         </CardDescription>
-        {dirty && (
+        {saving && (
           <CardAction>
-            <PermissionGate permission="mapping.co_po.update">
-              <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? <Loader2 className="animate-spin" /> : <Save />}
-                Save Matrix
-              </Button>
-            </PermissionGate>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Saving...
+            </div>
           </CardAction>
         )}
       </CardHeader>
