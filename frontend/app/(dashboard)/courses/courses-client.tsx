@@ -74,6 +74,7 @@ const schema = z.object({
   theory_hours: z.number().int().min(0),
   lab_hours: z.number().int().min(0),
   description: z.string().max(2000).optional(),
+  prerequisite_course_ids: z.array(z.string()).optional(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -81,6 +82,7 @@ export function CoursesClient() {
   const [open, setOpen] = useState(false)
   const [selCategoryId, setSelCategoryId] = useState("")
   const [selCourseType, setSelCourseType] = useState("")
+  const [selPrereqIds, setSelPrereqIds] = useState<string[]>([])
   const qc = useQueryClient()
   const router = useRouter()
 
@@ -187,7 +189,7 @@ export function CoursesClient() {
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      await apiClient.POST("/courses" as never, {
+      const { data } = await apiClient.POST("/courses" as never, {
         body: {
           code: values.code,
           title: values.title,
@@ -199,6 +201,16 @@ export function CoursesClient() {
           description: values.description || undefined,
         },
       } as never)
+      const created = (data as unknown) as { id: string }
+      if (created?.id && values.prerequisite_course_ids?.length) {
+        await Promise.all(
+          values.prerequisite_course_ids.map((prereqId) =>
+            apiClient.POST(`/courses/${created.id}/prerequisites` as never, {
+              body: { prerequisite_course_id: prereqId },
+            } as never)
+          )
+        )
+      }
     },
     onSuccess: () => {
       toast.success("Course created")
@@ -206,6 +218,7 @@ export function CoursesClient() {
       setOpen(false)
       setSelCategoryId("")
       setSelCourseType("")
+      setSelPrereqIds([])
       reset()
     },
     onError: () => toast.error("Failed to create course"),
@@ -226,6 +239,7 @@ export function CoursesClient() {
                 if (!v) {
                   setSelCategoryId("")
                   setSelCourseType("")
+                  setSelPrereqIds([])
                   setNewCategoryOpen(false)
                   setNewCategoryName("")
                   reset()
@@ -393,6 +407,44 @@ export function CoursesClient() {
                         <p className="text-sm text-destructive">{errors.lab_hours.message}</p>
                       )}
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Prerequisites <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <div className="rounded-lg border max-h-40 overflow-y-auto">
+                      {allCourses.filter((c) => c.status === "ACTIVE").length === 0 ? (
+                        <p className="text-sm text-muted-foreground p-3">No other courses available</p>
+                      ) : (
+                        allCourses
+                          .filter((c) => c.status === "ACTIVE")
+                          .map((c) => {
+                            const checked = selPrereqIds.includes(c.id)
+                            return (
+                              <label
+                                key={c.id}
+                                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted/50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  className="h-3.5 w-3.5 rounded border-border"
+                                  onChange={() => {
+                                    const next = checked
+                                      ? selPrereqIds.filter((id) => id !== c.id)
+                                      : [...selPrereqIds, c.id]
+                                    setSelPrereqIds(next)
+                                    setValue("prerequisite_course_ids", next)
+                                  }}
+                                />
+                                <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
+                                <span className="truncate">{c.title}</span>
+                              </label>
+                            )
+                          })
+                      )}
+                    </div>
+                    {selPrereqIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">{selPrereqIds.length} prerequisite(s) selected</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
