@@ -93,5 +93,15 @@ export async function POST(req: NextRequest) {
     maxAge: 7 * 24 * 60 * 60,
   })
 
+  // Cache the access token in a JS-readable cookie so AuthProvider can
+  // reuse it across full page reloads without calling the BFF again.
+  res.cookies.set("access_token", access_token, {
+    httpOnly: false,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 15 * 60,
+  })
+
   return res
 }

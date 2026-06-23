@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
 
   const res = NextResponse.json({ ok: true })
   res.cookies.set("refresh_token", "", { maxAge: 0, secure: true, path: "/" })
+  res.cookies.set("access_token", "", { maxAge: 0, secure: true, path: "/" })
   res.cookies.set("auth-status", "", { maxAge: 0, secure: true, path: "/" })
   return res
 }

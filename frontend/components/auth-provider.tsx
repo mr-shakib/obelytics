@@ -6,6 +6,11 @@ import { useAuthStore } from "@/lib/stores/auth-store"
 import { getMeApi } from "@/lib/api/auth"
 import type { MeResponse } from "@/types"
 
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { accessToken, setAuth, clearAuth, setInitialized, isInitialized } = useAuthStore()
   const router = useRouter()
@@ -23,24 +28,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        // Ask the BFF to exchange the HttpOnly cookie for a fresh access token
-        const refreshRes = await fetch("/api/auth/refresh", { method: "POST" })
-        if (!refreshRes.ok) throw new Error("no_session")
+        // Check if we have a cached access_token cookie from a prior login/refresh
+        const cached = getCookie("access_token")
 
-        const { access_token } = await refreshRes.json()
-        const me: MeResponse = await getMeApi(access_token)
+        let token: string
+        if (cached) {
+          token = cached
+        } else {
+          // No cached token — ask the BFF to exchange the HttpOnly refresh cookie
+          const refreshRes = await fetch("/api/auth/refresh", { method: "POST" })
+          if (!refreshRes.ok) throw new Error("no_session")
+          const data = await refreshRes.json()
+          token = data.access_token
+        }
+
+        const me: MeResponse = await getMeApi(token)
 
         const { permissions, scope, offering_ids, ...user } = me
-        setAuth(access_token, user, { permissions, scope, offering_ids })
+        setAuth(token, user, { permissions, scope, offering_ids })
 
         // Mark the lightweight cookie so middleware knows we're logged in
         document.cookie = "auth-status=authenticated; path=/; SameSite=Lax"
 
         // Start silent refresh 30 seconds before the 15-min expiry
-        scheduleRefresh(14 * 60 * 1000, access_token)
+        scheduleRefresh(14 * 60 * 1000, token)
       } catch {
         clearAuth()
         document.cookie = "auth-status=; Max-Age=0; path=/"
+        document.cookie = "access_token=; Max-Age=0; path=/"
       } finally {
         setInitialized()
       }
