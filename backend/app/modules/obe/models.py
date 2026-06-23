@@ -12,8 +12,8 @@ class ProgramOutcome(Base):
     __tablename__ = "program_outcomes"
     __table_args__ = (
         Index(
-            "uq_obe_po_program_code_active",
-            "program_id", "code",
+            "uq_obe_po_org_code_active",
+            "organization_id", "code",
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
@@ -30,7 +30,7 @@ class ProgramOutcome(Base):
     program_id = Column(
         PGUUID(as_uuid=True),
         ForeignKey("org.programs.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     bloom_domain_id = Column(

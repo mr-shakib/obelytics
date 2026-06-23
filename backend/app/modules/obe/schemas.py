@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 # ── Program Outcomes ──────────────────────────────────────────────────────────
 
 class ProgramOutcomeCreate(BaseModel):
-    program_id: UUID
+    program_id: UUID | None = None
     bloom_domain_id: UUID | None = None
     code: str = Field(min_length=1, max_length=20)
     reference: str | None = Field(default=None, max_length=100)
@@ -27,7 +27,7 @@ class ProgramOutcomeUpdate(BaseModel):
 class ProgramOutcomeResponse(BaseModel):
     id: UUID
     organization_id: UUID
-    program_id: UUID
+    program_id: UUID | None
     bloom_domain_id: UUID | None
     code: str
     reference: str | None

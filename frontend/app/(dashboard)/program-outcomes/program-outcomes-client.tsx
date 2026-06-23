@@ -53,7 +53,7 @@ type POType = { id: string; name: string; is_active: boolean }
 const NONE_PO_TYPE = "none"
 
 const schema = z.object({
-  program_id: z.string().min(1, "Program is required"),
+  program_id: z.string().optional(),
   code: z.string().min(1, "Code is required"),
   statement: z.string().min(1, "Statement is required").max(500, "Max 500 characters"),
   bloom_domain_id: z.string().min(1, "Bloom domain is required"),
@@ -155,10 +155,10 @@ export function ProgramOutcomesClient() {
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      const order_index = (data ?? []).filter((po) => po.program_id === values.program_id).length
+      const order_index = (data ?? []).length
       await apiClient.POST("/program-outcomes" as never, {
         body: {
-          program_id: values.program_id,
+          program_id: values.program_id || undefined,
           code: values.code,
           statement: values.statement,
           bloom_domain_id: values.bloom_domain_id,
@@ -202,16 +202,17 @@ export function ProgramOutcomesClient() {
                   className="space-y-4 py-2"
                 >
                   <div className="space-y-2">
-                    <Label htmlFor="po-program">Program</Label>
+                    <Label htmlFor="po-program">Program (optional — leave empty for global POs)</Label>
                     <Controller
                       name="program_id"
                       control={control}
                       render={({ field }) => (
-                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                        <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v === NONE_PO_TYPE ? "" : v)}>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select program" />
+                            <SelectValue placeholder="All programs (global)" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value={NONE_PO_TYPE}>All programs (global)</SelectItem>
                             {(programs ?? []).map((p) => (
                               <SelectItem key={p.id} value={p.id}>
                                 {programLabel(p)}

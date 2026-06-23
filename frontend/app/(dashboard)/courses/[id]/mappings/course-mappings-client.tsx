@@ -7,7 +7,7 @@ import { CoMappingsSummaryCard } from "@/components/courses/co-mappings-summary-
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { useResolveCourseLocation } from "@/hooks/use-course-location"
-import type { CourseOutcome, ProgramOutcome, BloomLevel, CurriculumDetail } from "../course-types"
+import type { CourseOutcome, ProgramOutcome, BloomLevel } from "../course-types"
 
 interface Props {
   id: string
@@ -28,35 +28,14 @@ export function CourseMappingsClient({ id }: Props) {
     enabled: !!curriculumId,
   })
 
-  const { data: curriculumDetail } = useQuery({
-    queryKey: queryKeys.curricula.detail(curriculumId ?? ""),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(`/curricula/${curriculumId}` as never)
-      return (data as unknown) as CurriculumDetail
-    },
-    enabled: !!curriculumId,
-  })
-  const programId = curriculumDetail?.program_id
-
-  const { data: programOutcomes = [], isFetched: isProgramOutcomesFetched } = useQuery({
-    queryKey: queryKeys.programOutcomes.list({ program_id: programId }),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(`/program-outcomes?program_id=${programId}` as never)
-      return ((data as unknown) as ProgramOutcome[]) ?? []
-    },
-    enabled: !!programId,
-  })
-
-  const { data: allProgramOutcomes = [] } = useQuery({
+  const { data: programOutcomes = [] } = useQuery({
     queryKey: queryKeys.programOutcomes.list(),
     queryFn: async () => {
       const { data } = await apiClient.GET("/program-outcomes" as never)
       return ((data as unknown) as ProgramOutcome[]) ?? []
     },
-    enabled: !!curriculumId && isProgramOutcomesFetched && programOutcomes.length === 0,
+    enabled: !!curriculumId,
   })
-
-  const resolvedPOs = programOutcomes.length > 0 ? programOutcomes : allProgramOutcomes
 
   const { data: bloomLevels = [] } = useQuery({
     queryKey: queryKeys.refData.bloomLevels,
@@ -78,7 +57,7 @@ export function CourseMappingsClient({ id }: Props) {
     <div className="space-y-6">
       <CoMappingsSummaryCard
         cos={courseOutcomes}
-        pos={resolvedPOs}
+        pos={programOutcomes}
         bloomLevels={bloomLevels}
         curriculumId={curriculumId}
         courseId={id}
@@ -88,7 +67,7 @@ export function CourseMappingsClient({ id }: Props) {
         curriculumId={curriculumId}
         courseId={id}
         cos={courseOutcomes}
-        pos={resolvedPOs}
+        pos={programOutcomes}
       />
 
       <ComplexMappingCard kind="cp" cos={courseOutcomes} />

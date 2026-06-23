@@ -100,7 +100,7 @@ class POService:
         return po
 
     async def create(self, body: ProgramOutcomeCreate, org_id: UUID) -> ProgramOutcome:
-        existing = await self._repo.find_by_code(body.code, body.program_id)
+        existing = await self._repo.find_by_code(body.code, org_id)
         if existing:
             raise POCodeConflictError()
         po = ProgramOutcome(

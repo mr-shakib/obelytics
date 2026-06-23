@@ -44,12 +44,12 @@ class PORepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def find_by_code(self, code: str, program_id: UUID) -> ProgramOutcome | None:
+    async def find_by_code(self, code: str, org_id: UUID) -> ProgramOutcome | None:
         result = await self._session.execute(
             select(ProgramOutcome).where(
                 and_(
                     ProgramOutcome.code == code,
-                    ProgramOutcome.program_id == program_id,
+                    ProgramOutcome.organization_id == org_id,
                     ProgramOutcome.status == "ACTIVE",
                 )
             )
