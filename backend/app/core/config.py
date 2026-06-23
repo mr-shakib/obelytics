@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import computed_field, field_validator
+from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -82,17 +82,14 @@ class Settings(BaseSettings):
     MINIO_BUCKET_LOGOS: str = "logos"
     MINIO_BUCKET_ACCREDITATION: str = "accreditation"
 
-    # CORS — set ALLOWED_ORIGINS env var as JSON array or comma-separated:
-    # ALLOWED_ORIGINS=["https://your-app.vercel.app","http://localhost:3000"]
-    # ALLOWED_ORIGINS=https://your-app.vercel.app,http://localhost:3000
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+    # CORS — comma-separated origins (works with any format on Railway/Vercel)
+    # e.g. ALLOWED_ORIGINS=https://obelytics.vercel.app,http://localhost:3000
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
 
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_origins(cls, v):
-        if isinstance(v, str):
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v
+    @computed_field
+    @property
+    def ALLOWED_ORIGINS_LIST(self) -> list[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     # Rate limiting
     RATE_LIMIT_REQUESTS: int = 100
