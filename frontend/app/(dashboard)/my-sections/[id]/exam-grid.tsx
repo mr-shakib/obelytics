@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Upload, Download } from "lucide-react"
+import * as XLSX from "xlsx"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -229,6 +230,78 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
       return sum + (typeof cell?.value === "number" ? cell.value : 0)
     }, 0)
 
+  // ── Bulk Import ──────────────────────────────────────────────────────────
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function downloadTemplate() {
+    const headers = ["Student ID", ...questions.map((q) => q.label)]
+    const sampleRow = grid?.students.slice(0, 2).map((s) => [s.student_id_number, ...questions.map(() => "")]) ?? []
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRow])
+    ws["!cols"] = [{ wch: 18 }, ...questions.map(() => ({ wch: 10 }))]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Marks")
+    XLSX.writeFile(wb, `${examType}_marks_template.xlsx`)
+  }
+
+  function handleBulkImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ""
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target?.result, { type: "array" })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+
+        if (rows.length === 0) {
+          toast.error("No data found in the file")
+          return
+        }
+
+        const questionMap = new Map(questions.map((q) => [q.label.toLowerCase(), q]))
+        const studentMap = new Map(grid?.students.map((s) => [s.student_id_number, s]) ?? [])
+        let updated = 0
+        let skipped = 0
+        const newCells = new Map(cells)
+        const newDirty = new Set(dirtyCells)
+
+        for (const row of rows) {
+          const studentId = String(row["Student ID"] ?? row["student_id"] ?? Object.values(row)[0] ?? "").trim()
+          if (!studentId) continue
+
+          const student = studentMap.get(studentId)
+          if (!student) { skipped++; continue }
+
+          for (const [col, val] of Object.entries(row)) {
+            const colLower = col.toLowerCase().trim()
+            if (colLower === "student id" || colLower === "student_id") continue
+
+            const question = questionMap.get(colLower)
+            if (!question) continue
+
+            const marks = Number(val)
+            if (!Number.isFinite(marks) || marks < 0) continue
+
+            const key = `${student.enrollment_id}:${question.id}`
+            newCells.set(key, { value: marks })
+            newDirty.add(key)
+            updated++
+          }
+        }
+
+        setCells(newCells)
+        setDirtyCells(newDirty)
+        toast.success(`Imported ${updated} marks${skipped ? ` (${skipped} students not found)` : ""}`)
+      } catch {
+        toast.error("Failed to parse Excel file")
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
   if (loadingQuestions || loadingGrid) {
     return <div className="h-64 animate-pulse bg-muted rounded-lg" />
   }
@@ -248,6 +321,25 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
             )}
             {hasUnsavedChanges && !hasOverMaxMarks && (
               <span className="text-sm text-amber-600">Unsaved changes</span>
+            )}
+            {questions.length > 0 && grid && grid.students.length > 0 && (
+              <>
+                <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                  <Download className="h-3.5 w-3.5" />
+                  Template
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-3.5 w-3.5" />
+                  Bulk Import
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleBulkImport}
+                />
+              </>
             )}
             <Button
               size="sm"
