@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { useAuthStore } from "@/lib/stores/auth-store"
+import { useAuthStore, loadPersisted } from "@/lib/stores/auth-store"
 import { getMeApi } from "@/lib/api/auth"
 import type { MeResponse } from "@/types"
 
@@ -29,11 +29,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         // Check if we have a cached access_token cookie from a prior login/refresh
-        const cached = getCookie("access_token")
+        const cachedToken = getCookie("access_token")
+        const cachedData = loadPersisted()
 
         let token: string
-        if (cached) {
-          token = cached
+        if (cachedToken && cachedData) {
+          // Fast path: token + user data all cached — skip getMeApi entirely
+          token = cachedToken
+          setAuth(token, cachedData.user, cachedData.manifest)
+          scheduleRefresh(14 * 60 * 1000, token)
+          document.cookie = "auth-status=authenticated; path=/; SameSite=Lax"
+          setInitialized()
+          return
+        }
+
+        if (cachedToken) {
+          token = cachedToken
         } else {
           // No cached token — ask the BFF to exchange the HttpOnly refresh cookie
           const refreshRes = await fetch("/api/auth/refresh", { method: "POST" })
