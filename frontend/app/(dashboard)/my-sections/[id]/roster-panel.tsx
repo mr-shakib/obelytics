@@ -314,17 +314,24 @@ export function RosterPanel({ sectionOfferingId, locked = false }: Props) {
           </CardContent>
         </Card>
 
-        {/* Right: Currently enrolled */}
+        {/* Right: Enrolled + Pending */}
         <Card className="flex flex-col">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Enrolled Students ({roster.length})</CardTitle>
+            <CardTitle className="text-base">
+              Enrolled Students ({roster.length})
+              {allPendingIds.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  + {allPendingIds.length} pending
+                </span>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex-1">
             {isLoading ? (
               <div className="flex justify-center py-10">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : roster.length === 0 ? (
+            ) : roster.length === 0 && allPendingIds.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
                 No students enrolled yet.
               </p>
@@ -335,16 +342,17 @@ export function RosterPanel({ sectionOfferingId, locked = false }: Props) {
                     <TableRow>
                       <TableHead>Student ID</TableHead>
                       <TableHead>Name</TableHead>
-                      {!locked && <TableHead className="w-10" />}
+                      <TableHead className="w-20" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {/* Already enrolled */}
                     {roster.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell className="font-mono text-xs">{r.student_id_number}</TableCell>
                         <TableCell>{r.full_name}</TableCell>
-                        {!locked && (
-                          <TableCell>
+                        <TableCell>
+                          {!locked && (
                             <Button
                               size="icon"
                               variant="ghost"
@@ -353,10 +361,41 @@ export function RosterPanel({ sectionOfferingId, locked = false }: Props) {
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
-                          </TableCell>
-                        )}
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
+                    {/* Pending (not yet saved) */}
+                    {showBulk
+                      ? bulkPreview.map((s) => (
+                          <TableRow key={s.id} className="bg-muted/40">
+                            <TableCell className="font-mono text-xs text-muted-foreground">{s.student_id_number}</TableCell>
+                            <TableCell className="text-muted-foreground">{s.full_name}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">Pending</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      : Array.from(pending.values()).map((s) => (
+                          <TableRow key={s.id} className="bg-muted/40">
+                            <TableCell className="font-mono text-xs text-muted-foreground">{s.student_id_number}</TableCell>
+                            <TableCell className="text-muted-foreground">{s.full_name}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Badge variant="outline" className="text-xs">Pending</Badge>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6"
+                                  onClick={() => togglePending(s)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    }
                   </TableBody>
                 </Table>
               </div>
