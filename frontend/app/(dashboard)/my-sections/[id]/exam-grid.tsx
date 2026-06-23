@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Loader2, Upload, Download } from "lucide-react"
-import * as XLSX from "xlsx"
+import { getXLSX } from "@/lib/lazy-xlsx"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -234,7 +234,8 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await getXLSX()
     const headers = ["Student ID", ...questions.map((q) => q.label)]
     const sampleRow = grid?.students.slice(0, 2).map((s) => [s.student_id_number, ...questions.map(() => "")]) ?? []
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRow])
@@ -244,11 +245,12 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
     XLSX.writeFile(wb, `${examType}_marks_template.xlsx`)
   }
 
-  function handleBulkImport(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleBulkImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ""
 
+    const XLSX = await getXLSX()
     const reader = new FileReader()
     reader.onload = (evt) => {
       try {

@@ -19,12 +19,15 @@ export async function POST(req: NextRequest) {
 
   const { access_token, refresh_token } = await loginRes.json()
 
-  // 2. Fetch user profile + permissions in parallel
-  const [meRes, permsRes] = await Promise.all([
+  // 2. Fetch user profile, permissions, and programs in parallel
+  const [meRes, permsRes, progRes] = await Promise.all([
     fetch(`${BACKEND}/api/v1/users/me`, {
       headers: { Authorization: `Bearer ${access_token}` },
     }),
     fetch(`${BACKEND}/api/v1/users/me/permissions`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    }),
+    fetch(`${BACKEND}/api/v1/programs`, {
       headers: { Authorization: `Bearer ${access_token}` },
     }),
   ])
@@ -36,24 +39,19 @@ export async function POST(req: NextRequest) {
   const me = await meRes.json()
   const perms = await permsRes.json()
 
-  // 3. If scoped user, fetch their programs to get names+acronyms
+  // 3. Filter programs for scoped users
   let programs: { id: string; name: string; acronym: string }[] = []
   const programIds: string[] = (perms.program_ids ?? []).map(String)
-  if (!perms.is_super_admin && programIds.length > 0) {
-    const progRes = await fetch(`${BACKEND}/api/v1/programs`, {
-      headers: { Authorization: `Bearer ${access_token}` },
-    })
-    if (progRes.ok) {
-      const data = await progRes.json()
-      const items: Record<string, unknown>[] = Array.isArray(data) ? data : (data.items ?? [])
-      programs = items
-        .filter((p) => programIds.includes(String(p.id)))
-        .map((p) => ({
-          id: String(p.id),
-          name: String(p.name ?? ""),
-          acronym: String(p.code ?? p.acronym ?? ""),
-        }))
-    }
+  if (!perms.is_super_admin && programIds.length > 0 && progRes.ok) {
+    const data = await progRes.json()
+    const items: Record<string, unknown>[] = Array.isArray(data) ? data : (data.items ?? [])
+    programs = items
+      .filter((p) => programIds.includes(String(p.id)))
+      .map((p) => ({
+        id: String(p.id),
+        name: String(p.name ?? ""),
+        acronym: String(p.code ?? p.acronym ?? ""),
+      }))
   }
 
   // 4. Derive first_name / last_name from full_name

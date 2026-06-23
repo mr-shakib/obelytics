@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
-import { AttainmentRunClient } from "./attainment-run-client"
+import dynamic from "next/dynamic"
+
+const AttainmentRunClient = dynamic(() => import("./attainment-run-client").then(m => m.AttainmentRunClient))
 
 export const metadata: Metadata = { title: "Attainment Run" }
 

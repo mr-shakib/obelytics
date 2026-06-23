@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Loader2, Search, Trash2, UserPlus, X, Upload, FileSpreadsheet, Download } from "lucide-react"
-import * as XLSX from "xlsx"
+import { getXLSX } from "@/lib/lazy-xlsx"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -135,11 +135,12 @@ export function RosterPanel({ sectionOfferingId, locked = false }: Props) {
     })
   }
 
-  function handleBulkUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleBulkUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ""
 
+    const XLSX = await getXLSX()
     const reader = new FileReader()
     reader.onload = (evt) => {
       try {
@@ -180,7 +181,8 @@ export function RosterPanel({ sectionOfferingId, locked = false }: Props) {
     reader.readAsArrayBuffer(file)
   }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await getXLSX()
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([["Student ID"], ["2021-1-60-001"], ["2021-1-60-002"]])
     ws["!cols"] = [{ wch: 20 }]

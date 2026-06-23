@@ -2,7 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
-    // enables the global PageProps/LayoutProps helpers
+    optimizePackageImports: [
+      "lucide-react",
+      "date-fns",
+      "@tanstack/react-table",
+      "@tanstack/react-query",
+    ],
   },
 };
 

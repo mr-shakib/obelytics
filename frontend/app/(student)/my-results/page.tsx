@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
-import { MyResultsClient } from "./my-results-client"
+import dynamic from "next/dynamic"
+
+const MyResultsClient = dynamic(() => import("./my-results-client").then(m => m.MyResultsClient))
 
 export const metadata: Metadata = { title: "My Results" }
 

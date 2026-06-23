@@ -12,7 +12,7 @@ import {
   Info, ChevronDown,
 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
-import * as XLSX from "xlsx"
+import { getXLSX } from "@/lib/lazy-xlsx"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -363,7 +363,8 @@ function BulkImportPanel({ departments }: { departments: Department[] }) {
     return out
   }
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
+    const XLSX = await getXLSX()
     const reader = new FileReader()
     reader.onload = (e) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
@@ -376,9 +377,10 @@ function BulkImportPanel({ departments }: { departments: Department[] }) {
     reader.readAsArrayBuffer(file)
   }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await getXLSX()
     const wb = XLSX.utils.book_new()
-    const ws: XLSX.WorkSheet = {}
+    const ws: ReturnType<typeof XLSX.utils.aoa_to_sheet> = {}
 
     // Required columns get a red header; optional columns get a blue-grey header
     const RED_FILL   = { patternType: "solid", fgColor: { rgb: "FFC0392B" } }

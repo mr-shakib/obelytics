@@ -87,9 +87,10 @@ function scheduleRefresh(delayMs: number, _currentToken: string) {
       const res = await fetch("/api/auth/refresh", { method: "POST" })
       if (!res.ok) throw new Error("refresh_failed")
       const { access_token } = await res.json()
-      const me: MeResponse = await getMeApi(access_token)
-      const { permissions, scope, offering_ids, ...user } = me
-      useAuthStore.getState().setAuth(access_token, user, { permissions, scope, offering_ids })
+
+      // Token refreshed — update the token in zustand. User/permissions
+      // are already in localStorage and zustand, no need to re-fetch.
+      useAuthStore.setState({ accessToken: access_token })
       scheduleRefresh(14 * 60 * 1000, access_token)
     } catch {
       useAuthStore.getState().clearAuth()

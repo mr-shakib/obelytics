@@ -7,7 +7,7 @@ import {
   Download, Upload, FileSpreadsheet, Loader2,
   CheckCircle2, AlertCircle, Info,
 } from "lucide-react"
-import * as XLSX from "xlsx"
+import { getXLSX } from "@/lib/lazy-xlsx"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -57,7 +57,8 @@ const COLUMN_GUIDE: { key: string; required: boolean; description: string; examp
   { key: "description", required: false, description: "Brief course description (optional)", example: "" },
 ]
 
-function downloadTemplate(categories: CourseCategory[]) {
+async function downloadTemplate(categories: CourseCategory[]) {
+  const XLSX = await getXLSX()
   const exampleCategory = categories[0]?.name ?? "Core"
   const ws = XLSX.utils.aoa_to_sheet([
     TEMPLATE_COLUMNS,
@@ -92,7 +93,8 @@ export function BulkImportCoursesDialog() {
     courseCategories.map((c) => [c.name.toLowerCase().trim(), c.id])
   )
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
+    const XLSX = await getXLSX()
     const reader = new FileReader()
     reader.onload = (e) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)

@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Upload, FileSpreadsheet, Loader2,
   CheckCircle2, AlertCircle, Info,
 } from "lucide-react"
-import * as XLSX from "xlsx"
+import { getXLSX } from "@/lib/lazy-xlsx"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { apiClient } from "@/lib/api/client"
@@ -27,7 +27,8 @@ const COLUMN_GUIDE: { key: string; required: boolean; description: string; examp
   { key: "email", required: false, description: "Student's email address — leave blank if not available", example: "jane@example.com" },
 ]
 
-function downloadTemplate() {
+async function downloadTemplate() {
+  const XLSX = await getXLSX()
   const ws = XLSX.utils.aoa_to_sheet([
     TEMPLATE_COLUMNS,
     ["221-15-1234", "Jane Doe", "jane@example.com"],
@@ -50,7 +51,8 @@ export function ImportStudentsClient() {
   const [fileName, setFileName] = useState("")
   const [result, setResult] = useState<BulkImportResult | null>(null)
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
+    const XLSX = await getXLSX()
     const reader = new FileReader()
     reader.onload = (e) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
