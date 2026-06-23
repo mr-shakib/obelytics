@@ -307,6 +307,9 @@ export function CourseAssessmentClient({ id }: Props) {
       else seeTotal += v
     }
   }
+  const bloomAssessmentTotal = bloomBreakdownTools.reduce(
+    (sum, tool) => sum + (coMarkByKey[coMarkCellKey(tool.assessment_type_id, TOTAL_COL)] ?? 0), 0
+  )
 
   return (
     <div className="space-y-6">
@@ -555,8 +558,8 @@ export function CourseAssessmentClient({ id }: Props) {
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">CIE total: {cieTotal}</Badge>
                 <Badge variant="outline">SEE total: {seeTotal}</Badge>
-                <Badge variant={cieTotal + seeTotal === 100 ? "default" : "destructive"}>
-                  Grand total: {cieTotal + seeTotal} / 100
+                <Badge variant={cieTotal + seeTotal === bloomAssessmentTotal ? "default" : "destructive"}>
+                  Grand total: {cieTotal + seeTotal} / {bloomAssessmentTotal}
                 </Badge>
               </div>
               <Button
