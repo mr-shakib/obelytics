@@ -766,6 +766,7 @@ async def get_end_report(
             co_attainment={},
             unattained_co_explanations=[],
             teacher_feedback=None,
+            course_drive_link=None,
             status="DRAFT",
             submitted_at=None,
             created_at=datetime.now(timezone.utc),
