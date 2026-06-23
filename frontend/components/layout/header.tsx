@@ -164,6 +164,9 @@ export function Header() {
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuLabel>
             <p className="text-sm font-medium">{displayName}</p>
+            {user?.employee_id && (
+              <p className="text-xs font-mono text-muted-foreground font-normal">{user.employee_id}</p>
+            )}
             <p className="text-xs text-muted-foreground font-normal truncate">{user?.email}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

@@ -6,6 +6,7 @@ export interface UserProfile {
   first_name: string
   last_name: string
   full_name?: string
+  employee_id?: string
   faculty_type: string
   title?: string
   designation?: string

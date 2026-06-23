@@ -55,6 +55,7 @@ export async function getMeApi(accessToken: string): Promise<MeResponse> {
     full_name: fullName,
     first_name: firstName,
     last_name: lastName,
+    employee_id: me.employee_id ?? "",
     faculty_type: me.faculty_type ?? "",
     status: me.status ?? "ACTIVE",
     department: me.department ?? null,

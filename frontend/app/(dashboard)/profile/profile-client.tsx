@@ -63,6 +63,9 @@ export function ProfileClient() {
             </Avatar>
             <div>
               <p className="text-lg font-semibold">{user?.first_name} {user?.last_name}</p>
+              {user?.employee_id && (
+                <p className="text-sm font-mono text-muted-foreground">{user.employee_id}</p>
+              )}
               <p className="text-sm text-muted-foreground">{user?.email}</p>
               {user?.department && (
                 <p className="text-xs text-muted-foreground mt-0.5">{user.department.name}</p>

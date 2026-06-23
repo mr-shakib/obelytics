@@ -27,6 +27,7 @@ type User = {
   first_name: string | null
   last_name: string | null
   email: string
+  employee_id: string | null
   faculty_type: string | null
   department_id: string | null
   designation: string | null
@@ -66,12 +67,20 @@ export function UsersClient() {
     const matchSearch = !term ||
       u.full_name.toLowerCase().includes(term) ||
       u.email.toLowerCase().includes(term) ||
+      (u.employee_id ?? "").toLowerCase().includes(term) ||
       (u.designation ?? "").toLowerCase().includes(term)
     const matchDept = deptFilter === "__all__" || u.department_id === deptFilter
     return matchSearch && matchDept
   })
 
   const columns: ColumnDef<User>[] = [
+    {
+      accessorKey: "employee_id",
+      header: "Employee ID",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.employee_id ?? "—"}</span>
+      ),
+    },
     {
       accessorKey: "faculty_type",
       header: "Faculty Type",
