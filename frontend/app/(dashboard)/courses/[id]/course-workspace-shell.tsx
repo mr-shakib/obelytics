@@ -148,7 +148,7 @@ export function CourseWorkspaceShell({ id, children }: Props) {
   // ── Completion tracking ─────────────────────────────────────────────────
   const assessmentToolsForCheck = assessmentTools.length > 0 ? assessmentTools : []
   const checks: { label: string; done: boolean }[] = []
-  checks.push({ label: "Course description", done: !!(data as Course).description })
+  checks.push({ label: "Course description", done: !!data?.description })
   checks.push({ label: "Course objectives", done: objectives.length > 0 })
   checks.push({ label: "Course outcomes (COs)", done: courseOutcomes.length > 0 })
   checks.push({ label: "Assessment tools", done: assessmentToolsForCheck.length > 0 })
