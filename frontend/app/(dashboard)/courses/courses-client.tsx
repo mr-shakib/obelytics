@@ -20,6 +20,7 @@ import { BulkImportCoursesDialog } from "./bulk-import-courses-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { MultiCombobox } from "@/components/ui/multi-combobox"
 import {
   Dialog,
   DialogContent,
@@ -410,41 +411,19 @@ export function CoursesClient() {
                   </div>
                   <div className="space-y-2">
                     <Label>Prerequisites <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                    <div className="rounded-lg border max-h-40 overflow-y-auto">
-                      {allCourses.filter((c) => c.status === "ACTIVE").length === 0 ? (
-                        <p className="text-sm text-muted-foreground p-3">No other courses available</p>
-                      ) : (
-                        allCourses
-                          .filter((c) => c.status === "ACTIVE")
-                          .map((c) => {
-                            const checked = selPrereqIds.includes(c.id)
-                            return (
-                              <label
-                                key={c.id}
-                                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted/50 cursor-pointer"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  className="h-3.5 w-3.5 rounded border-border"
-                                  onChange={() => {
-                                    const next = checked
-                                      ? selPrereqIds.filter((id) => id !== c.id)
-                                      : [...selPrereqIds, c.id]
-                                    setSelPrereqIds(next)
-                                    setValue("prerequisite_course_ids", next)
-                                  }}
-                                />
-                                <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
-                                <span className="truncate">{c.title}</span>
-                              </label>
-                            )
-                          })
-                      )}
-                    </div>
-                    {selPrereqIds.length > 0 && (
-                      <p className="text-xs text-muted-foreground">{selPrereqIds.length} prerequisite(s) selected</p>
-                    )}
+                    <MultiCombobox
+                      options={allCourses
+                        .filter((c) => c.status === "ACTIVE")
+                        .map((c) => ({ value: c.id, label: `${c.code} — ${c.title}` }))}
+                      values={selPrereqIds}
+                      onValuesChange={(next) => {
+                        setSelPrereqIds(next)
+                        setValue("prerequisite_course_ids", next)
+                      }}
+                      placeholder="Select prerequisites…"
+                      searchPlaceholder="Search courses…"
+                      emptyText="No courses found."
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
