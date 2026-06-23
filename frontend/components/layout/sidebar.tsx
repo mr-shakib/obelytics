@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { CircleDot, ChevronLeft, ChevronRight, Settings } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -10,6 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAppStore } from "@/lib/stores/app-store"
 import { useAuthStore } from "@/lib/stores/auth-store"
 import { usePermissions } from "@/hooks/use-permission"
+import { prefetchRoute } from "@/lib/prefetch"
 import {
   NAV_GROUP_META,
   isNavItemActive,
@@ -20,6 +22,7 @@ import {
 
 export function Sidebar() {
   const pathname = usePathname()
+  const qc = useQueryClient()
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const { user } = useAuthStore()
@@ -90,6 +93,7 @@ export function Sidebar() {
               const link = (
                 <Link
                   href={item.href}
+                  onMouseEnter={() => prefetchRoute(qc, item.href)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px]",
