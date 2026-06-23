@@ -153,6 +153,18 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
 
   const hasUnsavedChanges = dirtyCells.size > 0 || dirtyRows.size > 0
 
+  const hasOverMaxMarks = useMemo(() => {
+    for (const key of dirtyCells) {
+      const [enrollmentId, questionId] = key.split(":")
+      const q = questions.find((q) => q.id === questionId)
+      const cell = cells.get(key)
+      if (q && typeof cell?.value === "number" && cell.value > Number(q.max_marks)) {
+        return true
+      }
+    }
+    return false
+  }, [dirtyCells, questions, cells])
+
   const saveMarksMutation = useMutation({
     mutationFn: async () => {
       type MarkUpdate = { question_id: string; student_enrollment_id: string; marks_obtained: number | null; is_absent: boolean }
@@ -231,13 +243,16 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
         </p>
         {canEnterMarks ? (
           <div className="flex items-center gap-3">
-            {hasUnsavedChanges && (
+            {hasOverMaxMarks && (
+              <span className="text-sm text-red-600 font-medium">Some marks exceed maximum</span>
+            )}
+            {hasUnsavedChanges && !hasOverMaxMarks && (
               <span className="text-sm text-amber-600">Unsaved changes</span>
             )}
             <Button
               size="sm"
               onClick={() => saveMarksMutation.mutate()}
-              disabled={!hasUnsavedChanges || saveMarksMutation.isPending}
+              disabled={!hasUnsavedChanges || hasOverMaxMarks || saveMarksMutation.isPending}
             >
               {saveMarksMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Save Marks
@@ -311,7 +326,9 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
                                 className={cn(
                                   "h-8 w-16 px-1 text-center mx-auto disabled:opacity-40",
                                   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                                  dirty && "border-amber-500 ring-1 ring-amber-500/30"
+                                  typeof cell?.value === "number" && cell.value > Number(q.max_marks)
+                                    ? "border-red-500 ring-1 ring-red-500/30 bg-red-50 dark:bg-red-950/20"
+                                    : dirty && "border-amber-500 ring-1 ring-amber-500/30"
                                 )}
                               />
                             ) : (
