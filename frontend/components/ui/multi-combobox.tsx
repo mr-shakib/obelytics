@@ -66,7 +66,7 @@ function MultiCombobox({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className={cn("justify-between font-normal min-h-9 h-auto py-1.5", triggerClassName)}
+            className={cn("justify-between font-normal min-h-9 h-auto py-1.5 w-full", triggerClassName)}
           />
         }
       >
