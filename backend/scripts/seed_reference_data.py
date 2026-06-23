@@ -1,5 +1,5 @@
 """
-Run: python -m scripts.seed_reference_data --org-id <uuid>
+Run: python -m scripts.seed_reference_data [--org-id <uuid>]
 
 Seeds default reference data for an organization:
   - Bloom Cognitive, Affective, and Psychomotor domains with their levels
@@ -8,6 +8,7 @@ Seeds default reference data for an organization:
   - Assessment types (Quiz, Assignment, Mid-term, Final, Lab Report, Project)
   - Mapping weight labels (1=Low, 2=Medium, 3=High)
 
+If --org-id is omitted, uses the first organization found in the database.
 Safe to re-run: skips records that already exist.
 """
 import asyncio
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+from app.modules.org.models import Organization
 from app.modules.ref_data.models import (
     AssessmentType,
     BloomDomain,
@@ -101,6 +103,22 @@ _MAPPING_WEIGHTS = [
     (2, "Medium"),
     (3, "High"),
 ]
+
+
+async def resolve_org_id(org_id: UUID | None) -> UUID:
+    if org_id is not None:
+        return org_id
+    engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        result = await session.execute(select(Organization).limit(1))
+        org = result.scalar_one_or_none()
+    await engine.dispose()
+    if org is None:
+        print("ERROR: No organization found. Run seed_superadmin first, or pass --org-id.")
+        sys.exit(1)
+    print(f"[i] Auto-detected organization: {org.name} ({org.id})")
+    return org.id
 
 
 async def seed(org_id: UUID) -> None:
@@ -183,7 +201,9 @@ async def seed(org_id: UUID) -> None:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Seed default reference data for an organization")
-    parser.add_argument("--org-id", required=True, help="Organization UUID")
+    parser.add_argument("--org-id", default=None, help="Organization UUID (auto-detected if omitted)")
     args = parser.parse_args()
 
-    asyncio.run(seed(UUID(args.org_id)))
+    org_id = UUID(args.org_id) if args.org_id else None
+    resolved = asyncio.run(resolve_org_id(org_id))
+    asyncio.run(seed(resolved))
