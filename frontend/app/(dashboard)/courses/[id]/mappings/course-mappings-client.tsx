@@ -38,7 +38,7 @@ export function CourseMappingsClient({ id }: Props) {
   })
   const programId = curriculumDetail?.program_id
 
-  const { data: programOutcomes = [] } = useQuery({
+  const { data: programOutcomes = [], isFetched: isProgramOutcomesFetched } = useQuery({
     queryKey: queryKeys.programOutcomes.list({ program_id: programId }),
     queryFn: async () => {
       const { data } = await apiClient.GET(`/program-outcomes?program_id=${programId}` as never)
@@ -46,6 +46,17 @@ export function CourseMappingsClient({ id }: Props) {
     },
     enabled: !!programId,
   })
+
+  const { data: allProgramOutcomes = [] } = useQuery({
+    queryKey: queryKeys.programOutcomes.list(),
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/program-outcomes" as never)
+      return ((data as unknown) as ProgramOutcome[]) ?? []
+    },
+    enabled: !!curriculumId && isProgramOutcomesFetched && programOutcomes.length === 0,
+  })
+
+  const resolvedPOs = programOutcomes.length > 0 ? programOutcomes : allProgramOutcomes
 
   const { data: bloomLevels = [] } = useQuery({
     queryKey: queryKeys.refData.bloomLevels,
@@ -67,7 +78,7 @@ export function CourseMappingsClient({ id }: Props) {
     <div className="space-y-6">
       <CoMappingsSummaryCard
         cos={courseOutcomes}
-        pos={programOutcomes}
+        pos={resolvedPOs}
         bloomLevels={bloomLevels}
         curriculumId={curriculumId}
         courseId={id}
@@ -77,7 +88,7 @@ export function CourseMappingsClient({ id }: Props) {
         curriculumId={curriculumId}
         courseId={id}
         cos={courseOutcomes}
-        pos={programOutcomes}
+        pos={resolvedPOs}
       />
 
       <ComplexMappingCard kind="cp" cos={courseOutcomes} />
