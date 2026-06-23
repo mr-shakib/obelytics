@@ -502,7 +502,16 @@ export function CourseAssessmentClient({ id }: Props) {
       </Card>
 
       {curriculumId && isMyModule && (
-        <QuestionConfigCard courseId={id} curriculumId={curriculumId} />
+        <QuestionConfigCard
+          courseId={id}
+          curriculumId={curriculumId}
+          midTotalMarks={assessmentTools
+            .filter((t) => t.assessment_type_name.toLowerCase().includes("mid"))
+            .reduce((sum, t) => sum + (coMarkByKey[coMarkCellKey(t.assessment_type_id, TOTAL_COL)] ?? 0), 0)}
+          finalTotalMarks={assessmentTools
+            .filter((t) => t.assessment_type_name.toLowerCase().includes("final") && !t.assessment_type_name.toLowerCase().includes("lab"))
+            .reduce((sum, t) => sum + (coMarkByKey[coMarkCellKey(t.assessment_type_id, TOTAL_COL)] ?? 0), 0)}
+        />
       )}
 
       <Card>

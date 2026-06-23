@@ -52,12 +52,14 @@ function ConfigureQuestionsDialog({
   questions,
   courseOutcomes,
   examType,
+  totalMarks,
   onSave,
   saving,
 }: {
   questions: MarksheetQuestion[]
   courseOutcomes: CourseOutcome[]
   examType: string
+  totalMarks: number
   onSave: (questions: DraftQuestion[]) => void
   saving: boolean
 }) {
@@ -115,6 +117,8 @@ function ConfigureQuestionsDialog({
     (co) => (Number(coTargets[co.id]) || 0) > 0 || (mappedByCo.get(co.id) ?? 0) > 0
   )
 
+  const cosWithMarks = courseOutcomes.filter((co) => (Number(coTargets[co.id]) || 0) > 0)
+
   const handleSave = () => {
     const rows = draft.filter((row) => row.label.trim().length > 0)
     for (const row of rows) {
@@ -124,6 +128,21 @@ function ConfigureQuestionsDialog({
         return
       }
     }
+
+    if (totalMarks > 0 && total > totalMarks) {
+      toast.error(`Total marks (${total}) exceed the assigned ${totalMarks} marks for this assessment tool`)
+      return
+    }
+
+    for (const co of cosWithMarks) {
+      const target = Number(coTargets[co.id]) || 0
+      const mapped = mappedByCo.get(co.id) ?? 0
+      if (mapped > target) {
+        toast.error(`${co.code} mapped marks (${mapped}) exceed its allocated ${target} marks`)
+        return
+      }
+    }
+
     onSave(rows)
   }
 
@@ -215,7 +234,7 @@ function ConfigureQuestionsDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">—</SelectItem>
-                      {courseOutcomes.map((co) => (
+                      {cosWithMarks.map((co) => (
                         <SelectItem key={co.id} value={co.id}>{co.code}</SelectItem>
                       ))}
                     </SelectContent>
@@ -244,17 +263,23 @@ function ConfigureQuestionsDialog({
                 {cosWithTargetsOrMappings.map((co) => {
                   const target = Number(coTargets[co.id]) || 0
                   const mapped = mappedByCo.get(co.id) ?? 0
+                  const over = mapped > target
                   const match = mapped === target
                   return (
                     <div key={co.id} className="flex items-center justify-between text-sm">
                       <span>{co.code}</span>
-                      <span className={match ? "text-green-600" : "text-amber-600"}>
-                        {mapped} / {target} marks mapped
+                      <span className={over ? "text-destructive font-medium" : match ? "text-green-600" : "text-amber-600"}>
+                        {mapped} / {target} marks mapped{over ? " — exceeds!" : ""}
                       </span>
                     </div>
                   )
                 })}
               </div>
+            )}
+            {totalMarks > 0 && (
+              <p className={`text-sm font-medium ${total > totalMarks ? "text-destructive" : ""}`}>
+                Total: {total} / {totalMarks}{total > totalMarks ? " — exceeds assigned marks!" : ""}
+              </p>
             )}
           </TabsContent>
         </Tabs>
@@ -288,10 +313,12 @@ function CourseExamConfig({
   offeringIds,
   examType,
   courseOutcomes,
+  totalMarks,
 }: {
   offeringIds: string[]
   examType: "MID" | "FINAL"
   courseOutcomes: CourseOutcome[]
+  totalMarks: number
 }) {
   const qc = useQueryClient()
   const canonicalId = offeringIds[0] ?? ""
@@ -352,6 +379,7 @@ function CourseExamConfig({
       questions={questions}
       courseOutcomes={courseOutcomes}
       examType={examType}
+      totalMarks={totalMarks}
       onSave={(draft) => saveQuestionsMutation.mutate(draft)}
       saving={saveQuestionsMutation.isPending}
     />
@@ -363,9 +391,11 @@ function CourseExamConfig({
 interface Props {
   courseId: string
   curriculumId: string
+  midTotalMarks?: number
+  finalTotalMarks?: number
 }
 
-export function QuestionConfigCard({ courseId, curriculumId }: Props) {
+export function QuestionConfigCard({ courseId, curriculumId, midTotalMarks = 0, finalTotalMarks = 0 }: Props) {
   const { data: offerings = [], isLoading } = useQuery({
     queryKey: queryKeys.sectionOfferings.byCourse(courseId),
     queryFn: async () => {
@@ -415,11 +445,13 @@ export function QuestionConfigCard({ courseId, curriculumId }: Props) {
                   offeringIds={offeringIds}
                   examType="MID"
                   courseOutcomes={courseOutcomes}
+                  totalMarks={midTotalMarks}
                 />
                 <CourseExamConfig
                   offeringIds={offeringIds}
                   examType="FINAL"
                   courseOutcomes={courseOutcomes}
+                  totalMarks={finalTotalMarks}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
