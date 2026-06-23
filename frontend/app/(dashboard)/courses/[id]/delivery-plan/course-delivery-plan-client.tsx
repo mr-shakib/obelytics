@@ -112,7 +112,7 @@ export function CourseDeliveryPlanClient({ id }: Props) {
           body: {
             items: items.map((item) => ({
               week_number: item.week_number,
-              lesson_label: item.lesson_label?.trim() || undefined,
+              lesson_label: item.lesson_label || undefined,
               topic: item.topic.trim(),
               tla: item.tla?.trim() || undefined,
               assessment_strategy: item.assessment_strategy?.trim() || undefined,
@@ -184,7 +184,13 @@ export function CourseDeliveryPlanClient({ id }: Props) {
                         )}
                       </TableCell>
                       <TableCell className="align-top">
-                        <Input className="w-28" {...lessonPlanForm.register(`items.${index}.lesson_label`)} />
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          className="w-20"
+                          {...lessonPlanForm.register(`items.${index}.lesson_label`)}
+                        />
                       </TableCell>
                       <TableCell className="align-top whitespace-normal">
                         <Textarea rows={2} className="min-w-48" {...lessonPlanForm.register(`items.${index}.topic`)} />
