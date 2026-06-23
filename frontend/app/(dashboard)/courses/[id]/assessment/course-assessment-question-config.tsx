@@ -84,7 +84,7 @@ function ConfigureQuestionsDialog({
           }))
       )
     } else {
-      setDraft([{ ...EMPTY_QUESTION }])
+      setDraft([{ ...EMPTY_QUESTION, label: "Q1" }])
     }
     const targets: Record<string, string> = {}
     for (const co of courseOutcomes) {
