@@ -55,6 +55,7 @@ function ConfigureQuestionsDialog({
   totalMarks,
   onSave,
   saving,
+  saved,
 }: {
   questions: MarksheetQuestion[]
   courseOutcomes: CourseOutcome[]
@@ -62,6 +63,7 @@ function ConfigureQuestionsDialog({
   totalMarks: number
   onSave: (questions: DraftQuestion[]) => void
   saving: boolean
+  saved: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<"co-marks" | "questions">("co-marks")
@@ -93,6 +95,10 @@ function ConfigureQuestionsDialog({
     }
     setCoTargets(targets)
   }, [open, questions, courseOutcomes])
+
+  useEffect(() => {
+    if (saved) setOpen(false)
+  }, [saved])
 
   const updateRow = (index: number, patch: Partial<DraftQuestion>) =>
     setDraft((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)))
@@ -382,6 +388,7 @@ function CourseExamConfig({
       totalMarks={totalMarks}
       onSave={(draft) => saveQuestionsMutation.mutate(draft)}
       saving={saveQuestionsMutation.isPending}
+      saved={saveQuestionsMutation.isSuccess}
     />
   )
 }
