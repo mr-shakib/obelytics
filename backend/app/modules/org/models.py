@@ -1,6 +1,7 @@
 import sqlalchemy as sa
-from sqlalchemy import Column, String, SmallInteger, DateTime, Date, ForeignKey, Index, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, SmallInteger, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+
 from app.core.database import Base
 
 
@@ -38,7 +39,8 @@ class Department(Base):
     __table_args__ = (
         Index(
             "uq_org_dept_short_name_active",
-            "organization_id", "short_name",
+            "organization_id",
+            "short_name",
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
@@ -100,7 +102,8 @@ class Program(Base):
     __table_args__ = (
         Index(
             "uq_org_program_acronym_active",
-            "organization_id", "acronym",
+            "organization_id",
+            "acronym",
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
@@ -127,6 +130,11 @@ class Program(Base):
     total_credits = Column(SmallInteger, nullable=False)
     study_mode = Column(String(20), nullable=False)  # FULL_TIME, PART_TIME
     description = Column(Text, nullable=True)
+    po_version_id = Column(
+        PGUUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
     status = Column(String(20), nullable=False, server_default="ACTIVE")
     archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))

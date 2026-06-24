@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { Plus, Search, Upload } from "lucide-react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { Plus, Search, Upload, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/data-table"
 import { PageHeader } from "@/components/shared/page-header"
@@ -16,6 +17,13 @@ import { Badge } from "@/components/ui/badge"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 
@@ -41,8 +49,10 @@ type Department = { id: string; name: string; short_name: string }
 
 export function UsersClient() {
   const router = useRouter()
+  const qc = useQueryClient()
   const [search, setSearch] = useState("")
   const [deptFilter, setDeptFilter] = useState("__all__")
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: queryKeys.users.list(),
@@ -61,6 +71,18 @@ export function UsersClient() {
   })
 
   const deptMap = Object.fromEntries(departments.map((d) => [d.id, d.name]))
+
+  const deleteMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiClient.DELETE(`/users/${userId}` as never)
+    },
+    onSuccess: () => {
+      toast.success("User deleted")
+      qc.invalidateQueries({ queryKey: queryKeys.users.all })
+      setDeleteTarget(null)
+    },
+    onError: () => toast.error("Failed to delete user"),
+  })
 
   const filtered = users.filter((u) => {
     const term = search.toLowerCase()
@@ -128,6 +150,24 @@ export function UsersClient() {
     },
   ]
 
+  const deleteColumn: ColumnDef<User> = {
+    id: "actions",
+    header: "",
+    cell: ({ row }) => (
+      <PermissionGate permission="user.delete">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.original) }}
+          title="Delete user"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </PermissionGate>
+    ),
+  }
+
   return (
     <div>
       <PageHeader
@@ -176,12 +216,34 @@ export function UsersClient() {
       </div>
 
       <DataTable
-        columns={columns}
+        columns={[...columns, deleteColumn]}
         data={filtered}
         loading={isLoading}
         onRowClick={(row) => router.push(`/users/${row.id}`)}
         emptyMessage="No users found."
       />
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete <strong>{deleteTarget?.full_name}</strong> ({deleteTarget?.email})?
+            This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id) }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

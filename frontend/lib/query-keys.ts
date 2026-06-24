@@ -129,6 +129,12 @@ export const queryKeys = {
     all: ["program-outcomes"] as const,
     list: (filters?: Record<string, unknown>) => ["program-outcomes", "list", filters] as const,
     detail: (id: string) => ["program-outcomes", id] as const,
+    byVersion: (versionId: string) => ["program-outcomes", "version", versionId] as const,
+  },
+  poVersions: {
+    all: ["po-versions"] as const,
+    list: () => ["po-versions", "list"] as const,
+    detail: (id: string) => ["po-versions", id] as const,
   },
   courseOutcomes: {
     all: ["course-outcomes"] as const,

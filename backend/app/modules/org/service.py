@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.org.exceptions import (
@@ -13,7 +14,13 @@ from app.modules.org.exceptions import (
 )
 from app.modules.org.models import Department, Program
 from app.modules.org.repository import DepartmentRepository, OrgRepository, ProgramRepository
-from app.modules.org.schemas import DepartmentCreate, DepartmentUpdate, OrgUpdate, ProgramCreate, ProgramUpdate
+from app.modules.org.schemas import (
+    DepartmentCreate,
+    DepartmentUpdate,
+    OrgUpdate,
+    ProgramCreate,
+    ProgramUpdate,
+)
 
 
 class OrgService:
@@ -62,7 +69,9 @@ class DepartmentService:
         )
         return await self._repo.create(dept)
 
-    async def update(self, dept_id: UUID, body: DepartmentUpdate, organization_id: UUID) -> Department:
+    async def update(
+        self, dept_id: UUID, body: DepartmentUpdate, organization_id: UUID
+    ) -> Department:
         dept = await self._repo.get_by_id(dept_id, organization_id)
         if dept is None:
             raise DepartmentNotFoundError()
@@ -98,7 +107,9 @@ class ProgramService:
         self._session = session
         self._repo = ProgramRepository(session)
 
-    async def list_active(self, organization_id: UUID, department_id: UUID | None = None) -> list[Program]:
+    async def list_active(
+        self, organization_id: UUID, department_id: UUID | None = None
+    ) -> list[Program]:
         return await self._repo.list_active(organization_id, department_id)
 
     async def get(self, program_id: UUID, organization_id: UUID) -> Program:
@@ -121,15 +132,58 @@ class ProgramService:
             total_credits=body.total_credits,
             study_mode=body.study_mode,
             description=body.description,
+            po_version_id=body.po_version_id,
         )
         result = await self._repo.create(program)
-        await self._seed_pos_from_types(result.id, organization_id)
+        if body.po_version_id:
+            await self._seed_pos_from_version(result.id, body.po_version_id, organization_id)
+        else:
+            await self._seed_pos_from_types(result.id, organization_id)
         return result
+
+    async def _seed_pos_from_version(
+        self, program_id: UUID, version_id: UUID, organization_id: UUID
+    ) -> None:
+        from sqlalchemy import and_, select
+
+        from app.modules.obe.models import ProgramOutcome
+
+        version_pos_result = await self._session.execute(
+            select(ProgramOutcome)
+            .where(
+                and_(
+                    ProgramOutcome.po_version_id == version_id,
+                    ProgramOutcome.organization_id == organization_id,
+                    ProgramOutcome.status == "ACTIVE",
+                    ProgramOutcome.program_id.is_(None),
+                )
+            )
+            .order_by(ProgramOutcome.order_index)
+        )
+        version_pos = list(version_pos_result.scalars().all())
+
+        for i, po in enumerate(version_pos, start=1):
+            self._session.add(
+                ProgramOutcome(
+                    organization_id=organization_id,
+                    program_id=program_id,
+                    po_version_id=version_id,
+                    bloom_domain_id=po.bloom_domain_id,
+                    code=po.code,
+                    reference=po.reference,
+                    statement=po.statement,
+                    po_type=po.po_type,
+                    order_index=po.order_index,
+                )
+            )
+        if version_pos:
+            await self._session.flush()
 
     async def _seed_pos_from_types(self, program_id: UUID, organization_id: UUID) -> None:
         from sqlalchemy import and_, select
-        from app.modules.ref_data.models import POType
+
         from app.modules.obe.models import ProgramOutcome
+        from app.modules.ref_data.models import POType
 
         po_types_result = await self._session.execute(
             select(POType)
@@ -140,14 +194,16 @@ class ProgramService:
 
         for i, pt in enumerate(po_types, start=1):
             statement = pt.description or pt.name
-            self._session.add(ProgramOutcome(
-                organization_id=organization_id,
-                program_id=program_id,
-                code=f"PO{i}",
-                statement=statement,
-                po_type=pt.name,
-                order_index=i - 1,
-            ))
+            self._session.add(
+                ProgramOutcome(
+                    organization_id=organization_id,
+                    program_id=program_id,
+                    code=f"PO{i}",
+                    statement=statement,
+                    po_type=pt.name,
+                    order_index=i - 1,
+                )
+            )
         if po_types:
             await self._session.flush()
 

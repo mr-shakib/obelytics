@@ -171,7 +171,7 @@ async def _seed_db(session: AsyncSession) -> None:
         role_map[role.name] = role
 
     admin = User(organization_id=TEST_ORG_ID, email=TEST_ADMIN_EMAIL,
-                 full_name="Test Admin", status="ACTIVE")
+                 full_name="Test Admin", employee_id="TADMIN001", status="ACTIVE")
     session.add(admin)
     await session.flush()
     session.add(PasswordCredential(user_id=admin.id,
@@ -180,7 +180,7 @@ async def _seed_db(session: AsyncSession) -> None:
         scope_type="GLOBAL", assigned_by=admin.id))
 
     teacher = User(organization_id=TEST_ORG_ID, email=TEST_TEACHER_EMAIL,
-                   full_name="Test Teacher", status="ACTIVE")
+                   full_name="Test Teacher", employee_id="TTEACH01", status="ACTIVE")
     session.add(teacher)
     await session.flush()
     session.add(PasswordCredential(user_id=teacher.id,
@@ -189,7 +189,7 @@ async def _seed_db(session: AsyncSession) -> None:
         scope_type="PROGRAM", scope_id=None, assigned_by=admin.id))
 
     ml = User(organization_id=TEST_ORG_ID, email=TEST_ML_EMAIL,
-              full_name="Test ML", status="ACTIVE")
+              full_name="Test ML", employee_id="TMLEAD01", status="ACTIVE")
     session.add(ml)
     await session.flush()
     session.add(PasswordCredential(user_id=ml.id,

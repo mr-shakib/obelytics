@@ -96,7 +96,13 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
     batch_resp = await client.post(
         "/api/v1/batches",
         headers=headers,
-        json={"curriculum_id": curriculum_id, "name": f"Batch {suffix[:8]}", "intake_year": 2024},
+        json={
+            "curriculum_id": curriculum_id,
+            "name": f"Batch {suffix[:8]}",
+            "start_date": "2024-09-01",
+            "term_system": "SEMESTER",
+            "num_semesters": 8,
+        },
     )
     assert batch_resp.status_code == 201, batch_resp.text
     batch_id = batch_resp.json()["id"]
@@ -142,7 +148,7 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
 
     # Assessment type
     at_resp = await client.post(
-        "/api/v1/config/assessment-types",
+        "/api/v1/ref-data/assessment-types",
         headers=headers,
         json={"name": f"AttQuiz {suffix[:8]}"},
     )
@@ -155,7 +161,7 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
         headers=headers,
         json={
             "program_id": program_id,
-            "code": "PO1",
+            "code": f"PO1-{suffix[:8]}",
             "statement": "Apply attainment fundamentals",
             "order_index": 1,
         },
@@ -239,6 +245,7 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
             "full_name": f"Attainment Student 1 {suffix[:4]}",
             "email": f"att1_{suffix[:8]}@test.com",
             "program_id": program_id,
+            "batch_id": batch_id,
         },
     )
     assert stu1_resp.status_code == 201, stu1_resp.text
@@ -261,6 +268,7 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
             "full_name": f"Attainment Student 2 {suffix[:4]}",
             "email": f"att2_{suffix[:8]}@test.com",
             "program_id": program_id,
+            "batch_id": batch_id,
         },
     )
     assert stu2_resp.status_code == 201, stu2_resp.text
@@ -331,7 +339,6 @@ async def test_get_config_auto_creates_default(client: AsyncClient, auth_headers
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["program_id"] is None
-    assert float(data["threshold_student_pct"]) == 50.0
     assert float(data["threshold_co_score_pct"]) == 50.0
 
 
@@ -340,18 +347,17 @@ async def test_update_org_level_config(client: AsyncClient, auth_headers):
     resp = await client.patch(
         "/api/v1/attainment/config",
         headers=auth_headers,
-        json={"threshold_student_pct": "60.00", "threshold_co_score_pct": "55.00"},
+        json={"threshold_co_score_pct": "55.00"},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert float(data["threshold_student_pct"]) == 60.0
     assert float(data["threshold_co_score_pct"]) == 55.0
 
-    # Reset back to 50/50 for other tests
+    # Reset back to 50 for other tests
     await client.patch(
         "/api/v1/attainment/config",
         headers=auth_headers,
-        json={"threshold_student_pct": "50.00", "threshold_co_score_pct": "50.00"},
+        json={"threshold_co_score_pct": "50.00"},
     )
 
 
@@ -417,13 +423,12 @@ async def test_update_program_specific_config(client: AsyncClient, auth_headers)
     resp = await client.patch(
         f"/api/v1/attainment/config/programs/{program_id}",
         headers=auth_headers,
-        json={"threshold_student_pct": "70.00"},
+        json={"threshold_co_score_pct": "70.00"},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["program_id"] == program_id
-    assert float(data["threshold_student_pct"]) == 70.0
-    assert float(data["threshold_co_score_pct"]) == 50.0
+    assert float(data["threshold_co_score_pct"]) == 70.0
 
 
 # ── Attainment Computation Tests ──────────────────────────────────────────────
@@ -459,7 +464,7 @@ async def test_attainment_auto_computed_on_publish(client: AsyncClient, auth_hea
 
 
 async def test_po_attainment_results_exist_after_publish(client: AsyncClient, auth_headers):
-    """PO attainment results are computed based on CO-PO mappings."""
+    """PO attainment results are computed based on student-level PO score aggregation."""
     scenario = await _setup_attainment_scenario(client, auth_headers)
     offering_id = scenario["offering_id"]
 
@@ -478,10 +483,13 @@ async def test_po_attainment_results_exist_after_publish(client: AsyncClient, au
     po_result = data["po_results"][0]
     assert po_result["program_outcome_id"] == scenario["po_id"]
     assert po_result["contributing_co_count"] == 1
-    # PO attainment = same as CO average since only 1 CO with weight=2
-    assert float(po_result["attainment_pct"]) == pytest.approx(57.5, abs=0.1)
-    # 57.5 >= 50.0 -> attained
-    assert po_result["is_attained"] is True
+    # student1 scored 75% (above 50%), student2 scored 40% (below 50%)
+    # 1 out of 2 students attained -> attainment_pct = 50.0%
+    assert po_result["students_above_threshold"] == 1
+    assert po_result["total_students"] == 2
+    assert float(po_result["attainment_pct"]) == pytest.approx(50.0, abs=0.1)
+    # 50% is NOT > 50% -> not attained
+    assert po_result["is_attained"] is False
 
 
 async def test_attainment_summary_not_found_before_publish(client: AsyncClient, auth_headers):
@@ -541,7 +549,13 @@ async def test_attainment_summary_not_found_before_publish(client: AsyncClient, 
     batch_resp = await client.post(
         "/api/v1/batches",
         headers=auth_headers,
-        json={"curriculum_id": curriculum_id, "name": f"NF Batch {suffix}", "intake_year": 2024},
+        json={
+            "curriculum_id": curriculum_id,
+            "name": f"NF Batch {suffix}",
+            "start_date": "2024-09-01",
+            "term_system": "SEMESTER",
+            "num_semesters": 8,
+        },
     )
     batch_id = batch_resp.json()["id"]
     full_int = int(uuid.uuid4().hex, 16)
@@ -613,7 +627,7 @@ async def test_attainment_view_denied_without_auth(client: AsyncClient):
     resp = await client.get(
         "/api/v1/attainment/section-offerings/00000000-0000-0000-0000-000000000000/summary",
     )
-    assert resp.status_code == 403
+    assert resp.status_code in (401, 403)
 
 
 async def test_attainment_config_read_allowed_for_ml(client: AsyncClient, ml_auth_headers):

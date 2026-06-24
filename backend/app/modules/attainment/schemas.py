@@ -39,6 +39,8 @@ class POAttainmentResultResponse(BaseModel):
     program_outcome_id: UUID
     attainment_pct: Decimal
     contributing_co_count: int
+    students_above_threshold: int
+    total_students: int
     is_attained: bool
     calculated_at: datetime
     model_config = ConfigDict(from_attributes=True)

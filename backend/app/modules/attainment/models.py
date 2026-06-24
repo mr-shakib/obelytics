@@ -116,6 +116,8 @@ class POAttainmentResult(Base):
     )
     attainment_pct = Column(Numeric(5, 2), nullable=False)
     contributing_co_count = Column(Integer, nullable=False)
+    students_above_threshold = Column(Integer, nullable=False, server_default=sa.text("0"))
+    total_students = Column(Integer, nullable=False, server_default=sa.text("0"))
     is_attained = Column(Boolean, nullable=False)
     calculated_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(

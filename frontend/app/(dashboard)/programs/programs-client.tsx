@@ -52,6 +52,12 @@ type Department = {
   name: string
 }
 
+type POVersion = {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 const PROGRAM_TYPES = [
   { value: "UNDERGRADUATE", label: "Undergraduate" },
   { value: "POSTGRADUATE", label: "Postgraduate" },
@@ -72,6 +78,7 @@ const schema = z.object({
   total_credits: z.number().int().min(1).max(500),
   study_mode: z.enum(["FULL_TIME", "PART_TIME"], { message: "Mode required" }),
   description: z.string().optional(),
+  po_version_id: z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -131,6 +138,14 @@ export function ProgramsClient() {
     },
   })
 
+  const { data: poVersions = [] } = useQuery({
+    queryKey: queryKeys.poVersions.list(),
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/po-versions" as never)
+      return ((data as unknown) as POVersion[]) ?? []
+    },
+  })
+
   const {
     register,
     handleSubmit,
@@ -143,7 +158,12 @@ export function ProgramsClient() {
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      await apiClient.POST("/programs" as never, { body: values } as never)
+      await apiClient.POST("/programs" as never, {
+        body: {
+          ...values,
+          po_version_id: values.po_version_id || undefined,
+        },
+      } as never)
     },
     onSuccess: () => {
       toast.success("Program created")
@@ -298,6 +318,33 @@ export function ProgramsClient() {
                   <div className="space-y-2">
                     <Label htmlFor="prog-description">Vision</Label>
                     <Textarea id="prog-description" rows={2} {...register("description")} placeholder="Optional" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>PO Version</Label>
+                    <Controller
+                      name="po_version_id"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select PO version (optional)">
+                              {field.value ? poVersions.find((v) => v.id === field.value)?.name ?? field.value : undefined}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {poVersions.map((v) => (
+                              <SelectItem key={v.id} value={v.id}>
+                                {v.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.po_version_id && (
+                      <p className="text-sm text-destructive">{errors.po_version_id.message}</p>
+                    )}
                   </div>
                 </form>
                 <DialogFooter showCloseButton>

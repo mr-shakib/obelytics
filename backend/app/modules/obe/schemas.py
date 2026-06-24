@@ -3,11 +3,39 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+# ── PO Versions ──────────────────────────────────────────────────────────────
+
+
+class POVersionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = None
+
+
+class POVersionUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class POVersionResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    name: str
+    description: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    po_count: int = 0
+
+    model_config = {"from_attributes": True}
+
 
 # ── Program Outcomes ──────────────────────────────────────────────────────────
 
+
 class ProgramOutcomeCreate(BaseModel):
     program_id: UUID | None = None
+    po_version_id: UUID | None = None
     bloom_domain_id: UUID | None = None
     code: str = Field(min_length=1, max_length=20)
     reference: str | None = Field(default=None, max_length=100)
@@ -28,6 +56,7 @@ class ProgramOutcomeResponse(BaseModel):
     id: UUID
     organization_id: UUID
     program_id: UUID | None
+    po_version_id: UUID | None
     bloom_domain_id: UUID | None
     code: str
     reference: str | None
@@ -44,6 +73,7 @@ class ProgramOutcomeResponse(BaseModel):
 
 # ── PO Knowledge Profiles ─────────────────────────────────────────────────────
 
+
 class POKnowledgeProfileCreate(BaseModel):
     knowledge_profile_id: UUID
 
@@ -58,6 +88,7 @@ class POKnowledgeProfileResponse(BaseModel):
 
 
 # ── Course Outcomes ───────────────────────────────────────────────────────────
+
 
 class CourseOutcomeCreate(BaseModel):
     curriculum_id: UUID
@@ -92,6 +123,7 @@ class CourseOutcomeResponse(BaseModel):
 
 # ── CO Delivery Methods ───────────────────────────────────────────────────────
 
+
 class CODeliveryMethodCreate(BaseModel):
     delivery_method_id: UUID
 
@@ -106,6 +138,7 @@ class CODeliveryMethodResponse(BaseModel):
 
 
 # ── CO-PO Mapping Sets ────────────────────────────────────────────────────────
+
 
 class COPOMappingSetCreate(BaseModel):
     curriculum_id: UUID
@@ -128,6 +161,7 @@ class COPOMappingSetResponse(BaseModel):
 
 # ── CO-PO Mapping Entries ─────────────────────────────────────────────────────
 
+
 class COPOMappingEntryUpsert(BaseModel):
     course_outcome_id: UUID
     program_outcome_id: UUID
@@ -147,6 +181,7 @@ class COPOMappingEntryResponse(BaseModel):
 
 
 # ── CO-CP Mappings ────────────────────────────────────────────────────────────
+
 
 class COCPMappingCreate(BaseModel):
     course_outcome_id: UUID
@@ -170,6 +205,7 @@ class COCPMappingResponse(BaseModel):
 
 # ── CO-CA Mappings ────────────────────────────────────────────────────────────
 
+
 class COCAMappingCreate(BaseModel):
     course_outcome_id: UUID
     complex_activity_id: UUID
@@ -191,6 +227,7 @@ class COCAMappingResponse(BaseModel):
 
 
 # ── CO-KP Mappings ────────────────────────────────────────────────────────────
+
 
 class COKPMappingCreate(BaseModel):
     course_outcome_id: UUID
@@ -214,6 +251,7 @@ class COKPMappingResponse(BaseModel):
 
 # ── CO-PO Mapping Validation (CEP/CEA requirements) ───────────────────────────
 
+
 class COMappingValidationIssue(BaseModel):
     course_outcome_id: UUID
     course_outcome_code: str
@@ -227,6 +265,7 @@ class COPOMappingValidationResponse(BaseModel):
 
 
 # ── Program Missions ──────────────────────────────────────────────────────────
+
 
 class ProgramMissionCreate(BaseModel):
     program_id: UUID
@@ -257,6 +296,7 @@ class ProgramMissionResponse(BaseModel):
 
 # ── Program Educational Objectives (PEO) ─────────────────────────────────────
 
+
 class PEOCreate(BaseModel):
     program_id: UUID
     code: str = Field(min_length=1, max_length=20)
@@ -285,6 +325,7 @@ class PEOResponse(BaseModel):
 
 
 # ── PEO-PO & PEO-Mission Mappings ─────────────────────────────────────────────
+
 
 class PEOMappingSet(BaseModel):
     po_ids: list[UUID] = Field(default_factory=list)

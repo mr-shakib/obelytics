@@ -1,6 +1,19 @@
 from fastapi import HTTPException, status
 
 
+class POVersionNotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="PO version not found")
+
+
+class POVersionConflictError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A PO version with this name already exists",
+        )
+
+
 class PONotFoundError(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Program outcome not found")

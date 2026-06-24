@@ -349,6 +349,7 @@ function BulkImportPanel({ departments }: { departments: Department[] }) {
 
   const [rows, setRows] = useState<BulkRow[]>([])
   const [sharedPassword, setSharedPassword] = useState(() => genPassword())
+  const [bulkDeptId, setBulkDeptId] = useState("")
   const [importResult, setImportResult] = useState<{ created: number; errors: { row: number; email: string; error: string }[] } | null>(null)
 
   const deptByName = Object.fromEntries(departments.map((d) => [d.name.toLowerCase(), d.id]))
@@ -378,45 +379,55 @@ function BulkImportPanel({ departments }: { departments: Department[] }) {
   }
 
   async function downloadTemplate() {
-    const XLSX = await getXLSX()
-    const wb = XLSX.utils.book_new()
-    const ws: ReturnType<typeof XLSX.utils.aoa_to_sheet> = {}
+    const ExcelJS = await import("exceljs")
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet("Users")
 
-    // Required columns get a red header; optional columns get a blue-grey header
-    const RED_FILL   = { patternType: "solid", fgColor: { rgb: "FFC0392B" } }
-    const BLUE_FILL  = { patternType: "solid", fgColor: { rgb: "FF2C3E50" } }
-    const WHITE_FONT = { bold: true, color: { rgb: "FFFFFFFF" }, sz: 11 }
+    ws.columns = BULK_COLUMN_GUIDE.map((c) => ({
+      header: c.display,
+      key: c.key,
+      width: Math.max(c.display.length + 4, 18),
+    }))
 
-    BULK_COLUMN_GUIDE.forEach((col, idx) => {
-      const ref = XLSX.utils.encode_cell({ r: 0, c: idx })
-      ws[ref] = {
-        v: col.display,
-        t: "s",
-        s: {
-          fill: col.required ? RED_FILL : BLUE_FILL,
-          font: WHITE_FONT,
-          alignment: { horizontal: "center", vertical: "center", wrapText: false },
-          border: {
-            bottom: { style: "thin", color: { rgb: "FFFFFFFF" } },
-          },
-        },
+    const headerRow = ws.getRow(1)
+    headerRow.height = 22
+    headerRow.eachCell((cell, colNumber) => {
+      const col = BULK_COLUMN_GUIDE[colNumber - 1]
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: col.required ? "FFC0392B" : "FF2C3E50" },
+      }
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 }
+      cell.alignment = { horizontal: "center", vertical: "middle" }
+      cell.border = {
+        bottom: { style: "thin", color: { argb: "FFFFFFFF" } },
       }
     })
 
-    ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: BULK_COLUMN_GUIDE.length - 1 } })
-    ws["!cols"] = BULK_COLUMN_GUIDE.map((c) => ({ wch: Math.max(c.display.length + 4, 18) }))
-    ws["!rows"] = [{ hpt: 22 }]
-
-    XLSX.utils.book_append_sheet(wb, ws, "Users")
-    XLSX.writeFile(wb, "user_import_template.xlsx", { cellStyles: true })
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "user_import_template.xlsx"
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (sharedPassword.trim().length < 8) throw new Error("Password must be at least 8 characters")
       const body = rows.map((r) => {
-        const deptName = String(r["department_name"] ?? "").toLowerCase()
-        const deptId = deptByName[deptName] ?? undefined
+        let deptId: string | undefined
+        if (bulkDeptId) {
+          deptId = bulkDeptId
+        } else {
+          const deptName = String(r["department_name"] ?? "").toLowerCase()
+          deptId = deptByName[deptName] ?? undefined
+        }
         const rowPassword = String(r["password"] ?? "").trim()
         const pw = rowPassword || sharedPassword
         return {
@@ -518,6 +529,27 @@ function BulkImportPanel({ departments }: { departments: Department[] }) {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Department */}
+        <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Department</p>
+          <Field label="Assign Department">
+            <Select value={bulkDeptId} onValueChange={(v) => { if (v != null) setBulkDeptId(v === "__none__" ? "" : v) }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select department (optional — overrides per-row values)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None (use per-row values)</SelectItem>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            If set, all imported users will be assigned to this department — ignoring the Department column in the spreadsheet.
+          </p>
         </div>
 
         {/* Password */}

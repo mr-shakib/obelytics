@@ -1,9 +1,10 @@
 from datetime import date, datetime
 from uuid import UUID
+
 from pydantic import BaseModel, Field
 
-
 # ── Organization ──────────────────────────────────────────────────────────────
+
 
 class OrgUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
@@ -47,6 +48,7 @@ class OrgResponse(BaseModel):
 
 
 # ── Department ────────────────────────────────────────────────────────────────
+
 
 class DepartmentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -103,6 +105,7 @@ class DepartmentResponse(BaseModel):
 
 # ── Program ───────────────────────────────────────────────────────────────────
 
+
 class ProgramCreate(BaseModel):
     department_id: UUID
     title: str = Field(min_length=1, max_length=255)
@@ -112,6 +115,7 @@ class ProgramCreate(BaseModel):
     total_credits: int = Field(ge=1, le=500)
     study_mode: str = Field(pattern="^(FULL_TIME|PART_TIME)$")
     description: str | None = None
+    po_version_id: UUID | None = None
 
 
 class ProgramUpdate(BaseModel):
@@ -122,6 +126,7 @@ class ProgramUpdate(BaseModel):
     total_credits: int | None = Field(default=None, ge=1, le=500)
     study_mode: str | None = Field(default=None, pattern="^(FULL_TIME|PART_TIME)$")
     description: str | None = None
+    po_version_id: UUID | None = None
 
 
 class ProgramResponse(BaseModel):
@@ -135,6 +140,7 @@ class ProgramResponse(BaseModel):
     total_credits: int
     study_mode: str
     description: str | None
+    po_version_id: UUID | None
     status: str
     archived_at: datetime | None
     created_at: datetime

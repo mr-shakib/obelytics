@@ -17,8 +17,8 @@ from app.modules.obe.schemas import (
     CODeliveryMethodResponse,
     COKPMappingCreate,
     COKPMappingResponse,
-    COPOMappingEntryUpsert,
     COPOMappingEntryResponse,
+    COPOMappingEntryUpsert,
     COPOMappingSetCreate,
     COPOMappingSetResponse,
     COPOMappingValidationResponse,
@@ -34,6 +34,9 @@ from app.modules.obe.schemas import (
     PEOUpdate,
     POKnowledgeProfileCreate,
     POKnowledgeProfileResponse,
+    POVersionCreate,
+    POVersionResponse,
+    POVersionUpdate,
     ProgramMissionCreate,
     ProgramMissionResponse,
     ProgramMissionUpdate,
@@ -51,13 +54,80 @@ from app.modules.obe.service import (
     PEOService,
     POKnowledgeProfileService,
     POService,
+    POVersionService,
     ProgramMissionService,
 )
 
 router = APIRouter(tags=["OBE"])
 
 
+# ── PO Versions ──────────────────────────────────────────────────────────────
+
+
+@router.get("/po-versions", response_model=list[POVersionResponse])
+async def list_po_versions(
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("po.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = POVersionService(db)
+    versions = await svc.list_active(current_user.organization_id)
+    repo = svc._repo
+    results = []
+    for v in versions:
+        count = await repo.count_pos(v.id)
+        resp = POVersionResponse.model_validate(v)
+        resp.po_count = count
+        results.append(resp)
+    return results
+
+
+@router.post("/po-versions", response_model=POVersionResponse, status_code=status.HTTP_201_CREATED)
+async def create_po_version(
+    body: POVersionCreate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("po.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = POVersionService(db)
+    version = await svc.create(body, current_user.organization_id)
+    resp = POVersionResponse.model_validate(version)
+    resp.po_count = 0
+    return resp
+
+
+@router.get("/po-versions/{version_id}", response_model=POVersionResponse)
+async def get_po_version(
+    version_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("po.read"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = POVersionService(db)
+    data = await svc.get_with_count(version_id, current_user.organization_id)
+    resp = POVersionResponse.model_validate(data["version"])
+    resp.po_count = data["po_count"]
+    return resp
+
+
+@router.patch("/po-versions/{version_id}", response_model=POVersionResponse)
+async def update_po_version(
+    version_id: UUID,
+    body: POVersionUpdate,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("po.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = POVersionService(db)
+    version = await svc.update(version_id, body, current_user.organization_id)
+    count = await svc._repo.count_pos(version.id)
+    resp = POVersionResponse.model_validate(version)
+    resp.po_count = count
+    return resp
+
+
 # ── Program Outcomes ──────────────────────────────────────────────────────────
+
 
 @router.get("/program-outcomes", response_model=list[ProgramOutcomeResponse])
 async def list_program_outcomes(
@@ -65,12 +135,15 @@ async def list_program_outcomes(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     program_id: UUID | None = None,
+    po_version_id: UUID | None = None,
 ):
     svc = POService(db)
-    return await svc.list_active(current_user.organization_id, program_id)
+    return await svc.list_active(current_user.organization_id, program_id, po_version_id)
 
 
-@router.post("/program-outcomes", response_model=ProgramOutcomeResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/program-outcomes", response_model=ProgramOutcomeResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_program_outcome(
     body: ProgramOutcomeCreate,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("po.create"))],
@@ -131,7 +204,9 @@ async def add_po_knowledge_profile(
     return await svc.add(po_id, body.knowledge_profile_id, current_user.organization_id)
 
 
-@router.get("/program-outcomes/{po_id}/knowledge-profiles", response_model=list[POKnowledgeProfileResponse])
+@router.get(
+    "/program-outcomes/{po_id}/knowledge-profiles", response_model=list[POKnowledgeProfileResponse]
+)
 async def list_po_knowledge_profiles(
     po_id: UUID,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("po.read"))],
@@ -159,6 +234,7 @@ async def remove_po_knowledge_profile(
 
 # ── Course Outcomes ───────────────────────────────────────────────────────────
 
+
 @router.get("/course-outcomes", response_model=list[CourseOutcomeResponse])
 async def list_course_outcomes(
     curriculum_id: UUID,
@@ -168,10 +244,14 @@ async def list_course_outcomes(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = COService(db)
-    return await svc.list_by_curriculum_course(curriculum_id, course_id, current_user.organization_id)
+    return await svc.list_by_curriculum_course(
+        curriculum_id, course_id, current_user.organization_id
+    )
 
 
-@router.post("/course-outcomes", response_model=CourseOutcomeResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/course-outcomes", response_model=CourseOutcomeResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_course_outcome(
     body: CourseOutcomeCreate,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("co.create"))],
@@ -276,7 +356,9 @@ async def add_co_delivery_method(
     return await svc.add(co_id, body.delivery_method_id, current_user.organization_id)
 
 
-@router.get("/course-outcomes/{co_id}/delivery-methods", response_model=list[CODeliveryMethodResponse])
+@router.get(
+    "/course-outcomes/{co_id}/delivery-methods", response_model=list[CODeliveryMethodResponse]
+)
 async def list_co_delivery_methods(
     co_id: UUID,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("co.read"))],
@@ -304,6 +386,7 @@ async def remove_co_delivery_method(
 
 # ── CO-PO Mapping Sets ────────────────────────────────────────────────────────
 
+
 @router.get("/mappings/co-po", response_model=COPOMappingSetResponse)
 async def get_co_po_mapping_set(
     curriculum_id: UUID,
@@ -318,6 +401,7 @@ async def get_co_po_mapping_set(
         ms = await svc._repo.find_by_course_fallback(course_id)
     if ms is None:
         from app.modules.obe.exceptions import MappingSetNotFoundError
+
         raise MappingSetNotFoundError()
     return ms
 
@@ -397,6 +481,7 @@ async def publish_co_po_mapping_set(
 
 # ── CO-CP Mappings ────────────────────────────────────────────────────────────
 
+
 @router.get("/mappings/co-cp", response_model=list[COCPMappingResponse])
 async def list_co_cp_mappings(
     course_outcome_id: UUID,
@@ -408,7 +493,9 @@ async def list_co_cp_mappings(
     return await svc.list_by_co(course_outcome_id, current_user.organization_id)
 
 
-@router.post("/mappings/co-cp", response_model=COCPMappingResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/mappings/co-cp", response_model=COCPMappingResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_co_cp_mapping(
     body: COCPMappingCreate,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_cp.manage"))],
@@ -443,6 +530,7 @@ async def delete_co_cp_mapping(
 
 # ── CO-CA Mappings ────────────────────────────────────────────────────────────
 
+
 @router.get("/mappings/co-ca", response_model=list[COCAMappingResponse])
 async def list_co_ca_mappings(
     course_outcome_id: UUID,
@@ -454,7 +542,9 @@ async def list_co_ca_mappings(
     return await svc.list_by_co(course_outcome_id, current_user.organization_id)
 
 
-@router.post("/mappings/co-ca", response_model=COCAMappingResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/mappings/co-ca", response_model=COCAMappingResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_co_ca_mapping(
     body: COCAMappingCreate,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_ca.manage"))],
@@ -489,6 +579,7 @@ async def delete_co_ca_mapping(
 
 # ── CO-KP Mappings ────────────────────────────────────────────────────────────
 
+
 @router.get("/mappings/co-kp", response_model=list[COKPMappingResponse])
 async def list_co_kp_mappings(
     course_outcome_id: UUID,
@@ -500,7 +591,9 @@ async def list_co_kp_mappings(
     return await svc.list_by_co(course_outcome_id, current_user.organization_id)
 
 
-@router.post("/mappings/co-kp", response_model=COKPMappingResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/mappings/co-kp", response_model=COKPMappingResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_co_kp_mapping(
     body: COKPMappingCreate,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_kp.manage"))],
@@ -534,6 +627,7 @@ async def delete_co_kp_mapping(
 
 
 # ── Program Missions ──────────────────────────────────────────────────────────
+
 
 @router.get("/programs/{program_id}/missions", response_model=list[ProgramMissionResponse])
 async def list_program_missions(
@@ -585,6 +679,7 @@ async def archive_program_mission(
 
 
 # ── Program Educational Objectives (PEO) ─────────────────────────────────────
+
 
 @router.get("/programs/{program_id}/peos", response_model=list[PEOResponse])
 async def list_peos(

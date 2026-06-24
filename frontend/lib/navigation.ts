@@ -50,7 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Departments", href: "/departments", icon: Building, permission: "department.update", group: "Configuration" },
   { label: "Programs", href: "/programs", icon: GraduationCap, permission: "program.update", group: "Configuration" },
   { label: "Users", href: "/users", icon: Users, permission: "user.read", group: "Configuration" },
-  { label: "PO Types", href: "/po-types", icon: Tag, permission: "config.manage", group: "Configuration" },
+  { label: "Program Outcome", href: "/program-outcomes", icon: Tag, permission: ["config.manage", "po.read"], group: "Configuration" },
   { label: "Complex Attributes", href: "/complex-attributes", icon: Boxes, permission: "config.manage", group: "Configuration" },
 
   // Curriculum
@@ -61,7 +61,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Course Outcomes", href: "/course-outcomes", icon: ListChecks, permission: "co.read", group: "Curriculum" },
 
   // OBE
-  { label: "Program Outcomes", href: "/program-outcomes", icon: Target, permission: "po.read", group: "OBE" },
 
   // Assessment
   { label: "My Sections", href: "/my-sections", icon: FileSpreadsheet, permission: "marks.enter", group: "Assessment" },

@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
-import { ProgramOutcomeDetailClient } from "./program-outcome-detail-client"
+import { POVersionDetailClient } from "./po-version-detail-client"
 
-export const metadata: Metadata = { title: "Program Outcome" }
+export const metadata: Metadata = { title: "PO Version" }
 
-export default async function ProgramOutcomePage({ params }: PageProps<"/program-outcomes/[id]">) {
+export default async function POVersionPage({ params }: PageProps<"/program-outcomes/[id]">) {
   const { id } = await params
-  return <ProgramOutcomeDetailClient id={id} />
+  return <POVersionDetailClient versionId={id} />
 }

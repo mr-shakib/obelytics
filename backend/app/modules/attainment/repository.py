@@ -128,6 +128,8 @@ class POAttainmentResultRepository:
             program_outcome_id=obj.program_outcome_id,
             attainment_pct=obj.attainment_pct,
             contributing_co_count=obj.contributing_co_count,
+            students_above_threshold=obj.students_above_threshold,
+            total_students=obj.total_students,
             is_attained=obj.is_attained,
         )
         stmt = stmt.on_conflict_do_update(
@@ -135,6 +137,8 @@ class POAttainmentResultRepository:
             set_={
                 "attainment_pct": stmt.excluded.attainment_pct,
                 "contributing_co_count": stmt.excluded.contributing_co_count,
+                "students_above_threshold": stmt.excluded.students_above_threshold,
+                "total_students": stmt.excluded.total_students,
                 "is_attained": stmt.excluded.is_attained,
                 "updated_at": stmt.excluded.calculated_at,
             },

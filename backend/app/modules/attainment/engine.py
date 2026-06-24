@@ -68,7 +68,6 @@ class AttainmentEngine:
             return
 
         assessment_ids = [a.id for a in assessments]
-        assessment_map = {a.id: a for a in assessments}
 
         # 4. Load ACTIVE enrollments for this offering
         enrollments_result = await self._session.execute(
@@ -214,32 +213,52 @@ class AttainmentEngine:
             po_entries[entry.program_outcome_id].append(entry)
 
         for po_id, entries in po_entries.items():
-            weighted_sum = Decimal("0")
-            weight_sum = Decimal("0")
             contributing_count = 0
+            contributing_co_ids: set[UUID] = set()
 
             for entry in entries:
                 co_id = entry.course_outcome_id
                 if co_id in co_avg_attainment:
-                    w = Decimal(str(entry.weight))
-                    weighted_sum += co_avg_attainment[co_id] * w
-                    weight_sum += w
+                    contributing_co_ids.add(co_id)
                     contributing_count += 1
 
-            if weight_sum > 0:
-                po_attainment = weighted_sum / weight_sum
-            else:
-                po_attainment = Decimal("0")
+            if not contributing_co_ids:
+                continue
 
-            po_is_attained = po_attainment >= threshold_co_score_pct
+            # For each student, compute PO score as % of total marks across
+            # all assessments whose COs map to this PO.
+            po_student_pcts: list[Decimal] = []
+            for enrollment in enrollments:
+                total_obtained = Decimal("0")
+                total_max = Decimal("0")
+                for assessment in assessments:
+                    weights_for_assessment = assessment_co_weights.get(assessment.id, [])
+                    for co_weight in weights_for_assessment:
+                        if co_weight.course_outcome_id in contributing_co_ids:
+                            total_max += Decimal(str(assessment.total_marks))
+                            mark = mark_map.get((assessment.id, enrollment.id))
+                            if mark and not mark.is_absent and mark.marks_obtained is not None:
+                                total_obtained += Decimal(str(mark.marks_obtained))
+                            break  # count each assessment once per PO
+                pct = (total_obtained / total_max * Decimal("100")) if total_max > 0 else Decimal("0")
+                po_student_pcts.append(pct)
+
+            above_threshold = sum(1 for s in po_student_pcts if s >= threshold_co_score_pct)
+            po_attainment_pct = (
+                Decimal(str(above_threshold)) / Decimal(str(total_students)) * Decimal("100")
+                if total_students > 0 else Decimal("0")
+            )
+            po_is_attained = po_attainment_pct > Decimal("50")
 
             po_result = POAttainmentResult(
                 id=uuid.uuid4(),
                 organization_id=org_id,
                 section_offering_id=section_offering_id,
                 program_outcome_id=po_id,
-                attainment_pct=round(po_attainment, 2),
+                attainment_pct=round(po_attainment_pct, 2),
                 contributing_co_count=contributing_count,
+                students_above_threshold=above_threshold,
+                total_students=total_students,
                 is_attained=po_is_attained,
             )
             await self._po_repo.upsert(po_result)

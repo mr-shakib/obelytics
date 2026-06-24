@@ -1,11 +1,45 @@
 import sqlalchemy as sa
 from sqlalchemy import (
-    CheckConstraint, Column, DateTime, ForeignKey, Index,
-    SmallInteger, String, Text, UniqueConstraint,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 from app.core.database import Base
+
+
+class POVersion(Base):
+    __tablename__ = "po_versions"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_obe_po_version_org_name"),
+        {"schema": "obe"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
+    )
 
 
 class ProgramOutcome(Base):
@@ -13,7 +47,8 @@ class ProgramOutcome(Base):
     __table_args__ = (
         Index(
             "uq_obe_po_org_code_active",
-            "organization_id", "code",
+            "organization_id",
+            "code",
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
@@ -30,6 +65,12 @@ class ProgramOutcome(Base):
     program_id = Column(
         PGUUID(as_uuid=True),
         ForeignKey("org.programs.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    po_version_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.po_versions.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -79,7 +120,9 @@ class POKnowledgeProfile(Base):
 class CourseOutcome(Base):
     __tablename__ = "course_outcomes"
     __table_args__ = (
-        UniqueConstraint("curriculum_id", "course_id", "code", name="uq_obe_co_curriculum_course_code"),
+        UniqueConstraint(
+            "curriculum_id", "course_id", "code", name="uq_obe_co_curriculum_course_code"
+        ),
         Index("ix_obe_co_curriculum_course_status", "curriculum_id", "course_id", "status"),
         {"schema": "obe"},
     )
@@ -165,7 +208,9 @@ class CODeliveryMethod(Base):
 class COPOMappingSet(Base):
     __tablename__ = "co_po_mapping_sets"
     __table_args__ = (
-        UniqueConstraint("curriculum_id", "course_id", name="uq_obe_co_po_mapping_set_curriculum_course"),
+        UniqueConstraint(
+            "curriculum_id", "course_id", name="uq_obe_co_po_mapping_set_curriculum_course"
+        ),
         {"schema": "obe"},
     )
 
@@ -205,7 +250,9 @@ class COPOMappingEntry(Base):
     __tablename__ = "co_po_mapping_entries"
     __table_args__ = (
         UniqueConstraint(
-            "mapping_set_id", "course_outcome_id", "program_outcome_id",
+            "mapping_set_id",
+            "course_outcome_id",
+            "program_outcome_id",
             name="uq_obe_co_po_mapping_entry",
         ),
         CheckConstraint("weight IN (1, 2, 3)", name="ck_obe_co_po_mapping_entry_weight"),
@@ -357,12 +404,14 @@ class COKPMapping(Base):
 
 # ── Program Missions ──────────────────────────────────────────────────────────
 
+
 class ProgramMission(Base):
     __tablename__ = "program_missions"
     __table_args__ = (
         Index(
             "uq_obe_mission_program_code_active",
-            "program_id", "code",
+            "program_id",
+            "code",
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
@@ -398,12 +447,14 @@ class ProgramMission(Base):
 
 # ── Program Educational Objectives (PEO) ─────────────────────────────────────
 
+
 class ProgramEducationalObjective(Base):
     __tablename__ = "program_educational_objectives"
     __table_args__ = (
         Index(
             "uq_obe_peo_program_code_active",
-            "program_id", "code",
+            "program_id",
+            "code",
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
@@ -439,6 +490,7 @@ class ProgramEducationalObjective(Base):
 
 # ── PEO-PO Mapping ────────────────────────────────────────────────────────────
 
+
 class PEOPOMapping(Base):
     __tablename__ = "peo_po_mappings"
     __table_args__ = (
@@ -467,6 +519,7 @@ class PEOPOMapping(Base):
 
 
 # ── PEO-Mission Mapping ───────────────────────────────────────────────────────
+
 
 class PEOMissionMapping(Base):
     __tablename__ = "peo_mission_mappings"

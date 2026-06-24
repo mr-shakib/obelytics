@@ -153,6 +153,8 @@ class COAttainmentReportService:
                     program_outcome_id=r.program_outcome_id,
                     attainment_pct=r.attainment_pct,
                     contributing_co_count=r.contributing_co_count,
+                    students_above_threshold=r.students_above_threshold,
+                    total_students=r.total_students,
                     is_attained=r.is_attained,
                 )
                 for r in po_results

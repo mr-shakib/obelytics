@@ -38,6 +38,7 @@ from app.modules.obe.models import (
     PEOMissionMapping,
     PEOPOMapping,
     POKnowledgeProfile,
+    POVersion,
     ProgramEducationalObjective,
     ProgramMission,
     ProgramOutcome,
@@ -55,16 +56,15 @@ from app.modules.obe.repository import (
     PEORepository,
     POKnowledgeProfileRepository,
     PORepository,
+    POVersionRepository,
     ProgramMissionRepository,
 )
 from app.modules.obe.schemas import (
     COCAMappingCreate,
     COCPMappingCreate,
-    CODeliveryMethodCreate,
     COKPMappingCreate,
     COMappingValidationIssue,
     COPOMappingEntryUpsert,
-    COPOMappingSetCreate,
     COPOMappingValidationResponse,
     CourseOutcomeCreate,
     CourseOutcomeResponse,
@@ -73,6 +73,8 @@ from app.modules.obe.schemas import (
     PEOMappingSet,
     PEOMissionMappingSet,
     PEOUpdate,
+    POVersionCreate,
+    POVersionUpdate,
     ProgramMissionCreate,
     ProgramMissionUpdate,
     ProgramOutcomeCreate,
@@ -83,15 +85,68 @@ _CO_PUBLISHED_LOCKED = {"PUBLISHED", "LOCKED"}
 _CO_TERMINAL = {"PUBLISHED", "LOCKED"}
 
 
+class POVersionService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = POVersionRepository(session)
+
+    async def list_active(self, org_id: UUID) -> list[POVersion]:
+        return await self._repo.list_active(org_id)
+
+    async def list_all(self, org_id: UUID) -> list[POVersion]:
+        return await self._repo.list_all(org_id)
+
+    async def get(self, version_id: UUID, org_id: UUID) -> POVersion:
+        version = await self._repo.get_by_id(version_id, org_id)
+        if version is None:
+            from app.modules.obe.exceptions import POVersionNotFoundError
+
+            raise POVersionNotFoundError()
+        return version
+
+    async def get_with_count(self, version_id: UUID, org_id: UUID) -> dict:
+        version = await self.get(version_id, org_id)
+        count = await self._repo.count_pos(version.id)
+        return {"version": version, "po_count": count}
+
+    async def create(self, body: POVersionCreate, org_id: UUID) -> POVersion:
+        existing = await self._repo.find_by_name(body.name, org_id)
+        if existing:
+            from app.modules.obe.exceptions import POVersionConflictError
+
+            raise POVersionConflictError()
+        obj = POVersion(
+            organization_id=org_id,
+            name=body.name,
+            description=body.description,
+        )
+        result = await self._repo.create(obj)
+        await self._session.commit()
+        return result
+
+    async def update(self, version_id: UUID, body: POVersionUpdate, org_id: UUID) -> POVersion:
+        version = await self.get(version_id, org_id)
+        data = body.model_dump(exclude_none=True)
+        if "name" in data and data["name"] != version.name:
+            existing = await self._repo.find_by_name(data["name"], org_id)
+            if existing:
+                from app.modules.obe.exceptions import POVersionConflictError
+
+                raise POVersionConflictError()
+        result = await self._repo.update(version, data)
+        await self._session.commit()
+        return result
+
+
 class POService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = PORepository(session)
 
     async def list_active(
-        self, org_id: UUID, program_id: UUID | None = None
+        self, org_id: UUID, program_id: UUID | None = None, po_version_id: UUID | None = None
     ) -> list[ProgramOutcome]:
-        return await self._repo.list_active(org_id, program_id)
+        return await self._repo.list_active(org_id, program_id, po_version_id)
 
     async def get(self, po_id: UUID, org_id: UUID) -> ProgramOutcome:
         po = await self._repo.get_by_id(po_id, org_id)
@@ -106,6 +161,7 @@ class POService:
         po = ProgramOutcome(
             organization_id=org_id,
             program_id=body.program_id,
+            po_version_id=body.po_version_id,
             bloom_domain_id=body.bloom_domain_id,
             code=body.code,
             reference=body.reference,
@@ -118,9 +174,7 @@ class POService:
         await self._session.commit()
         return result
 
-    async def update(
-        self, po_id: UUID, body: ProgramOutcomeUpdate, org_id: UUID
-    ) -> ProgramOutcome:
+    async def update(self, po_id: UUID, body: ProgramOutcomeUpdate, org_id: UUID) -> ProgramOutcome:
         po = await self._repo.get_by_id(po_id, org_id)
         if po is None:
             raise PONotFoundError()
@@ -151,23 +205,20 @@ class POKnowledgeProfileService:
         self._repo = POKnowledgeProfileRepository(session)
         self._po_repo = PORepository(session)
 
-    async def list_by_po(
-        self, po_id: UUID, org_id: UUID
-    ) -> list[POKnowledgeProfile]:
+    async def list_by_po(self, po_id: UUID, org_id: UUID) -> list[POKnowledgeProfile]:
         po = await self._po_repo.get_by_id(po_id, org_id)
         if po is None:
             raise PONotFoundError()
         return await self._repo.list_by_po(po_id)
 
-    async def add(
-        self, po_id: UUID, kp_id: UUID, org_id: UUID
-    ) -> POKnowledgeProfile:
+    async def add(self, po_id: UUID, kp_id: UUID, org_id: UUID) -> POKnowledgeProfile:
         po = await self._po_repo.get_by_id(po_id, org_id)
         if po is None:
             raise PONotFoundError()
         existing = await self._repo.find_by_po_kp(po_id, kp_id)
         if existing:
             from app.modules.obe.exceptions import SubMappingConflictError
+
             raise SubMappingConflictError()
         obj = POKnowledgeProfile(
             program_outcome_id=po_id,
@@ -184,6 +235,7 @@ class POKnowledgeProfileService:
         obj = await self._repo.find_by_po_kp(po_id, kp_id)
         if obj is None:
             from app.modules.obe.exceptions import SubMappingNotFoundError
+
             raise SubMappingNotFoundError()
         await self._repo.delete(obj)
         await self._session.commit()
@@ -222,6 +274,7 @@ class COService:
         existing = await self._repo.find_by_code(body.curriculum_id, body.course_id, body.code)
         if existing:
             from app.modules.obe.exceptions import MappingEntryConflictError
+
             raise MappingEntryConflictError()
         co = CourseOutcome(
             organization_id=org_id,
@@ -277,7 +330,9 @@ class COService:
         bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
         return self._to_response(result, bloom_level_ids)
 
-    async def approve(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
+    async def approve(
+        self, co_id: UUID, org_id: UUID, actor_user_id: UUID
+    ) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -354,7 +409,9 @@ class COService:
         await self._repo.delete(co)
         await self._session.commit()
 
-    async def publish(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
+    async def publish(
+        self, co_id: UUID, org_id: UUID, actor_user_id: UUID
+    ) -> CourseOutcomeResponse:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -411,9 +468,7 @@ class CODeliveryMethodService:
             raise CONotFoundError()
         return await self._repo.list_by_co(co_id)
 
-    async def add(
-        self, co_id: UUID, dm_id: UUID, org_id: UUID
-    ) -> CODeliveryMethod:
+    async def add(self, co_id: UUID, dm_id: UUID, org_id: UUID) -> CODeliveryMethod:
         co = await self._co_repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -574,18 +629,18 @@ class MappingSetService:
             if not missing_cep and not missing_cea:
                 continue
             co = co_map.get(co_id)
-            issues.append(COMappingValidationIssue(
-                course_outcome_id=co_id,
-                course_outcome_code=co.code if co else "",
-                missing_cep=missing_cep,
-                missing_cea=missing_cea,
-            ))
+            issues.append(
+                COMappingValidationIssue(
+                    course_outcome_id=co_id,
+                    course_outcome_code=co.code if co else "",
+                    missing_cep=missing_cep,
+                    missing_cea=missing_cea,
+                )
+            )
 
         return COPOMappingValidationResponse(is_valid=not issues, issues=issues)
 
-    async def publish(
-        self, set_id: UUID, org_id: UUID, user_id: UUID
-    ) -> COPOMappingSet:
+    async def publish(self, set_id: UUID, org_id: UUID, user_id: UUID) -> COPOMappingSet:
         ms = await self._repo.get_by_id(set_id, org_id)
         if ms is None:
             raise MappingSetNotFoundError()
@@ -615,9 +670,7 @@ class COCPMappingService:
             raise CONotFoundError()
         return await self._repo.list_by_co(co_id)
 
-    async def create(
-        self, body: COCPMappingCreate, org_id: UUID, user_id: UUID
-    ) -> COCPMapping:
+    async def create(self, body: COCPMappingCreate, org_id: UUID, user_id: UUID) -> COCPMapping:
         co = await self._co_repo.get_by_id(body.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -637,9 +690,7 @@ class COCPMappingService:
         await self._session.commit()
         return result
 
-    async def approve(
-        self, mapping_id: UUID, org_id: UUID, user_id: UUID
-    ) -> COCPMapping:
+    async def approve(self, mapping_id: UUID, org_id: UUID, user_id: UUID) -> COCPMapping:
         obj = await self._repo.get_by_id(mapping_id)
         if obj is None or obj.organization_id != org_id:
             raise SubMappingNotFoundError()
@@ -678,9 +729,7 @@ class COCAMappingService:
             raise CONotFoundError()
         return await self._repo.list_by_co(co_id)
 
-    async def create(
-        self, body: COCAMappingCreate, org_id: UUID, user_id: UUID
-    ) -> COCAMapping:
+    async def create(self, body: COCAMappingCreate, org_id: UUID, user_id: UUID) -> COCAMapping:
         co = await self._co_repo.get_by_id(body.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -700,9 +749,7 @@ class COCAMappingService:
         await self._session.commit()
         return result
 
-    async def approve(
-        self, mapping_id: UUID, org_id: UUID, user_id: UUID
-    ) -> COCAMapping:
+    async def approve(self, mapping_id: UUID, org_id: UUID, user_id: UUID) -> COCAMapping:
         obj = await self._repo.get_by_id(mapping_id)
         if obj is None or obj.organization_id != org_id:
             raise SubMappingNotFoundError()
@@ -741,9 +788,7 @@ class COKPMappingService:
             raise CONotFoundError()
         return await self._repo.list_by_co(co_id)
 
-    async def create(
-        self, body: COKPMappingCreate, org_id: UUID, user_id: UUID
-    ) -> COKPMapping:
+    async def create(self, body: COKPMappingCreate, org_id: UUID, user_id: UUID) -> COKPMapping:
         co = await self._co_repo.get_by_id(body.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
@@ -763,9 +808,7 @@ class COKPMappingService:
         await self._session.commit()
         return result
 
-    async def approve(
-        self, mapping_id: UUID, org_id: UUID, user_id: UUID
-    ) -> COKPMapping:
+    async def approve(self, mapping_id: UUID, org_id: UUID, user_id: UUID) -> COKPMapping:
         obj = await self._repo.get_by_id(mapping_id)
         if obj is None or obj.organization_id != org_id:
             raise SubMappingNotFoundError()
@@ -864,9 +907,7 @@ class PEOService:
             raise PEONotFoundError()
         return obj
 
-    async def create(
-        self, body: PEOCreate, org_id: UUID
-    ) -> ProgramEducationalObjective:
+    async def create(self, body: PEOCreate, org_id: UUID) -> ProgramEducationalObjective:
         existing = await self._repo.find_by_code(body.code, body.program_id)
         if existing:
             raise PEOCodeConflictError()

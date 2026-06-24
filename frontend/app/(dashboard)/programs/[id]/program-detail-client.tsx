@@ -46,6 +46,7 @@ type Program = {
   total_credits: number
   study_mode: string
   description?: string | null
+  po_version_id?: string | null
   status: string
 }
 
@@ -75,6 +76,7 @@ type ProgramOutcome = {
 
 type PEOPOMapping = { id: string; peo_id: string; program_outcome_id: string }
 type PEOMissionMapping = { id: string; peo_id: string; mission_id: string }
+type POVersion = { id: string; name: string; is_active: boolean }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -387,9 +389,81 @@ function PEOsCard({ programId }: { programId: string }) {
   )
 }
 
+// ── PO List Card (by version) ────────────────────────────────────────────────
+
+function POListCard({ programId, poVersionId }: { programId: string; poVersionId?: string | null }) {
+  const [selectedVersion, setSelectedVersion] = useState(poVersionId ?? "")
+
+  const { data: poVersions = [] } = useQuery({
+    queryKey: queryKeys.poVersions.list(),
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/po-versions" as never)
+      return ((data as unknown) as POVersion[]) ?? []
+    },
+  })
+
+  const { data: pos = [], isLoading } = useQuery({
+    queryKey: queryKeys.programOutcomes.byVersion(selectedVersion || programId),
+    queryFn: async () => {
+      const url = selectedVersion
+        ? `/program-outcomes?program_id=${programId}&po_version_id=${selectedVersion}`
+        : `/program-outcomes?program_id=${programId}`
+      const { data } = await apiClient.GET(url as never)
+      return ((data as unknown) as ProgramOutcome[]) ?? []
+    },
+  })
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Program Outcomes</CardTitle>
+          <div className="w-48">
+            <Select value={selectedVersion} onValueChange={(v) => { if (v != null) setSelectedVersion(v === "__all__" ? "" : v) }}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select version">
+                  {selectedVersion
+                    ? poVersions.find((v) => v.id === selectedVersion)?.name ?? "Select version"
+                    : "All versions"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All versions</SelectItem>
+                {poVersions.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => <div key={i} className="h-10 animate-pulse rounded bg-muted" />)}
+          </div>
+        ) : pos.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No program outcomes found.</p>
+        ) : (
+          <ul className="space-y-2">
+            {[...pos].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })).map((po) => (
+              <li key={po.id} className="flex items-start gap-2 rounded-md border p-2.5">
+                <Badge variant="secondary" className="mt-0.5 shrink-0 font-mono text-xs">
+                  {po.code}
+                </Badge>
+                <p className="flex-1 text-sm leading-relaxed whitespace-pre-line">{po.statement}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── PEO-PO Mapping Card ───────────────────────────────────────────────────────
 
-function PEOPOMappingCard({ programId }: { programId: string }) {
+function PEOPOMappingCard({ programId, poVersionId }: { programId: string; poVersionId?: string | null }) {
   const qc = useQueryClient()
 
   const { data: peos = [] } = useQuery({
@@ -401,9 +475,12 @@ function PEOPOMappingCard({ programId }: { programId: string }) {
   })
 
   const { data: pos = [] } = useQuery({
-    queryKey: queryKeys.programOutcomes.list(),
+    queryKey: queryKeys.programOutcomes.list({ program_id: programId }),
     queryFn: async () => {
-      const { data } = await apiClient.GET("/program-outcomes" as never)
+      const url = poVersionId
+        ? `/program-outcomes?program_id=${programId}&po_version_id=${poVersionId}`
+        : `/program-outcomes?program_id=${programId}`
+      const { data } = await apiClient.GET(url as never)
       return (data as unknown as ProgramOutcome[]) ?? []
     },
   })
@@ -868,12 +945,13 @@ export function ProgramDetailClient({ id }: Props) {
           </PermissionGate>
         </div>
 
-        {/* Right — Mission, PEO, and Mappings */}
+        {/* Right — Mission, PEO, POs, and Mappings */}
         <div className="space-y-6 lg:col-span-3">
           <MissionsCard programId={id} />
           <PEOsCard programId={id} />
-          <PEOPOMappingCard programId={id} />
           <PEOMissionMappingCard programId={id} />
+          <POListCard programId={id} poVersionId={data?.po_version_id} />
+          <PEOPOMappingCard programId={id} poVersionId={data?.po_version_id} />
         </div>
       </div>
     </div>

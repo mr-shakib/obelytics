@@ -23,9 +23,9 @@ const prefetchers: Record<string, (qc: QueryClient) => void> = {
   },
   "/program-outcomes": (qc) => {
     qc.prefetchQuery({
-      queryKey: queryKeys.programOutcomes.list(),
+      queryKey: queryKeys.poVersions.list(),
       queryFn: async () => {
-        const { data } = await apiClient.GET("/program-outcomes" as never)
+        const { data } = await apiClient.GET("/po-versions" as never)
         return data
       },
     })

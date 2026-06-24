@@ -1,7 +1,9 @@
 from datetime import date
 from uuid import UUID
-from sqlalchemy import select, and_, desc
+
+from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.modules.org.models import Department, DepartmentHeadHistory, Organization, Program
 
 

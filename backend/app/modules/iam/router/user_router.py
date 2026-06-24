@@ -124,8 +124,8 @@ async def get_user(
     _: Annotated[PermissionManifestResponse, Depends(require_permission("user.read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from app.modules.iam.repository.user_repository import UserRepository
     from app.modules.iam.exceptions import UserNotFoundError
+    from app.modules.iam.repository.user_repository import UserRepository
     repo = UserRepository(db)
     user = await repo.find_by_id(user_id)
     if not user:
@@ -200,7 +200,7 @@ async def activate_user(
 @router.delete("/{user_id}", status_code=204)
 async def delete_user(
     user_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("user.delete"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = UserService(db)

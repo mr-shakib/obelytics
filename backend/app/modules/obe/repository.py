@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import and_, delete, exists, select
+from sqlalchemy import and_, delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.obe.models import (
@@ -15,10 +15,75 @@ from app.modules.obe.models import (
     PEOMissionMapping,
     PEOPOMapping,
     POKnowledgeProfile,
+    POVersion,
     ProgramEducationalObjective,
     ProgramMission,
     ProgramOutcome,
 )
+
+
+class POVersionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_active(self, org_id: UUID) -> list[POVersion]:
+        result = await self._session.execute(
+            select(POVersion)
+            .where(and_(POVersion.organization_id == org_id, POVersion.is_active.is_(True)))
+            .order_by(POVersion.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def list_all(self, org_id: UUID) -> list[POVersion]:
+        result = await self._session.execute(
+            select(POVersion)
+            .where(POVersion.organization_id == org_id)
+            .order_by(POVersion.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def get_by_id(self, version_id: UUID, org_id: UUID) -> POVersion | None:
+        result = await self._session.execute(
+            select(POVersion).where(
+                and_(POVersion.id == version_id, POVersion.organization_id == org_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def find_by_name(self, name: str, org_id: UUID) -> POVersion | None:
+        result = await self._session.execute(
+            select(POVersion).where(
+                and_(POVersion.name == name, POVersion.organization_id == org_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def count_pos(self, version_id: UUID) -> int:
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(ProgramOutcome)
+            .where(
+                and_(
+                    ProgramOutcome.po_version_id == version_id,
+                    ProgramOutcome.status == "ACTIVE",
+                )
+            )
+        )
+        return result.scalar() or 0
+
+    async def create(self, obj: POVersion) -> POVersion:
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
+
+    async def update(self, obj: POVersion, data: dict) -> POVersion:
+        for key, value in data.items():
+            setattr(obj, key, value)
+        self._session.add(obj)
+        await self._session.flush()
+        await self._session.refresh(obj)
+        return obj
 
 
 class PORepository:
@@ -33,14 +98,20 @@ class PORepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_active(self, org_id: UUID, program_id: UUID | None = None) -> list[ProgramOutcome]:
+    async def list_active(
+        self, org_id: UUID, program_id: UUID | None = None, po_version_id: UUID | None = None
+    ) -> list[ProgramOutcome]:
         stmt = (
             select(ProgramOutcome)
-            .where(and_(ProgramOutcome.organization_id == org_id, ProgramOutcome.status == "ACTIVE"))
+            .where(
+                and_(ProgramOutcome.organization_id == org_id, ProgramOutcome.status == "ACTIVE")
+            )
             .order_by(ProgramOutcome.order_index)
         )
         if program_id:
             stmt = stmt.where(ProgramOutcome.program_id == program_id)
+        if po_version_id:
+            stmt = stmt.where(ProgramOutcome.po_version_id == po_version_id)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -134,16 +205,16 @@ class CORepository:
         )
         return list(result.scalars().all())
 
-    async def list_by_course_fallback(
-        self, course_id: UUID, org_id: UUID
-    ) -> list[CourseOutcome]:
+    async def list_by_course_fallback(self, course_id: UUID, org_id: UUID) -> list[CourseOutcome]:
         result = await self._session.execute(
-            select(CourseOutcome).where(
+            select(CourseOutcome)
+            .where(
                 and_(
                     CourseOutcome.course_id == course_id,
                     CourseOutcome.organization_id == org_id,
                 )
-            ).order_by(CourseOutcome.code)
+            )
+            .order_by(CourseOutcome.code)
         )
         seen_codes: set[str] = set()
         unique: list[CourseOutcome] = []
@@ -209,7 +280,9 @@ class CORepository:
 
     async def set_bloom_levels(self, co_id: UUID, bloom_level_ids: list[UUID]) -> None:
         await self._session.execute(
-            delete(CourseOutcomeBloomLevel).where(CourseOutcomeBloomLevel.course_outcome_id == co_id)
+            delete(CourseOutcomeBloomLevel).where(
+                CourseOutcomeBloomLevel.course_outcome_id == co_id
+            )
         )
         for bloom_level_id in dict.fromkeys(bloom_level_ids):
             self._session.add(
@@ -329,9 +402,7 @@ class MappingEntryRepository:
         )
         return result.scalar_one_or_none()
 
-    async def upsert(
-        self, set_id: UUID, co_id: UUID, po_id: UUID, weight: int
-    ) -> COPOMappingEntry:
+    async def upsert(self, set_id: UUID, co_id: UUID, po_id: UUID, weight: int) -> COPOMappingEntry:
         existing = await self.find_by_set_co_po(set_id, co_id, po_id)
         if existing:
             existing.weight = weight
@@ -571,9 +642,7 @@ class PEORepository:
         )
         return list(result.scalars().all())
 
-    async def find_by_code(
-        self, code: str, program_id: UUID
-    ) -> ProgramEducationalObjective | None:
+    async def find_by_code(self, code: str, program_id: UUID) -> ProgramEducationalObjective | None:
         result = await self._session.execute(
             select(ProgramEducationalObjective).where(
                 and_(
@@ -631,9 +700,7 @@ class PEOPOMappingRepository:
     async def replace_for_peo(
         self, peo_id: UUID, org_id: UUID, po_ids: list[UUID]
     ) -> list[PEOPOMapping]:
-        await self._session.execute(
-            delete(PEOPOMapping).where(PEOPOMapping.peo_id == peo_id)
-        )
+        await self._session.execute(delete(PEOPOMapping).where(PEOPOMapping.peo_id == peo_id))
         results = []
         for po_id in dict.fromkeys(po_ids):
             obj = PEOPOMapping(organization_id=org_id, peo_id=peo_id, program_outcome_id=po_id)

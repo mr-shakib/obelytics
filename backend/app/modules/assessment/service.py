@@ -762,6 +762,8 @@ class ResultPublicationService:
         await engine.compute_for_section_offering(offering_id, org_id)
         await self._session.commit()
 
+        return result
+
     async def bulk_approve_ml(
         self,
         org_id: UUID,
@@ -1358,16 +1360,9 @@ class MarksheetService:
         po_attainment_by_po: dict[UUID, Decimal] = {}
         po_contributing_count: dict[UUID, int] = {}
         for po_id, entries in po_entries_by_po.items():
-            weighted_sum = Decimal("0")
-            weight_sum = Decimal("0")
-            contributing = 0
-            for entry in entries:
-                if entry.course_outcome_id in co_avg_attainment:
-                    w = Decimal(str(entry.weight))
-                    weighted_sum += co_avg_attainment[entry.course_outcome_id] * w
-                    weight_sum += w
-                    contributing += 1
-            po_attainment_by_po[po_id] = weighted_sum / weight_sum if weight_sum > 0 else Decimal("0")
+            contributing = sum(
+                1 for e in entries if e.course_outcome_id in all_co_ids
+            )
             po_contributing_count[po_id] = contributing
 
         po_threshold_pass_count: dict[UUID, int] = defaultdict(int)
@@ -1389,23 +1384,20 @@ class MarksheetService:
             po_marks: dict[str, Decimal] = {}
             po_pct: dict[str, Decimal] = {}
             for po_id, entries in po_entries_by_po.items():
-                weighted_sum = Decimal("0")
-                weight_sum = Decimal("0")
-                for entry in entries:
-                    if entry.course_outcome_id in all_co_ids:
-                        w = Decimal(str(entry.weight))
-                        weighted_sum += student_co_pct[enrollment.id][entry.course_outcome_id] * w
-                        weight_sum += w
-                student_po_pct = weighted_sum / weight_sum if weight_sum > 0 else Decimal("0")
+                contributing_co_ids = po_contributing_cos.get(po_id, set())
+                total_obtained = sum(
+                    (student_co_obtained[enrollment.id].get(co_id, Decimal("0"))
+                     for co_id in contributing_co_ids),
+                    Decimal("0"),
+                )
+                total_max = po_total_max.get(po_id, Decimal("0"))
+                student_po_pct = (total_obtained / total_max * Decimal("100")) if total_max > 0 else Decimal("0")
                 po = po_map.get(po_id)
                 label = po.code if po else str(po_id)
                 po_results[label] = student_po_pct >= threshold_co_score_pct
                 if po_results[label]:
                     po_threshold_pass_count[po_id] += 1
-                po_marks[label] = round(
-                    sum((student_co_obtained[enrollment.id][co_id] for co_id in po_contributing_cos[po_id]), Decimal("0")),
-                    2,
-                )
+                po_marks[label] = round(total_obtained, 2)
                 po_pct[label] = round(student_po_pct, 2)
 
             students.append(
@@ -1422,6 +1414,15 @@ class MarksheetService:
                 )
             )
 
+        po_attainment_by_po = {
+            po_id: (
+                Decimal(str(po_threshold_pass_count[po_id]))
+                / Decimal(str(total_students)) * Decimal("100")
+                if total_students > 0 else Decimal("0")
+            )
+            for po_id in po_entries_by_po
+        }
+
         po_previews: list[POAttainmentPreview] = []
         for po_id in po_entries_by_po:
             po = po_map.get(po_id)
@@ -1434,7 +1435,7 @@ class MarksheetService:
                     contributing_co_count=po_contributing_count[po_id],
                     students_above_threshold=po_threshold_pass_count[po_id],
                     total_students=total_students,
-                    is_attained=po_attainment_by_po[po_id] >= threshold_co_score_pct,
+                    is_attained=po_attainment_by_po[po_id] > Decimal("50"),
                 )
             )
 
@@ -1604,19 +1605,16 @@ class MarksheetService:
 
             po_results = []
             for po_id, po_ents in po_entries.items():
-                weighted_sum = Decimal("0")
-                weight_sum = Decimal("0")
-                for entry in po_ents:
-                    if entry.course_outcome_id in co_max_marks:
-                        max_marks = co_max_marks[entry.course_outcome_id]
-                        if max_marks > 0:
-                            pct = co_obtained[entry.course_outcome_id] / max_marks * Decimal("100")
-                        else:
-                            pct = Decimal("0")
-                        w = Decimal(str(entry.weight))
-                        weighted_sum += pct * w
-                        weight_sum += w
-                student_po_pct = float(weighted_sum / weight_sum) if weight_sum > 0 else 0.0
+                contributing_co_ids = {e.course_outcome_id for e in po_ents if e.course_outcome_id in co_max_marks}
+                total_obtained = sum(
+                    (co_obtained.get(co_id, Decimal("0")) for co_id in contributing_co_ids),
+                    Decimal("0"),
+                )
+                total_max = sum(
+                    (co_max_marks[co_id] for co_id in contributing_co_ids),
+                    Decimal("0"),
+                )
+                student_po_pct = float(total_obtained / total_max * Decimal("100")) if total_max > 0 else 0.0
                 po = po_map.get(po_id)
                 po_results.append({
                     "po_code": po.code if po else str(po_id),

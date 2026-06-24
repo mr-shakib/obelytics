@@ -41,6 +41,8 @@ class POAttainmentRow(BaseModel):
     program_outcome_id: UUID
     attainment_pct: Decimal
     contributing_co_count: int
+    students_above_threshold: int
+    total_students: int
     is_attained: bool
 
 

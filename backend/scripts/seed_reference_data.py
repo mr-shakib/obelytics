@@ -11,6 +11,7 @@ Seeds default reference data for an organization:
 If --org-id is omitted, uses the first organization found in the database.
 Safe to re-run: skips records that already exist.
 """
+
 import asyncio
 import os
 import sys
@@ -23,6 +24,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+from app.modules.obe.models import POVersion
 from app.modules.org.models import Organization
 from app.modules.ref_data.models import (
     AssessmentType,
@@ -104,6 +106,11 @@ _MAPPING_WEIGHTS = [
     (3, "High"),
 ]
 
+_PO_VERSIONS = [
+    ("Version 2.1", "Program Outcome Version 2.1"),
+    ("Version 3", "Program Outcome Version 3"),
+]
+
 
 async def resolve_org_id(org_id: UUID | None) -> UUID:
     if org_id is not None:
@@ -129,11 +136,15 @@ async def seed(org_id: UUID) -> None:
         # Bloom domains
         for domain_name, domain_desc, levels in _BLOOM_DOMAINS:
             result = await session.execute(
-                select(BloomDomain).where(BloomDomain.organization_id == org_id, BloomDomain.name == domain_name)
+                select(BloomDomain).where(
+                    BloomDomain.organization_id == org_id, BloomDomain.name == domain_name
+                )
             )
             domain = result.scalar_one_or_none()
             if domain is None:
-                domain = BloomDomain(organization_id=org_id, name=domain_name, description=domain_desc)
+                domain = BloomDomain(
+                    organization_id=org_id, name=domain_name, description=domain_desc
+                )
                 session.add(domain)
                 await session.flush()
                 print(f"  Created Bloom domain: {domain_name} ({domain.id})")
@@ -149,14 +160,23 @@ async def seed(org_id: UUID) -> None:
                     )
                 )
                 if r.scalar_one_or_none() is None:
-                    session.add(BloomLevel(organization_id=org_id, bloom_domain_id=domain.id,
-                                           code=code, name=name, order_index=order))
+                    session.add(
+                        BloomLevel(
+                            organization_id=org_id,
+                            bloom_domain_id=domain.id,
+                            code=code,
+                            name=name,
+                            order_index=order,
+                        )
+                    )
                     print(f"    Created Bloom level: {code} - {name}")
 
         # Delivery methods
         for name, desc in _DELIVERY_METHODS:
             r = await session.execute(
-                select(DeliveryMethod).where(DeliveryMethod.organization_id == org_id, DeliveryMethod.name == name)
+                select(DeliveryMethod).where(
+                    DeliveryMethod.organization_id == org_id, DeliveryMethod.name == name
+                )
             )
             if r.scalar_one_or_none() is None:
                 session.add(DeliveryMethod(organization_id=org_id, name=name, description=desc))
@@ -165,7 +185,9 @@ async def seed(org_id: UUID) -> None:
         # Course categories
         for name, desc in _COURSE_CATEGORIES:
             r = await session.execute(
-                select(CourseCategory).where(CourseCategory.organization_id == org_id, CourseCategory.name == name)
+                select(CourseCategory).where(
+                    CourseCategory.organization_id == org_id, CourseCategory.name == name
+                )
             )
             if r.scalar_one_or_none() is None:
                 session.add(CourseCategory(organization_id=org_id, name=name, description=desc))
@@ -174,10 +196,14 @@ async def seed(org_id: UUID) -> None:
         # Assessment types
         for name, is_sessional in _ASSESSMENT_TYPES:
             r = await session.execute(
-                select(AssessmentType).where(AssessmentType.organization_id == org_id, AssessmentType.name == name)
+                select(AssessmentType).where(
+                    AssessmentType.organization_id == org_id, AssessmentType.name == name
+                )
             )
             if r.scalar_one_or_none() is None:
-                session.add(AssessmentType(organization_id=org_id, name=name, is_sessional=is_sessional))
+                session.add(
+                    AssessmentType(organization_id=org_id, name=name, is_sessional=is_sessional)
+                )
                 print(f"  Created assessment type: {name}")
 
         # Mapping weight labels
@@ -189,8 +215,19 @@ async def seed(org_id: UUID) -> None:
                 )
             )
             if r.scalar_one_or_none() is None:
-                session.add(MappingWeightLabel(organization_id=org_id, weight_value=value, label=label))
+                session.add(
+                    MappingWeightLabel(organization_id=org_id, weight_value=value, label=label)
+                )
                 print(f"  Created mapping weight: {value} = {label}")
+
+        # PO Versions
+        for name, desc in _PO_VERSIONS:
+            r = await session.execute(
+                select(POVersion).where(POVersion.organization_id == org_id, POVersion.name == name)
+            )
+            if r.scalar_one_or_none() is None:
+                session.add(POVersion(organization_id=org_id, name=name, description=desc))
+                print(f"  Created PO version: {name}")
 
         await session.commit()
         print("\nReference data seeded successfully.")
@@ -200,8 +237,11 @@ async def seed(org_id: UUID) -> None:
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Seed default reference data for an organization")
-    parser.add_argument("--org-id", default=None, help="Organization UUID (auto-detected if omitted)")
+    parser.add_argument(
+        "--org-id", default=None, help="Organization UUID (auto-detected if omitted)"
+    )
     args = parser.parse_args()
 
     org_id = UUID(args.org_id) if args.org_id else None
