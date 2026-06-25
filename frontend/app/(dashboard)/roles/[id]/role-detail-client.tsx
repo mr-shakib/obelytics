@@ -108,7 +108,7 @@ export function RoleDetailClient({ id }: Props) {
               <ArrowLeft /> Roles
             </Button>
             {isDirty && !role.is_system && (
-              <PermissionGate permission="roles.manage">
+              <PermissionGate permission="system.permissions.grant">
                 <Button
                   size="sm"
                   onClick={() => {

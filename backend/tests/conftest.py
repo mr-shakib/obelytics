@@ -71,6 +71,8 @@ TEST_TEACHER_EMAIL    = "test_teacher@obelytics-test.com"
 TEST_TEACHER_PASSWORD = "TestTeacher@123"
 TEST_ML_EMAIL         = "test_ml@obelytics-test.com"
 TEST_ML_PASSWORD      = "TestML@123"
+TEST_PC_EMAIL         = "test_pc@obelytics-test.com"
+TEST_PC_PASSWORD      = "TestPC@123"
 
 _SCHEMAS = [
     "events", "iam", "org", "config", "curriculum", "obe",
@@ -197,6 +199,15 @@ async def _seed_db(session: AsyncSession) -> None:
     session.add(UserRoleAssignment(user_id=ml.id, role_id=role_map["Module Leader"].id,
         scope_type="PROGRAM", scope_id=None, assigned_by=admin.id))
 
+    pc = User(organization_id=TEST_ORG_ID, email=TEST_PC_EMAIL,
+              full_name="Test Program Coordinator", employee_id="TPCOORD1", status="ACTIVE")
+    session.add(pc)
+    await session.flush()
+    session.add(PasswordCredential(user_id=pc.id,
+        hashed_password=hash_password(TEST_PC_PASSWORD), must_change_password=False))
+    session.add(UserRoleAssignment(user_id=pc.id, role_id=role_map["Program Coordinator"].id,
+        scope_type="PROGRAM", scope_id=None, assigned_by=admin.id))
+
     await session.commit()
 
 
@@ -250,6 +261,16 @@ async def ml_auth_headers(client: AsyncClient) -> dict[str, str]:
     resp = await client.post(
         "/api/v1/auth/login",
         json={"email": TEST_ML_EMAIL, "password": TEST_ML_PASSWORD},
+    )
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest_asyncio.fixture
+async def pc_auth_headers(client: AsyncClient) -> dict[str, str]:
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": TEST_PC_EMAIL, "password": TEST_PC_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}

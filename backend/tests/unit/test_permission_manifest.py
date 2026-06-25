@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis_client import get_redis
 from app.modules.iam.models import User
-from app.modules.iam.service.permission_service import PermissionManifestBuilder
+from app.modules.iam.service.permission_service import PermissionManifestBuilder, manifest_cache_key
 from tests.conftest import TEST_ADMIN_EMAIL, TEST_ML_EMAIL, TEST_TEACHER_EMAIL
 
 
@@ -83,7 +83,7 @@ async def test_manifest_is_cached_in_redis(db_session: AsyncSession):
 
     # Clear cache first
     redis = await get_redis()
-    await redis.delete(f"auth:{admin.id}:manifest")
+    await redis.delete(manifest_cache_key(admin.id))
 
     builder = PermissionManifestBuilder(db_session)
 
@@ -91,7 +91,7 @@ async def test_manifest_is_cached_in_redis(db_session: AsyncSession):
     manifest1 = await builder.build_manifest(admin.id)
 
     # Verify key is in Redis
-    cached = await redis.get(f"auth:{admin.id}:manifest")
+    cached = await redis.get(manifest_cache_key(admin.id))
     assert cached is not None
     cached_data = json.loads(cached)
     assert cached_data["is_super_admin"] is True
@@ -110,17 +110,17 @@ async def test_manifest_invalidation_clears_cache(db_session: AsyncSession):
     admin = result.scalar_one()
 
     redis = await get_redis()
-    await redis.delete(f"auth:{admin.id}:manifest")
+    await redis.delete(manifest_cache_key(admin.id))
 
     builder = PermissionManifestBuilder(db_session)
     await builder.build_manifest(admin.id)
 
     # Confirm cached
-    assert await redis.get(f"auth:{admin.id}:manifest") is not None
+    assert await redis.get(manifest_cache_key(admin.id)) is not None
 
     # Invalidate
     await builder.invalidate(admin.id)
-    assert await redis.get(f"auth:{admin.id}:manifest") is None
+    assert await redis.get(manifest_cache_key(admin.id)) is None
 
 
 @pytest.mark.asyncio
@@ -134,3 +134,13 @@ async def test_manifest_role_names_listed(db_session: AsyncSession):
     manifest = await builder.build_manifest(admin.id)
 
     assert "Super Admin" in manifest.role_names
+
+
+def test_full_access_roles_include_every_seeded_permission():
+    from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
+
+    all_codes = {permission["code"] for permission in ALL_PERMISSIONS}
+    roles_by_name = {role["name"]: set(role["permissions"]) for role in ROLES}
+
+    assert roles_by_name["Super Admin"] == all_codes
+    assert roles_by_name["Program Coordinator"] == all_codes

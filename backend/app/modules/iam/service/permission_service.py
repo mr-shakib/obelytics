@@ -9,7 +9,12 @@ from app.modules.iam.repository.user_repository import UserRepository
 from app.modules.iam.schemas import PermissionManifestResponse
 
 MANIFEST_TTL_SECONDS = 300  # 5-minute cache, matches access token TTL window
+MANIFEST_CACHE_VERSION = 2
 SUPER_ADMIN_ROLE_NAME = "Super Admin"
+
+
+def manifest_cache_key(user_id: UUID) -> str:
+    return f"auth:{user_id}:manifest:v{MANIFEST_CACHE_VERSION}"
 
 
 class PermissionManifestBuilder:
@@ -18,7 +23,7 @@ class PermissionManifestBuilder:
 
     async def build_manifest(self, user_id: UUID) -> PermissionManifestResponse:
         redis = await get_redis()
-        cache_key = f"auth:{user_id}:manifest"
+        cache_key = manifest_cache_key(user_id)
 
         cached = await redis.get(cache_key)
         if cached:
@@ -31,7 +36,10 @@ class PermissionManifestBuilder:
 
     async def invalidate(self, user_id: UUID) -> None:
         redis = await get_redis()
-        await redis.delete(f"auth:{user_id}:manifest")
+        await redis.delete(
+            manifest_cache_key(user_id),
+            f"auth:{user_id}:manifest",
+        )
 
     async def _load_manifest(self, user_id: UUID) -> PermissionManifestResponse:
         repo = UserRepository(self._session)

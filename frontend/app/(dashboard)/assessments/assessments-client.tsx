@@ -149,7 +149,7 @@ export function AssessmentsClient() {
         title="Assessments"
         description="Manage course assessments."
         actions={
-          <PermissionGate permission="assessment.create">
+          <PermissionGate permission="assessment.configure">
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger render={<Button />}>
                 <Plus className="h-4 w-4" />

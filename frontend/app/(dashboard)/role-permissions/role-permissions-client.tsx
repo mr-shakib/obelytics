@@ -7,6 +7,7 @@ import { Loader2, Save, Shield, Check, Lock, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuthStore } from "@/lib/stores/auth-store"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -55,11 +56,13 @@ function Cell({
   checked,
   indeterminate = false,
   locked = false,
+  disabled = false,
   onChange,
 }: {
   checked: boolean
   indeterminate?: boolean
   locked?: boolean
+  disabled?: boolean
   onChange?: () => void
 }) {
   if (locked) {
@@ -77,12 +80,14 @@ function Cell({
       type="button"
       role="checkbox"
       aria-checked={indeterminate ? "mixed" : checked}
+      disabled={disabled}
       onClick={onChange}
       className={cn(
         "mx-auto flex size-5 items-center justify-center rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         checked || indeterminate
           ? "bg-primary border-primary text-primary-foreground"
-          : "border-input bg-background hover:border-primary/50"
+          : "border-input bg-background hover:border-primary/50",
+        disabled && "cursor-default opacity-70 hover:border-input"
       )}
     >
       {indeterminate ? (
@@ -97,6 +102,8 @@ function Cell({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function RolePermissionsClient() {
+  const canEdit = useAuthStore((state) => state.manifest?.scope.is_global ?? false)
+
   // ── Remote data ─────────────────────────────────────────────────────────────
 
   const { data: roles = [], isLoading: rolesLoading } = useQuery({
@@ -119,27 +126,23 @@ export function RolePermissionsClient() {
 
   const [draft, setDraft] = useState<Record<string, Set<string>>>({})
   const [dirty, setDirty] = useState<Set<string>>(new Set())
-  const [initialized, setInitialized] = useState(false)
 
-  // Seed draft from remote once roles are loaded
-  const rolesKey = roles.map((r) => r.id).join(",")
-  useMemo(() => {
-    if (roles.length === 0) return
-    const init: Record<string, Set<string>> = {}
-    for (const role of roles) init[role.id] = new Set(role.permission_codes)
-    setDraft(init)
-    setDirty(new Set())
-    setInitialized(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rolesKey])
+  function grantedCodes(roleId: string) {
+    return draft[roleId] ?? new Set(
+      roles.find((role) => role.id === roleId)?.permission_codes ?? []
+    )
+  }
 
   function isGranted(roleId: string, code: string) {
-    return draft[roleId]?.has(code) ?? false
+    return grantedCodes(roleId).has(code)
   }
 
   function toggle(roleId: string, code: string) {
+    if (!canEdit) return
     setDraft((prev) => {
-      const next = new Set(prev[roleId] ?? [])
+      const next = new Set(
+        prev[roleId] ?? roles.find((role) => role.id === roleId)?.permission_codes ?? []
+      )
       if (next.has(code)) next.delete(code)
       else next.add(code)
       return { ...prev, [roleId]: next }
@@ -148,9 +151,15 @@ export function RolePermissionsClient() {
   }
 
   function toggleModule(roleId: string, codes: string[], on: boolean) {
+    if (!canEdit) return
     setDraft((prev) => {
-      const next = new Set(prev[roleId] ?? [])
-      for (const c of codes) on ? next.add(c) : next.delete(c)
+      const next = new Set(
+        prev[roleId] ?? roles.find((role) => role.id === roleId)?.permission_codes ?? []
+      )
+      for (const code of codes) {
+        if (on) next.add(code)
+        else next.delete(code)
+      }
       return { ...prev, [roleId]: next }
     })
     setDirty((prev) => new Set([...prev, roleId]))
@@ -165,7 +174,7 @@ export function RolePermissionsClient() {
 
       await Promise.all(
         [...dirty].map((roleId) => {
-          const ids = [...(draft[roleId] ?? [])].map((c) => permByCode[c]).filter(Boolean)
+          const ids = [...grantedCodes(roleId)].map((c) => permByCode[c]).filter(Boolean)
           return apiClient.PUT(`/roles/${roleId}/permissions` as never, {
             body: { permission_ids: ids },
           } as never)
@@ -200,7 +209,7 @@ export function RolePermissionsClient() {
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
-  if (rolesLoading || permsLoading || !initialized) {
+  if (rolesLoading || permsLoading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground p-8">
         <Loader2 className="animate-spin h-4 w-4" />
@@ -215,9 +224,13 @@ export function RolePermissionsClient() {
     <div className="space-y-4">
       <PageHeader
         title="Permission Management"
-        description="Control which permissions each role has. Super Admin always retains all permissions."
+        description={
+          canEdit
+            ? "Control which permissions each role has. Super Admin always retains all permissions."
+            : "View every permission and the roles that currently receive it."
+        }
         actions={
-          dirty.size > 0 ? (
+          canEdit && dirty.size > 0 ? (
             <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? <Loader2 className="animate-spin" /> : <Save />}
               Save Changes
@@ -311,15 +324,17 @@ export function RolePermissionsClient() {
                     </td>
                     {displayRoles.map((role) => {
                       const locked = LOCKED_ROLES.includes(role.name)
-                      const allOn  = moduleCodes.every((c) => draft[role.id]?.has(c))
-                      const someOn = moduleCodes.some((c) => draft[role.id]?.has(c))
+                      const roleCodes = grantedCodes(role.id)
+                      const allOn = moduleCodes.every((code) => roleCodes.has(code))
+                      const someOn = moduleCodes.some((code) => roleCodes.has(code))
                       return (
                         <td key={role.id} className="border-r last:border-r-0 text-center py-2">
-                          <Cell
-                            checked={allOn}
-                            indeterminate={someOn && !allOn}
-                            locked={locked}
-                            onChange={() => toggleModule(role.id, moduleCodes, !allOn)}
+                      <Cell
+                        checked={allOn}
+                        indeterminate={someOn && !allOn}
+                        locked={locked}
+                        disabled={!canEdit}
+                        onChange={() => toggleModule(role.id, moduleCodes, !allOn)}
                           />
                         </td>
                       )
@@ -366,6 +381,7 @@ export function RolePermissionsClient() {
                             <Cell
                               checked={granted}
                               locked={locked}
+                              disabled={!canEdit}
                               onChange={() => toggle(role.id, perm.code)}
                             />
                           </td>
@@ -381,7 +397,7 @@ export function RolePermissionsClient() {
       </div>
 
       {/* Sticky save bar */}
-      {dirty.size > 0 && (
+      {canEdit && dirty.size > 0 && (
         <div className="sticky bottom-4 flex justify-end pointer-events-none">
           <div className="flex items-center gap-3 rounded-xl border bg-background/95 backdrop-blur px-4 py-2.5 shadow-lg pointer-events-auto">
             <span className="text-sm text-muted-foreground">

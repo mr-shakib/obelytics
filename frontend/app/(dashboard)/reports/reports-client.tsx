@@ -96,7 +96,7 @@ export function ReportsClient() {
                 {def.description && (
                   <p className="text-xs text-muted-foreground">{def.description}</p>
                 )}
-                <PermissionGate permission="reports.generate">
+                <PermissionGate permission="report.generate">
                   <Button
                     size="sm"
                     className="w-full"

@@ -91,7 +91,7 @@ export function AttainmentClient() {
             <Button variant="outline" size="sm" render={<Link href="/attainment/trends" />}>
               <TrendingUp /> Trends
             </Button>
-            <PermissionGate permission="attainment.compute">
+            <PermissionGate permission="attainment.initiate">
               <Button
                 size="sm"
                 onClick={() => triggerMutation.mutate()}

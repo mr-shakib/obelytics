@@ -102,7 +102,7 @@ export function RefDataClient() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Bloom&apos;s Taxonomy Domains</CardTitle>
-          <PermissionGate permission="system.refdata.manage">
+          <PermissionGate permission="config.manage">
             <Dialog open={bdOpen} onOpenChange={setBdOpen}>
               <DialogTrigger render={<Button size="sm" />}>
                 <Plus /> Add Level
@@ -165,7 +165,7 @@ export function RefDataClient() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Assessment Types</CardTitle>
-          <PermissionGate permission="system.refdata.manage">
+          <PermissionGate permission="config.manage">
             <Dialog open={atOpen} onOpenChange={setAtOpen}>
               <DialogTrigger render={<Button size="sm" />}>
                 <Plus /> Add Type

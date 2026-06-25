@@ -70,15 +70,15 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Attainment", href: "/attainment", icon: BarChart3, permission: "attainment.read", group: "Assessment" },
 
   // Reports & Accreditation
-  { label: "Reports", href: "/reports", icon: FileText, permission: "report.export", group: "Reports" },
-  { label: "Accreditation", href: "/accreditation", icon: Award, permission: "accreditation.cycle.manage", group: "Reports" },
+  { label: "Reports", href: "/reports", icon: FileText, permission: "report.generate", group: "Reports" },
+  { label: "Accreditation", href: "/accreditation", icon: Award, permission: "accreditation.read", group: "Reports" },
 
   // System
   { label: "Notifications", href: "/notifications", icon: Bell, permission: null, group: "System" },
   { label: "Roles", href: "/roles", icon: Shield, permission: "system.roles.create", group: "System" },
   { label: "Permissions", href: "/role-permissions", icon: ShieldCheck, permission: "system.permissions.grant", group: "System" },
   { label: "System Settings", href: "/system-settings", icon: Wrench, permission: "system.organization.configure", group: "System" },
-  { label: "Reference Data", href: "/ref-data", icon: Database, permission: "config.bloom.manage", group: "System" },
+  { label: "Reference Data", href: "/ref-data", icon: Database, permission: "config.manage", group: "System" },
   { label: "Audit Log", href: "/audit", icon: ScrollText, permission: "system.audit.read", group: "System" },
 ]
 

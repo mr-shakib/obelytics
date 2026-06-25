@@ -59,7 +59,10 @@ async def create_role(
 
 @router.get("/permissions/all", response_model=list[PermissionResponse])
 async def list_all_permissions(
-    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    _: Annotated[
+        PermissionManifestResponse,
+        Depends(require_permission("system.permissions.grant")),
+    ],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     repo = PermissionRepository(db)
@@ -68,11 +71,14 @@ async def list_all_permissions(
 
 @router.get("/with-permissions", response_model=list[RoleWithPermissionsResponse])
 async def list_roles_with_permissions(
-    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    _: Annotated[
+        PermissionManifestResponse,
+        Depends(require_permission("system.permissions.grant")),
+    ],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Return all roles together with their current permission codes (super admin only)."""
+    """Return all roles and permission codes to permission-management users."""
     role_repo = RoleRepository(db)
     roles = await role_repo.list_by_org(current_user.organization_id)
     result = []

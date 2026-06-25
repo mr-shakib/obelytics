@@ -96,7 +96,7 @@ export function AssessmentDetailClient({ id }: Props) {
       />
 
       {!isLocked && (
-        <PermissionGate permission="assessment.update">
+        <PermissionGate permission="assessment.configure">
           <Card>
             <CardHeader>
               <CardTitle>Edit Assessment</CardTitle>

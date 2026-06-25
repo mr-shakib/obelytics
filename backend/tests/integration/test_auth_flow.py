@@ -219,6 +219,25 @@ async def test_admin_can_list_all_permissions(
 
 
 @pytest.mark.asyncio
+async def test_program_coordinator_can_view_permission_matrix(
+    client: AsyncClient, pc_auth_headers: dict
+):
+    permissions_resp = await client.get(
+        "/api/v1/roles/permissions/all",
+        headers=pc_auth_headers,
+    )
+    roles_resp = await client.get(
+        "/api/v1/roles/with-permissions",
+        headers=pc_auth_headers,
+    )
+
+    assert permissions_resp.status_code == 200
+    assert roles_resp.status_code == 200
+    assert len(permissions_resp.json()) > 0
+    assert any(role["name"] == "Program Coordinator" for role in roles_resp.json())
+
+
+@pytest.mark.asyncio
 async def test_teacher_cannot_list_all_permissions(
     client: AsyncClient, teacher_auth_headers: dict
 ):

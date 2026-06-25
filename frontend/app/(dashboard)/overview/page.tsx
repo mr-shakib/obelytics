@@ -15,7 +15,7 @@ const QUICK_LINKS = [
   { label: "Assessments", href: "/assessments", icon: ClipboardList, permission: "assessment.read", description: "Configure assessments" },
   { label: "Attainment", href: "/attainment", icon: BarChart3, permission: "attainment.read", description: "View CO/PO attainment results" },
   { label: "Approvals", href: "/approvals", icon: CheckSquare, permission: null, description: "Review pending approvals" },
-  { label: "Accreditation", href: "/accreditation", icon: Award, permission: "accreditation.cycle.manage", description: "Manage accreditation cycles" },
+  { label: "Accreditation", href: "/accreditation", icon: Award, permission: "accreditation.read", description: "Manage accreditation cycles" },
 ]
 
 function QuickLinkCard({ item }: { item: typeof QUICK_LINKS[0] }) {
