@@ -65,8 +65,13 @@ type ModuleLeaderAssignment = {
 type User = {
   id: string
   full_name: string
+  employee_id?: string | null
   faculty_type: string | null
   status: string
+}
+
+function userDisplayLabel(user: User) {
+  return user.employee_id ? `${user.employee_id} - ${user.full_name}` : user.full_name
 }
 
 // ── Assign control ────────────────────────────────────────────────────────────
@@ -82,7 +87,7 @@ function AssignModuleLeader({
 }) {
   const [userId, setUserId] = useState<string>("")
   const options = useMemo(
-    () => facultyUsers.map((u) => ({ value: u.id, label: u.full_name })),
+    () => facultyUsers.map((u) => ({ value: u.id, label: userDisplayLabel(u) })),
     [facultyUsers]
   )
 
@@ -95,7 +100,8 @@ function AssignModuleLeader({
         placeholder="Select faculty…"
         searchPlaceholder="Search faculty…"
         emptyText="No faculty found."
-        triggerClassName="h-8 w-56 text-xs"
+        className="[&_[cmdk-item]]:whitespace-nowrap"
+        triggerClassName="h-8 w-64 text-xs"
       />
       <Button
         size="sm"
@@ -165,7 +171,7 @@ export function ModuleLeadersClient() {
     [users]
   )
   const userMap = useMemo(
-    () => Object.fromEntries(users.map((u) => [u.id, u.full_name])),
+    () => Object.fromEntries(users.map((u) => [u.id, userDisplayLabel(u)])),
     [users]
   )
 
@@ -315,7 +321,9 @@ export function ModuleLeadersClient() {
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="gap-1.5 text-xs font-normal">
                           <UserCog className="h-3 w-3" />
-                          {userMap[ml.user_id] ?? "Unknown user"}
+                          <span className="max-w-64 truncate whitespace-nowrap">
+                            {userMap[ml.user_id] ?? "Unknown user"}
+                          </span>
                         </Badge>
                         {canManage && (
                           <button

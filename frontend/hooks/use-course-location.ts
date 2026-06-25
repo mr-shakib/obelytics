@@ -5,7 +5,9 @@ import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 
 type Curriculum = { id: string }
+type Batch = { id: string; curriculum_id: string }
 type CourseSlot = { curriculum_term_definition_id: string; course_id: string }
+type ModuleLeaderAssignment = { batch_id: string; course_id: string }
 
 /**
  * Resolves which curriculum and term a course belongs to, by scanning the
@@ -34,6 +36,24 @@ export function useResolveCourseLocation(courseId: string) {
     })),
   })
 
+  const { data: myModuleAssignments = [] } = useQuery({
+    queryKey: queryKeys.moduleLeaderAssignments.mine,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/module-leader-assignments/mine" as never)
+      return ((data as unknown) as ModuleLeaderAssignment[]) ?? []
+    },
+    enabled: !!courseId,
+  })
+
+  const { data: batches = [] } = useQuery({
+    queryKey: queryKeys.batches.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/batches" as never)
+      return ((data as unknown) as Batch[]) ?? []
+    },
+    enabled: !!courseId && myModuleAssignments.some((a) => a.course_id === courseId),
+  })
+
   if (!courseId) return null
 
   for (let i = 0; i < slotQueries.length; i++) {
@@ -42,5 +62,12 @@ export function useResolveCourseLocation(courseId: string) {
       return { curriculumId: candidates[i].id, termDefId: slot.curriculum_term_definition_id }
     }
   }
+
+  const myAssignment = myModuleAssignments.find((a) => a.course_id === courseId)
+  const assignedBatch = myAssignment
+    ? batches.find((batch) => batch.id === myAssignment.batch_id)
+    : undefined
+  if (assignedBatch) return { curriculumId: assignedBatch.curriculum_id, termDefId: "" }
+
   return null
 }

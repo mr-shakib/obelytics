@@ -18,6 +18,19 @@ import { usePermission } from "@/hooks/use-permission"
 import { useResolveCourseLocation } from "@/hooks/use-course-location"
 import type { LessonPlanItem, CourseOutcome, ProgramOutcome, CurriculumDetail } from "../course-types"
 
+type Program = { id: string; po_version_id?: string | null }
+
+async function fetchProgramOutcomes(programId: string, poVersionId?: string | null) {
+  const { data } = await apiClient.GET(`/program-outcomes?program_id=${programId}` as never)
+  const programPos = ((data as unknown) as ProgramOutcome[]) ?? []
+  if (programPos.length > 0 || !poVersionId) return programPos
+
+  const { data: versionData } = await apiClient.GET(
+    `/program-outcomes?po_version_id=${poVersionId}` as never
+  )
+  return ((versionData as unknown) as ProgramOutcome[]) ?? []
+}
+
 const lessonPlanItemSchema = z.object({
   week_number: z.number().int().min(1, "Required").max(52),
   lesson_label: z.string().max(100).optional(),
@@ -76,12 +89,21 @@ export function CourseDeliveryPlanClient({ id }: Props) {
   })
   const programId = curriculumDetail?.program_id
 
-  const { data: programOutcomes = [] } = useQuery({
-    queryKey: queryKeys.programOutcomes.list({ program_id: programId }),
+  const { data: program } = useQuery({
+    queryKey: queryKeys.programs.detail(programId ?? ""),
     queryFn: async () => {
-      const { data } = await apiClient.GET(`/program-outcomes?program_id=${programId}` as never)
-      return ((data as unknown) as ProgramOutcome[]) ?? []
+      const { data } = await apiClient.GET(`/programs/${programId}` as never)
+      return (data as unknown) as Program
     },
+    enabled: !!programId,
+  })
+
+  const { data: programOutcomes = [] } = useQuery({
+    queryKey: queryKeys.programOutcomes.list({
+      program_id: programId,
+      po_version_id: program?.po_version_id ?? undefined,
+    }),
+    queryFn: () => fetchProgramOutcomes(programId as string, program?.po_version_id),
     enabled: !!programId,
   })
 

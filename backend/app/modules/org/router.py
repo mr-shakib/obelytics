@@ -239,7 +239,7 @@ async def create_program(
 @router.get("/programs/{program_id}", response_model=ProgramResponse)
 async def get_program(
     program_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("program.update"))],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("program.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):

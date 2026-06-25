@@ -101,6 +101,28 @@ function formatProgramType(type: string) {
   return PROGRAM_TYPES.find((t) => t.value === type)?.label ?? type
 }
 
+function formatStudyMode(mode: string) {
+  return STUDY_MODES.find((m) => m.value === mode)?.label ?? mode
+}
+
+async function fetchProgramOutcomes(programId: string, poVersionId?: string | null) {
+  if (poVersionId) {
+    const programVersionUrl = `/program-outcomes?program_id=${programId}&po_version_id=${poVersionId}`
+    const { data: programVersionData } = await apiClient.GET(programVersionUrl as never)
+    const programVersionPos = ((programVersionData as unknown) as ProgramOutcome[]) ?? []
+
+    if (programVersionPos.length > 0) return programVersionPos
+
+    const { data: versionData } = await apiClient.GET(
+      `/program-outcomes?po_version_id=${poVersionId}` as never
+    )
+    return ((versionData as unknown) as ProgramOutcome[]) ?? []
+  }
+
+  const { data } = await apiClient.GET(`/program-outcomes?program_id=${programId}` as never)
+  return ((data as unknown) as ProgramOutcome[]) ?? []
+}
+
 // ── Edit Program Schema ───────────────────────────────────────────────────────
 
 const programSchema = z.object({
@@ -391,9 +413,15 @@ function PEOsCard({ programId }: { programId: string }) {
 
 // ── PO List Card (by version) ────────────────────────────────────────────────
 
-function POListCard({ programId, poVersionId }: { programId: string; poVersionId?: string | null }) {
-  const [selectedVersion, setSelectedVersion] = useState(poVersionId ?? "")
-
+function POListCard({
+  programId,
+  selectedVersion,
+  onSelectedVersionChange,
+}: {
+  programId: string
+  selectedVersion: string
+  onSelectedVersionChange: (versionId: string) => void
+}) {
   const { data: poVersions = [] } = useQuery({
     queryKey: queryKeys.poVersions.list(),
     queryFn: async () => {
@@ -403,14 +431,11 @@ function POListCard({ programId, poVersionId }: { programId: string; poVersionId
   })
 
   const { data: pos = [], isLoading } = useQuery({
-    queryKey: queryKeys.programOutcomes.byVersion(selectedVersion || programId),
-    queryFn: async () => {
-      const url = selectedVersion
-        ? `/program-outcomes?program_id=${programId}&po_version_id=${selectedVersion}`
-        : `/program-outcomes?program_id=${programId}`
-      const { data } = await apiClient.GET(url as never)
-      return ((data as unknown) as ProgramOutcome[]) ?? []
-    },
+    queryKey: queryKeys.programOutcomes.list({
+      program_id: programId,
+      po_version_id: selectedVersion || undefined,
+    }),
+    queryFn: () => fetchProgramOutcomes(programId, selectedVersion),
   })
 
   return (
@@ -419,7 +444,12 @@ function POListCard({ programId, poVersionId }: { programId: string; poVersionId
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Program Outcomes</CardTitle>
           <div className="w-48">
-            <Select value={selectedVersion} onValueChange={(v) => { if (v != null) setSelectedVersion(v === "__all__" ? "" : v) }}>
+            <Select
+              value={selectedVersion || "__all__"}
+              onValueChange={(v) => {
+                if (v != null) onSelectedVersionChange(v === "__all__" ? "" : v)
+              }}
+            >
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue placeholder="Select version">
                   {selectedVersion
@@ -475,14 +505,11 @@ function PEOPOMappingCard({ programId, poVersionId }: { programId: string; poVer
   })
 
   const { data: pos = [] } = useQuery({
-    queryKey: queryKeys.programOutcomes.list({ program_id: programId }),
-    queryFn: async () => {
-      const url = poVersionId
-        ? `/program-outcomes?program_id=${programId}&po_version_id=${poVersionId}`
-        : `/program-outcomes?program_id=${programId}`
-      const { data } = await apiClient.GET(url as never)
-      return (data as unknown as ProgramOutcome[]) ?? []
-    },
+    queryKey: queryKeys.programOutcomes.list({
+      program_id: programId,
+      po_version_id: poVersionId || undefined,
+    }),
+    queryFn: () => fetchProgramOutcomes(programId, poVersionId),
   })
 
   const mappingQueries = useQuery({
@@ -738,6 +765,7 @@ interface Props {
 
 export function ProgramDetailClient({ id }: Props) {
   const qc = useQueryClient()
+  const [selectedPoVersionId, setSelectedPoVersionId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.programs.detail(id),
@@ -791,6 +819,8 @@ export function ProgramDetailClient({ id }: Props) {
   if (isLoading) return <div className="animate-pulse h-40 bg-muted rounded-md" />
   if (!data) return <p className="text-muted-foreground">Program not found.</p>
 
+  const effectivePoVersionId = selectedPoVersionId ?? data.po_version_id ?? ""
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -799,161 +829,203 @@ export function ProgramDetailClient({ id }: Props) {
         actions={<StatusBadge status={data.status} />}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        {/* Left — Edit form */}
-        <div className="lg:col-span-2">
-          <PermissionGate permission="program.update">
-            <Card>
-              <CardHeader>
-                <CardTitle>Edit Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Title</Label>
-                    <Input id="title" {...register("title")} />
-                    {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="acronym">Acronym</Label>
-                    <Input id="acronym" {...register("acronym")} />
-                    {errors.acronym && <p className="text-sm text-destructive">{errors.acronym.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Department</Label>
-                    <Controller
-                      name="department_id"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select department">
-                              {(value: string) => value
-                                ? ((departments ?? []).find((d) => d.id === value)?.name ?? value)
-                                : null}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(departments ?? []).map((d) => (
-                              <SelectItem key={d.id} value={d.id}>
-                                {d.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    {errors.department_id && (
-                      <p className="text-sm text-destructive">{errors.department_id.message}</p>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Program Details</CardTitle>
+            <Badge variant="secondary" className="w-fit">
+              {data.acronym}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <PermissionGate
+            permission="program.update"
+            fallback={
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <DetailItem label="Title" value={data.title} className="sm:col-span-2" />
+                <DetailItem label="Department" value={data.department_name} />
+                <DetailItem label="Type" value={formatProgramType(data.program_type)} />
+                <DetailItem label="Semesters" value={`${data.minimum_duration_semesters}`} />
+                <DetailItem label="Credits" value={`${data.total_credits}`} />
+                <DetailItem label="Mode" value={formatStudyMode(data.study_mode)} />
+                <DetailItem
+                  label="Vision"
+                  value={data.description || "No vision added yet."}
+                  className="sm:col-span-2 lg:col-span-4"
+                />
+              </div>
+            }
+          >
+            <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input id="title" {...register("title")} />
+                  {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="acronym">Acronym</Label>
+                  <Input id="acronym" {...register("acronym")} />
+                  {errors.acronym && <p className="text-sm text-destructive">{errors.acronym.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Controller
+                    name="department_id"
+                    control={control}
+                    render={({ field }) => (
+                      <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select department">
+                            {(value: string) => value
+                              ? ((departments ?? []).find((d) => d.id === value)?.name ?? value)
+                              : null}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(departments ?? []).map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Type</Label>
-                    <Controller
-                      name="program_type"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select type">
-                              {(value: string) => value
-                                ? (PROGRAM_TYPES.find((t) => t.value === value)?.label ?? value)
-                                : null}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PROGRAM_TYPES.map((t) => (
-                              <SelectItem key={t.value} value={t.value}>
-                                {t.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    {errors.program_type && (
-                      <p className="text-sm text-destructive">{errors.program_type.message}</p>
+                  />
+                  {errors.department_id && (
+                    <p className="text-sm text-destructive">{errors.department_id.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Controller
+                    name="program_type"
+                    control={control}
+                    render={({ field }) => (
+                      <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select type">
+                            {(value: string) => value
+                              ? (PROGRAM_TYPES.find((t) => t.value === value)?.label ?? value)
+                              : null}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PROGRAM_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="minimum_duration_semesters">No. of Semesters</Label>
-                      <Input
-                        id="minimum_duration_semesters"
-                        type="number"
-                        min={1}
-                        max={20}
-                        {...register("minimum_duration_semesters", { valueAsNumber: true })}
-                      />
-                      {errors.minimum_duration_semesters && (
-                        <p className="text-sm text-destructive">{errors.minimum_duration_semesters.message}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="total_credits">Total Credits</Label>
-                      <Input
-                        id="total_credits"
-                        type="number"
-                        min={1}
-                        max={500}
-                        {...register("total_credits", { valueAsNumber: true })}
-                      />
-                      {errors.total_credits && (
-                        <p className="text-sm text-destructive">{errors.total_credits.message}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Mode</Label>
-                    <Controller
-                      name="study_mode"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select mode">
-                              {(value: string) => value
-                                ? (STUDY_MODES.find((m) => m.value === value)?.label ?? value)
-                                : null}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STUDY_MODES.map((m) => (
-                              <SelectItem key={m.value} value={m.value}>
-                                {m.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    {errors.study_mode && (
-                      <p className="text-sm text-destructive">{errors.study_mode.message}</p>
+                  />
+                  {errors.program_type && (
+                    <p className="text-sm text-destructive">{errors.program_type.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="minimum_duration_semesters">No. of Semesters</Label>
+                  <Input
+                    id="minimum_duration_semesters"
+                    type="number"
+                    min={1}
+                    max={20}
+                    {...register("minimum_duration_semesters", { valueAsNumber: true })}
+                  />
+                  {errors.minimum_duration_semesters && (
+                    <p className="text-sm text-destructive">{errors.minimum_duration_semesters.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="total_credits">Total Credits</Label>
+                  <Input
+                    id="total_credits"
+                    type="number"
+                    min={1}
+                    max={500}
+                    {...register("total_credits", { valueAsNumber: true })}
+                  />
+                  {errors.total_credits && (
+                    <p className="text-sm text-destructive">{errors.total_credits.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Mode</Label>
+                  <Controller
+                    name="study_mode"
+                    control={control}
+                    render={({ field }) => (
+                      <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select mode">
+                            {(value: string) => value
+                              ? (STUDY_MODES.find((m) => m.value === value)?.label ?? value)
+                              : null}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STUDY_MODES.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>
+                              {m.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Vision</Label>
-                    <Textarea id="description" rows={2} {...register("description")} />
-                  </div>
-                  <Button type="submit" disabled={!isDirty || isSubmitting || mutation.isPending}>
-                    {(isSubmitting || mutation.isPending) && <Loader2 className="animate-spin" />}
-                    Save Changes
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+                  />
+                  {errors.study_mode && (
+                    <p className="text-sm text-destructive">{errors.study_mode.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2 md:col-span-2 xl:col-span-4">
+                  <Label htmlFor="description">Vision</Label>
+                  <Textarea id="description" rows={3} {...register("description")} />
+                </div>
+              </div>
+              <Button type="submit" disabled={!isDirty || isSubmitting || mutation.isPending}>
+                {(isSubmitting || mutation.isPending) && <Loader2 className="animate-spin" />}
+                Save Changes
+              </Button>
+            </form>
           </PermissionGate>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* Right — Mission, PEO, POs, and Mappings */}
-        <div className="space-y-6 lg:col-span-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="space-y-6">
           <MissionsCard programId={id} />
           <PEOsCard programId={id} />
           <PEOMissionMappingCard programId={id} />
-          <POListCard programId={id} poVersionId={data?.po_version_id} />
-          <PEOPOMappingCard programId={id} poVersionId={data?.po_version_id} />
+        </div>
+
+        <div className="space-y-6">
+          <POListCard
+            programId={id}
+            selectedVersion={effectivePoVersionId}
+            onSelectedVersionChange={(versionId) => setSelectedPoVersionId(versionId)}
+          />
+          <PEOPOMappingCard programId={id} poVersionId={effectivePoVersionId} />
         </div>
       </div>
+    </div>
+  )
+}
+
+function DetailItem({
+  label,
+  value,
+  className,
+}: {
+  label: string
+  value: string
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm leading-relaxed">{value}</p>
     </div>
   )
 }

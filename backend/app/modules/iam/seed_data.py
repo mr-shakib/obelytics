@@ -12,6 +12,7 @@ ALL_PERMISSIONS: list[dict] = [
     {"code": "department.update",             "module": "org",          "description": "Update departments"},
     {"code": "department.archive",            "module": "org",          "description": "Archive departments"},
     {"code": "program.create",                "module": "org",          "description": "Create programs"},
+    {"code": "program.read",                  "module": "org",          "description": "Read programs"},
     {"code": "program.update",                "module": "org",          "description": "Update programs"},
     {"code": "program.archive",               "module": "org",          "description": "Archive programs"},
     {"code": "user.create",                   "module": "iam",          "description": "Create users"},
@@ -123,7 +124,7 @@ ROLES: list[dict] = [
         "permissions": [
             "system.organization.configure",
             "department.create", "department.update",
-            "program.create", "program.update",
+            "program.create", "program.read", "program.update",
             "user.create", "user.read", "user.update", "user.delete", "user.role.assign",
             "config.manage",
             "curriculum.create", "curriculum.update", "curriculum.version", "curriculum.read",
@@ -149,7 +150,7 @@ ROLES: list[dict] = [
         "name": _ML,
         "description": "Reviews COs and marks for assigned courses",
         "permissions": [
-            "curriculum.read", "po.read",
+            "curriculum.read", "po.read", "program.read",
             "course.update",
             "section_offering.manage_own", "faculty_assignment.section_teacher",
             "co.read", "co.create", "co.update", "co.approve", "co.reject",
@@ -173,7 +174,7 @@ ROLES: list[dict] = [
         "name": _ST,
         "description": "Creates COs and enters marks for assigned sections",
         "permissions": [
-            "curriculum.read", "po.read",
+            "curriculum.read", "po.read", "program.read",
             "co.create", "co.update", "co.submit", "co.read",
             "mapping.co_po.read",
             "mapping.co_cp.manage", "mapping.co_ca.manage", "mapping.co_kp.manage",

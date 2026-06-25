@@ -71,6 +71,7 @@ async def test_ml_manifest_has_only_ml_permissions(db_session: AsyncSession):
     assert "co.publish" not in manifest.permissions
     assert "attainment.initiate" not in manifest.permissions
     assert "user.create" not in manifest.permissions
+    assert "program.read" in manifest.permissions
 
 
 @pytest.mark.asyncio
