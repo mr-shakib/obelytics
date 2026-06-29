@@ -125,6 +125,7 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
         <Badge variant="outline">Attainment threshold: {Number(data.threshold_co_score_pct)}%</Badge>
+        <Badge variant="secondary">% achieved = students at/above threshold</Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -278,7 +279,8 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                 <TableRow>
                   <TableHead>CO</TableHead>
                   <TableHead className="text-right">Max Marks</TableHead>
-                  <TableHead className="text-right">Avg Attainment</TableHead>
+                  <TableHead className="text-right">Threshold Marks</TableHead>
+                  <TableHead className="text-right">% Students Achieved</TableHead>
                   <TableHead className="text-right">Students &ge; Threshold</TableHead>
                   <TableHead className="text-right">Attained</TableHead>
                 </TableRow>
@@ -288,7 +290,12 @@ export function AttainmentPanel({ sectionOfferingId }: Props) {
                   <TableRow key={co.course_outcome_id}>
                     <TableCell className="font-medium">{co.co_code}</TableCell>
                     <TableCell className="text-right">{Number(co.max_marks)}</TableCell>
-                    <TableCell className="text-right">{Number(co.average_attainment_pct).toFixed(1)}%</TableCell>
+                    <TableCell className="text-right">
+                      {(Number(co.max_marks) * Number(data.threshold_co_score_pct) / 100).toFixed(1)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {co.total_students > 0 ? Math.round((co.students_above_threshold / co.total_students) * 100) : 0}%
+                    </TableCell>
                     <TableCell className="text-right">
                       {co.students_above_threshold}/{co.total_students}
                     </TableCell>

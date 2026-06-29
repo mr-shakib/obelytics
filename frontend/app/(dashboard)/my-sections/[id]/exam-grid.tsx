@@ -72,6 +72,20 @@ const EXAM_LABEL: Record<string, string> = { MID: "Mid Term", FINAL: "Final Exam
 
 // ── Main exam grid ────────────────────────────────────────────────────────────
 
+function formatMarkLabel(value: number) {
+  return value.toFixed(2).replace(/\.?0+$/, "")
+}
+
+function formatMarkValue(value: number | "") {
+  return value === "" ? "" : formatMarkLabel(Number(value))
+}
+
+function questionImportHeaders(question: MarksheetQuestion) {
+  const label = question.label.trim()
+  const marksLabel = formatMarkLabel(Number(question.max_marks))
+  return [label, `${label} (${marksLabel} marks)`, `${label} [${marksLabel} marks]`]
+}
+
 export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }: Props) {
   const qc = useQueryClient()
   const canEnterMarks = useHasAnyPermission(["marks.enter"]) && !locked
@@ -117,6 +131,7 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
       }
       absentMap.set(student.enrollment_id, rowAbsent)
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCells(cellMap)
     setAbsent(absentMap)
     setDirtyCells(new Set())
@@ -156,7 +171,7 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
 
   const hasOverMaxMarks = useMemo(() => {
     for (const key of dirtyCells) {
-      const [enrollmentId, questionId] = key.split(":")
+      const [, questionId] = key.split(":")
       const q = questions.find((q) => q.id === questionId)
       const cell = cells.get(key)
       if (q && typeof cell?.value === "number" && cell.value > Number(q.max_marks)) {
@@ -236,10 +251,22 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
 
   async function downloadTemplate() {
     const XLSX = await getXLSX()
-    const headers = ["Student ID", ...questions.map((q) => q.label)]
-    const sampleRow = grid?.students.slice(0, 2).map((s) => [s.student_id_number, ...questions.map(() => "")]) ?? []
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRow])
-    ws["!cols"] = [{ wch: 18 }, ...questions.map(() => ({ wch: 10 }))]
+    const headers = [
+      "Student ID",
+      "Full Name",
+      ...questions.map((q) => questionImportHeaders(q)[1]),
+    ]
+    const studentRows = grid?.students.map((s) => [
+      s.student_id_number,
+      s.full_name,
+      ...questions.map(() => ""),
+    ]) ?? []
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...studentRows])
+    ws["!cols"] = [
+      { wch: 18 },
+      { wch: 28 },
+      ...questions.map((q) => ({ wch: Math.max(14, questionImportHeaders(q)[1].length + 2) })),
+    ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Marks")
     XLSX.writeFile(wb, `${examType}_marks_template.xlsx`)
@@ -263,7 +290,11 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
           return
         }
 
-        const questionMap = new Map(questions.map((q) => [q.label.toLowerCase(), q]))
+        const questionMap = new Map(
+          questions.flatMap((q) =>
+            questionImportHeaders(q).map((header) => [header.toLowerCase().trim(), q] as const)
+          )
+        )
         const studentMap = new Map(grid?.students.map((s) => [s.student_id_number, s]) ?? [])
         let updated = 0
         let skipped = 0
@@ -279,7 +310,12 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
 
           for (const [col, val] of Object.entries(row)) {
             const colLower = col.toLowerCase().trim()
-            if (colLower === "student id" || colLower === "student_id") continue
+            if (
+              colLower === "student id"
+              || colLower === "student_id"
+              || colLower === "full name"
+              || colLower === "full_name"
+            ) continue
 
             const question = questionMap.get(colLower)
             if (!question) continue
@@ -385,12 +421,12 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
                       <TableHead key={q.id} className="text-center">
                         <div>{q.label}</div>
                         <div className="text-xs font-normal text-muted-foreground">
-                          /{Number(q.max_marks)}{co && co.code !== q.label ? ` · ${co.code}` : ""}
+                          /{formatMarkLabel(Number(q.max_marks))}{co && co.code !== q.label ? ` · ${co.code}` : ""}
                         </div>
                       </TableHead>
                     )
                   })}
-                  <TableHead className="text-center">Total (/{totalMaxMarks})</TableHead>
+                  <TableHead className="text-center">Total (/{formatMarkLabel(totalMaxMarks)})</TableHead>
                   <TableHead className="text-center">Absent</TableHead>
                 </TableRow>
               </TableHeader>
@@ -415,7 +451,7 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
                                 max={Number(q.max_marks)}
                                 step="0.5"
                                 disabled={rowAbsent}
-                                value={cell?.value ?? ""}
+                                value={formatMarkValue(cell?.value ?? "")}
                                 onChange={(e) => handleCellChange(student.enrollment_id, q.id, e.target.value)}
                                 className={cn(
                                   "h-8 w-16 px-1 text-center mx-auto disabled:opacity-40",
@@ -426,13 +462,13 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
                                 )}
                               />
                             ) : (
-                              <span>{rowAbsent ? "AB" : cell?.value ?? "—"}</span>
+                              <span>{rowAbsent ? "AB" : cell?.value !== undefined ? formatMarkValue(cell.value) : "—"}</span>
                             )}
                           </TableCell>
                         )
                       })}
                       <TableCell className="text-center font-medium">
-                        {rowAbsent ? "AB" : rowTotal(student.enrollment_id)}
+                        {rowAbsent ? "AB" : formatMarkLabel(rowTotal(student.enrollment_id))}
                       </TableCell>
                       <TableCell className="text-center">
                         {canEnterMarks ? (

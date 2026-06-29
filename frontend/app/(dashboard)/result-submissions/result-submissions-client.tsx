@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { BookOpen, ChevronRight, Loader2, Send } from "lucide-react"
+import { BarChart3, BookOpen, ChevronRight, GraduationCap, Loader2, Send } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -162,6 +162,7 @@ export function ResultSubmissionsClient() {
           const submittedCount = course.items.filter((i) => i.status !== "DRAFT").length
           const notSubmittedCount = total - submittedCount
           const reviewCount = course.items.filter((i) => i.status === "SUBMITTED").length
+          const firstItem = course.items[0]
 
           const isSubmitting = bulkApproveMutation.isPending && bulkApproveMutation.variables === course.course_id
 
@@ -202,6 +203,34 @@ export function ResultSubmissionsClient() {
                   </div>
                 </CardContent>
               </Link>
+              <CardContent className="flex flex-wrap gap-2 pt-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      href={`/result-submissions/${course.course_id}/dashboard?code=${encodeURIComponent(course.course_code)}&title=${encodeURIComponent(course.course_title)}`}
+                    />
+                  }
+                >
+                  <BarChart3 /> Course Dashboard
+                </Button>
+                {firstItem && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    nativeButton={false}
+                    render={
+                      <Link
+                        href={`/result-submissions/batches/${firstItem.batch_id}/dashboard?batch=${encodeURIComponent(firstItem.batch_name)}`}
+                      />
+                    }
+                  >
+                    <GraduationCap /> Batch PO Dashboard
+                  </Button>
+                )}
+              </CardContent>
               {canSubmitToPC && reviewCount > 0 && (
                 <CardContent className="pt-0">
                   <Button

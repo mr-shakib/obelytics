@@ -19,25 +19,64 @@ type BulkRow = Record<string, string | number | undefined>
 type BulkImportError = { row: number; student_id_number: string; message: string }
 type BulkImportResult = { created: number; updated: number; errors: BulkImportError[] }
 
-const TEMPLATE_COLUMNS = ["student_id_number", "full_name", "email"]
+const TEMPLATE_COLUMNS = [
+  { key: "student_id_number", label: "Student ID Number", required: true },
+  { key: "full_name", label: "Full Name", required: true },
+  { key: "email", label: "Email", required: false },
+]
 
-const COLUMN_GUIDE: { key: string; required: boolean; description: string; example: string }[] = [
-  { key: "student_id_number", required: true, description: "Unique student ID / roll number", example: "221-15-1234" },
-  { key: "full_name", required: true, description: "Student's full name", example: "Jane Doe" },
-  { key: "email", required: false, description: "Student's email address — leave blank if not available", example: "jane@example.com" },
+const COLUMN_GUIDE: { key: string; label: string; required: boolean; description: string; example: string }[] = [
+  { key: "student_id_number", label: "Student ID Number", required: true, description: "Unique student ID / roll number", example: "221-15-1234" },
+  { key: "full_name", label: "Full Name", required: true, description: "Student's full name", example: "Jane Doe" },
+  { key: "email", label: "Email", required: false, description: "Student's email address — leave blank if not available", example: "jane@example.com" },
 ]
 
 async function downloadTemplate() {
-  const XLSX = await getXLSX()
-  const ws = XLSX.utils.aoa_to_sheet([
-    TEMPLATE_COLUMNS,
-    ["221-15-1234", "Jane Doe", "jane@example.com"],
-    ["221-15-1235", "John Smith", ""],
-  ])
-  ws["!cols"] = TEMPLATE_COLUMNS.map(() => ({ wch: 20 }))
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, "Students")
-  XLSX.writeFile(wb, "student_import_template.xlsx")
+  const ExcelJS = await import("exceljs")
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet("Students")
+
+  ws.addRow(TEMPLATE_COLUMNS.map((c) => c.label))
+  ws.addRow(["221-15-1234", "Jane Doe", "jane@example.com"])
+  ws.addRow(["221-15-1235", "John Smith", ""])
+
+  const header = ws.getRow(1)
+  header.eachCell((cell, colNumber) => {
+    const column = TEMPLATE_COLUMNS[colNumber - 1]
+    cell.font = { bold: true, color: { argb: column.required ? "FFFF0000" : "FF000000" } }
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD9EAD3" },
+    }
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    }
+  })
+
+  ws.columns = [
+    { key: "student_id_number", width: 22 },
+    { key: "full_name", width: 28 },
+    { key: "email", width: 30 },
+  ]
+
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = "student_import_template.xlsx"
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function readCell(row: BulkRow, key: string): string {
+  const column = TEMPLATE_COLUMNS.find((c) => c.key === key)
+  const value = row[key] ?? (column ? row[column.label] : undefined)
+  return String(value ?? "").trim()
 }
 
 export function ImportStudentsClient() {
@@ -70,9 +109,9 @@ export function ImportStudentsClient() {
     mutationFn: async () => {
       const body = {
         students: rows.map((r) => ({
-          student_id_number: String(r["student_id_number"] ?? "").trim(),
-          full_name: String(r["full_name"] ?? "").trim(),
-          email: String(r["email"] ?? "").trim() || null,
+          student_id_number: readCell(r, "student_id_number"),
+          full_name: readCell(r, "full_name"),
+          email: readCell(r, "email") || null,
           batch_id: batchId ?? null,
         })),
       }
@@ -160,8 +199,8 @@ export function ImportStudentsClient() {
             <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
               <li>Open the downloaded template — it already has the correct column headers and two example rows.</li>
               <li>Replace the example rows with your students, one row per student. Don&apos;t rename, reorder, or remove columns.</li>
-              <li><span className="font-mono text-foreground">student_id_number</span> and <span className="font-mono text-foreground">full_name</span> are required for every row.</li>
-              <li><span className="font-mono text-foreground">email</span> is optional — leave it blank if a student doesn&apos;t have one.</li>
+              <li><span className="font-medium text-foreground">Student ID Number</span> and <span className="font-medium text-foreground">Full Name</span> are required for every row.</li>
+              <li><span className="font-medium text-foreground">Email</span> is optional — leave it blank if a student doesn&apos;t have one.</li>
               <li>If a student ID already exists in the system, that student&apos;s name/email will be updated instead of creating a duplicate.</li>
               <li>Save the file as .xlsx, .xls, or .csv and upload it above.</li>
             </ol>
@@ -178,7 +217,7 @@ export function ImportStudentsClient() {
                 <tbody>
                   {COLUMN_GUIDE.map((c) => (
                     <tr key={c.key} className="border-t">
-                      <td className="whitespace-nowrap px-2 py-1.5 font-mono">{c.key}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 font-medium">{c.label}</td>
                       <td className="whitespace-nowrap px-2 py-1.5">
                         {c.required
                           ? <Badge variant="secondary" className="text-[10px]">Required</Badge>

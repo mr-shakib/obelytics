@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/table"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { cn } from "@/lib/utils"
 
 type COAttainment = {
   course_outcome_id: string
@@ -35,6 +36,7 @@ type AttainmentResponse = {
   cos: COAttainment[]
   pos: POAttainment[]
   students: StudentAttainmentRow[]
+  threshold_co_score_pct: number
 }
 
 interface Props {
@@ -57,6 +59,7 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
   const cos = [...data.cos].sort((a, b) => naturalSort(a.co_code, b.co_code))
   const pos = [...data.pos].sort((a, b) => naturalSort(a.po_code, b.po_code))
+  const threshold = Number(data.threshold_co_score_pct)
 
   if (data.students.length === 0) {
     return <p className="text-muted-foreground">No students enrolled in this section.</p>
@@ -65,7 +68,12 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Marks vs CO/PO</CardTitle>
+        <CardTitle className="text-sm">
+          Marks vs CO/PO
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            Below threshold: &lt; {threshold}%
+          </span>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
@@ -74,7 +82,7 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
               <TableHead>ID</TableHead>
               <TableHead>Name</TableHead>
               {cos.map((co) => (
-                <TableHead key={co.course_outcome_id} className="text-center bg-blue-50 dark:bg-blue-950/30">
+                <TableHead key={co.course_outcome_id} className="text-center bg-blue-200 text-blue-950 dark:bg-blue-900/70 dark:text-blue-50">
                   {co.co_code}
                   <span className="block text-[10px] font-normal text-muted-foreground">
                     /{Number(co.max_marks)}
@@ -82,7 +90,7 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
                 </TableHead>
               ))}
               {pos.map((po) => (
-                <TableHead key={po.program_outcome_id} className="text-center bg-amber-50 dark:bg-amber-950/30">
+                <TableHead key={po.program_outcome_id} className="text-center bg-amber-200 text-amber-950 dark:bg-amber-900/70 dark:text-amber-50">
                   {po.po_code}
                   <span className="block text-[10px] font-normal text-muted-foreground">
                     /{Number(po.max_marks)}
@@ -96,22 +104,48 @@ export function MarksCoPoPanel({ sectionOfferingId }: Props) {
               <TableRow key={student.enrollment_id}>
                 <TableCell className="font-mono text-xs">{student.student_id_number}</TableCell>
                 <TableCell>{student.full_name}</TableCell>
-                {cos.map((co) => (
-                  <TableCell key={co.course_outcome_id} className="text-center bg-blue-50/50 dark:bg-blue-950/20">
-                    {Number(student.co_marks[co.co_code] ?? 0)} / {Number(co.max_marks)}
-                    <span className="block text-[10px] text-muted-foreground">
-                      {Number(student.co_pct[co.co_code] ?? 0).toFixed(1)}%
+                {cos.map((co) => {
+                  const pct = Number(student.co_pct[co.co_code] ?? 0)
+                  const belowThreshold = pct < threshold
+                  return (
+                    <TableCell
+                      key={co.course_outcome_id}
+                      className={cn(
+                        "text-center bg-blue-100/80 dark:bg-blue-950/40",
+                        belowThreshold && "bg-red-100 text-red-800 font-semibold dark:bg-red-950/35 dark:text-red-200"
+                      )}
+                    >
+                      {Number(student.co_marks[co.co_code] ?? 0)} / {Number(co.max_marks)}
+                      <span className={cn(
+                        "block text-[10px]",
+                        belowThreshold ? "text-red-700 dark:text-red-200" : "text-muted-foreground"
+                      )}>
+                        {pct.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                  )
+                })}
+                {pos.map((po) => {
+                  const pct = Number(student.po_pct[po.po_code] ?? 0)
+                  const belowThreshold = pct < threshold
+                  return (
+                    <TableCell
+                      key={po.program_outcome_id}
+                      className={cn(
+                        "text-center bg-amber-100/80 dark:bg-amber-950/40",
+                        belowThreshold && "bg-red-100 text-red-800 font-semibold dark:bg-red-950/35 dark:text-red-200"
+                      )}
+                    >
+                      {Number(student.po_marks[po.po_code] ?? 0)} / {Number(po.max_marks)}
+                      <span className={cn(
+                        "block text-[10px]",
+                        belowThreshold ? "text-red-700 dark:text-red-200" : "text-muted-foreground"
+                      )}>
+                        {pct.toFixed(1)}%
                     </span>
-                  </TableCell>
-                ))}
-                {pos.map((po) => (
-                  <TableCell key={po.program_outcome_id} className="text-center bg-amber-50/50 dark:bg-amber-950/20">
-                    {Number(student.po_marks[po.po_code] ?? 0)} / {Number(po.max_marks)}
-                    <span className="block text-[10px] text-muted-foreground">
-                      {Number(student.po_pct[po.po_code] ?? 0).toFixed(1)}%
-                    </span>
-                  </TableCell>
-                ))}
+                    </TableCell>
+                  )
+                })}
               </TableRow>
             ))}
           </TableBody>

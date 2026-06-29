@@ -236,7 +236,8 @@ class CourseOutlineService:
         bloom_level_by_id = {b.id: b for b in bloom_levels}
 
         cps = {c.id: c for c in await self._cp_repo.list_active(org_id)}
-        cas = {c.id: c for c in await self._ca_repo.list_active(org_id)}
+        # Complex Engineering Activities (EA) are hidden in the course outline PDF for now.
+        # cas = {c.id: c for c in await self._ca_repo.list_active(org_id)}
         kps = {c.id: c for c in await self._kp_repo.list_active(org_id)}
 
         pos = await self._po_repo.list_active(org_id)
@@ -285,10 +286,12 @@ class CourseOutlineService:
                     (_format_ep_code(cps[cid].code) for cid in co_cp_ids[co.id] if cid in cps),
                     key=_natural_key,
                 ),
-                "ea_codes": sorted(
-                    (cas[cid].code for cid in co_ca_ids[co.id] if cid in cas),
-                    key=_natural_key,
-                ),
+                # Complex Engineering Activities (EA) are intentionally hidden in the
+                # course outline PDF for now.
+                # "ea_codes": sorted(
+                #     (cas[cid].code for cid in co_ca_ids[co.id] if cid in cas),
+                #     key=_natural_key,
+                # ),
             })
 
         # ── Mapping justification tables (filtered to COs with mappings) ──

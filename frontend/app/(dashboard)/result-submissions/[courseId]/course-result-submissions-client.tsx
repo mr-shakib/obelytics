@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
-import { ArrowLeft, ArrowRight, Check, Download, ExternalLink, FileText, Loader2, Send } from "lucide-react"
+import { ArrowLeft, ArrowRight, BarChart3, Check, Download, ExternalLink, FileText, GraduationCap, Loader2, Send } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -211,6 +211,30 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                 {group.label}
               </p>
               <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      href={`/result-submissions/${courseId}/dashboard?code=${encodeURIComponent(headerCode ?? "")}&title=${encodeURIComponent(headerTitle ?? "")}`}
+                    />
+                  }
+                >
+                  <BarChart3 /> Course Dashboard
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      href={`/result-submissions/batches/${group.batch_id}/dashboard?term_id=${group.academic_term_id}&batch=${encodeURIComponent(group.items[0]?.batch_name ?? "")}&term=${encodeURIComponent(group.label)}`}
+                    />
+                  }
+                >
+                  <GraduationCap /> Batch PO Dashboard
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"

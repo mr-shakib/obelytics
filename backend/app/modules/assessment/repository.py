@@ -70,8 +70,7 @@ class StudentRepository:
 
     async def update(self, obj: Student, data: dict) -> Student:
         for key, value in data.items():
-            if value is not None:
-                setattr(obj, key, value)
+            setattr(obj, key, value)
         self._session.add(obj)
         await self._session.flush()
         await self._session.refresh(obj)
