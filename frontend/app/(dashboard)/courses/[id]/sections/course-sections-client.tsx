@@ -94,7 +94,11 @@ const DEPENDENT_LABELS: { key: keyof SectionDependents; label: string }[] = [
   { key: "faculty_assignments", label: "faculty assignment(s)" },
 ]
 
-const NEXT_SECTION_LABEL = (count: number) => String.fromCharCode(65 + count) // A, B, C…
+const NEXT_SECTION_LETTER = (count: number) => String.fromCharCode(65 + count) // A, B, C…
+
+function batchNumberFromName(batchName: string) {
+  return batchName.match(/\d+/)?.[0]
+}
 
 // ── Delete section (with cascade confirmation) ─────────────────────────────────
 
@@ -261,17 +265,22 @@ function DeleteSectionDialog({
 // ── Add section control ───────────────────────────────────────────────────────
 
 function AddSectionInline({
+  batchName,
   existingCount,
   pending,
   onAdd,
 }: {
+  batchName: string
   existingCount: number
   pending: boolean
   onAdd: (name: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
-  const suggested = NEXT_SECTION_LABEL(existingCount)
+  const sectionLetter = NEXT_SECTION_LETTER(existingCount)
+  const suggested = batchNumberFromName(batchName)
+    ? `${batchNumberFromName(batchName)}_${sectionLetter}`
+    : sectionLetter
 
   const submit = () => {
     const label = (name.trim() || suggested).toUpperCase()
@@ -516,6 +525,7 @@ function TermSectionGroup({
             {batchName} — Semester {term.term_number} ({term.name})
           </CardTitle>
           <AddSectionInline
+            batchName={batchName}
             existingCount={offerings.length}
             pending={addMutation.isPending}
             onAdd={(name) => addMutation.mutate(name)}

@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Upload } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuthStore } from "@/lib/stores/auth-store"
 import { formatDate } from "@/lib/utils"
 
 type Department = {
@@ -34,6 +35,7 @@ type Department = {
   description?: string | null
   vision?: string | null
   mission?: string | null
+  logo_url?: string | null
   status: string
   current_hod?: { user_id: string; full_name: string } | null
   hod_history?: Array<{ user_id: string; full_name: string; effective_from: string; effective_to?: string | null }>
@@ -57,7 +59,11 @@ interface Props {
 
 export function DepartmentDetailClient({ id }: Props) {
   const qc = useQueryClient()
+  const { accessToken } = useAuthStore()
   const [hodId, setHodId] = useState("")
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.departments.detail(id),
@@ -117,6 +123,38 @@ export function DepartmentDetailClient({ id }: Props) {
     onError: () => toast.error("Failed to assign Head of Department"),
   })
 
+  const logoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData()
+      form.append("file", file)
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/departments/${id}/logo`,
+        {
+          method: "POST",
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+          body: form,
+        }
+      )
+      if (!res.ok) throw new Error("upload_failed")
+      return res.json()
+    },
+    onSuccess: () => {
+      toast.success("Department logo updated")
+      qc.invalidateQueries({ queryKey: queryKeys.departments.detail(id) })
+      qc.invalidateQueries({ queryKey: queryKeys.departments.all })
+      setLogoFile(null)
+      setLogoPreview(null)
+    },
+    onError: () => toast.error("Failed to upload department logo"),
+  })
+
+  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoFile(file)
+    setLogoPreview(URL.createObjectURL(file))
+  }
+
   if (isLoading) return <div className="animate-pulse h-40 bg-muted rounded-md" />
   if (!data) return <p className="text-muted-foreground">Department not found.</p>
 
@@ -127,6 +165,59 @@ export function DepartmentDetailClient({ id }: Props) {
         description={`Short name: ${data.short_name}`}
         actions={<StatusBadge status={data.status} />}
       />
+
+      <PermissionGate permission="department.update">
+        <Card>
+          <CardHeader>
+            <CardTitle>Department Logo</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex size-24 items-center justify-center rounded border bg-muted/20 p-3">
+              {logoPreview || data.logo_url ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logoPreview ?? data.logo_url ?? ""}
+                    alt={`${data.name} logo`}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </>
+              ) : (
+                <Upload className="size-7 text-muted-foreground" />
+              )}
+            </div>
+            <div className="space-y-3">
+              {!data.logo_url && (
+                <p className="text-sm font-medium text-amber-700">
+                  Logo upload is required for this department.
+                </p>
+              )}
+              <Input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.svg"
+                className="hidden"
+                onChange={handleLogoChange}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <Upload />
+                  {data.logo_url ? "Replace Logo" : "Upload Logo"}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!logoFile || logoMutation.isPending}
+                  onClick={() => logoFile && logoMutation.mutate(logoFile)}
+                >
+                  {logoMutation.isPending && <Loader2 className="animate-spin" />}
+                  Save Logo
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">PNG, JPG, or SVG up to 2MB.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </PermissionGate>
 
       <PermissionGate permission="department.update">
         <Card>

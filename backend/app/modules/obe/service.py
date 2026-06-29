@@ -553,7 +553,11 @@ class MappingSetService:
         results = []
         for e in entries:
             entry = await self._entry_repo.upsert(
-                set_id, e.course_outcome_id, e.program_outcome_id, e.weight
+                set_id,
+                e.course_outcome_id,
+                e.program_outcome_id,
+                e.weight,
+                e.justification.strip(),
             )
             results.append(entry)
         await self._session.commit()
@@ -683,6 +687,7 @@ class COCPMappingService:
             organization_id=org_id,
             course_outcome_id=body.course_outcome_id,
             complex_problem_id=body.complex_problem_id,
+            justification=body.justification.strip(),
             status="DRAFT",
             created_by_user_id=user_id,
         )
@@ -801,6 +806,7 @@ class COKPMappingService:
             organization_id=org_id,
             course_outcome_id=body.course_outcome_id,
             knowledge_profile_id=body.knowledge_profile_id,
+            justification=body.justification.strip(),
             status="DRAFT",
             created_by_user_id=user_id,
         )

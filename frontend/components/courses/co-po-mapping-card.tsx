@@ -6,6 +6,16 @@ import { toast } from "sonner"
 import { Grid3x3, AlertTriangle, CheckCircle2, ArrowRight, Check, Loader2 } from "lucide-react"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
@@ -22,6 +32,7 @@ type MappingEntry = {
   course_outcome_id: string
   program_outcome_id: string
   weight: 1 | 2 | 3
+  justification: string
 }
 
 type ValidationIssue = {
@@ -42,6 +53,8 @@ function matrixKey(coId: string, poId: string) {
 
 const EMPTY_ENTRIES: MappingEntry[] = []
 
+type PendingMapping = { coId: string; poId: string; coCode: string; poCode: string }
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CoPoMappingCard({
@@ -59,9 +72,12 @@ export function CoPoMappingCard({
 
   const [setId,  setSetId]  = useState<string | null>(null)
   const [matrix, setMatrix] = useState<Set<string>>(new Set())
+  const [pendingMapping, setPendingMapping] = useState<PendingMapping | null>(null)
+  const [justificationText, setJustificationText] = useState("")
   const [saving, setSaving] = useState(false)
   const pendingRef = useRef<Set<string>>(new Set())
   const matrixRef = useRef<Set<string>>(new Set())
+  const justificationsRef = useRef<Map<string, string>>(new Map())
 
   // ── Existing mapping set ─────────────────────────────────────────────────
 
@@ -103,17 +119,23 @@ export function CoPoMappingCard({
 
   useEffect(() => {
     if (existingSet !== undefined) {
-      setSetId(existingSet?.id ?? null)
+      queueMicrotask(() => setSetId(existingSet?.id ?? null))
     }
   }, [existingSet])
 
   useEffect(() => {
     const m = new Set<string>()
+    const j = new Map<string, string>()
     for (const e of existingEntries) {
-      m.add(matrixKey(e.course_outcome_id, e.program_outcome_id))
+      const key = matrixKey(e.course_outcome_id, e.program_outcome_id)
+      m.add(key)
+      j.set(key, e.justification)
     }
-    setMatrix(m)
-    matrixRef.current = m
+    queueMicrotask(() => {
+      setMatrix(m)
+      matrixRef.current = m
+      justificationsRef.current = j
+    })
   }, [existingEntries])
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -125,7 +147,12 @@ export function CoPoMappingCard({
   const flushMatrix = useCallback(async (resolvedSetId: string, matrixSnapshot: Set<string>) => {
     const entries = Array.from(matrixSnapshot).map((key) => {
       const [course_outcome_id, program_outcome_id] = key.split(":")
-      return { course_outcome_id, program_outcome_id, weight: DEFAULT_WEIGHT }
+      return {
+        course_outcome_id,
+        program_outcome_id,
+        weight: DEFAULT_WEIGHT,
+        justification: justificationsRef.current.get(key) ?? "",
+      }
     })
 
     await apiClient.PUT(`/mappings/co-po/${resolvedSetId}/entries` as never, {
@@ -159,14 +186,24 @@ export function CoPoMappingCard({
     },
   })
 
-  function toggleCell(coId: string, poId: string) {
+  function applyMapping(coId: string, poId: string, justification: string | null = null) {
     const key = matrixKey(coId, poId)
+    const isAdding = !matrixRef.current.has(key)
+    if (isAdding && !justification?.trim()) return
+
     setMatrix((prev) => {
       const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      const nextJustifications = new Map(justificationsRef.current)
+      if (next.has(key)) {
+        next.delete(key)
+        nextJustifications.delete(key)
+      } else {
+        next.add(key)
+        nextJustifications.set(key, justification!.trim())
+      }
 
       matrixRef.current = next
+      justificationsRef.current = nextJustifications
 
       // Optimistically update the react-query cache so the summary card reflects instantly
       if (setId) {
@@ -178,6 +215,7 @@ export function CoPoMappingCard({
             course_outcome_id,
             program_outcome_id,
             weight: DEFAULT_WEIGHT as 1 | 2 | 3,
+            justification: nextJustifications.get(k) ?? "",
           }
         })
         qc.setQueryData(queryKeys.coPoMappings.entries(setId), entries)
@@ -196,9 +234,27 @@ export function CoPoMappingCard({
     })
   }
 
+  function handleCellClick(co: CourseOutcome, po: ProgramOutcome) {
+    const key = matrixKey(co.id, po.id)
+    if (matrixRef.current.has(key)) {
+      applyMapping(co.id, po.id)
+      return
+    }
+    setPendingMapping({ coId: co.id, poId: po.id, coCode: co.code, poCode: po.code })
+    setJustificationText("")
+  }
+
+  function savePendingMapping() {
+    if (!pendingMapping || !justificationText.trim()) return
+    applyMapping(pendingMapping.coId, pendingMapping.poId, justificationText.trim())
+    setPendingMapping(null)
+    setJustificationText("")
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <Card id="co-po-mapping">
       <CardHeader>
         <CardTitle>CO-PO Mapping</CardTitle>
@@ -296,7 +352,7 @@ export function CoPoMappingCard({
                             <button
                               type="button"
                               className="w-full h-9 flex items-center justify-center hover:bg-accent/50 transition-colors"
-                              onClick={() => toggleCell(co.id, po.id)}
+                              onClick={() => handleCellClick(co, po)}
                               title={`${co.code} × ${po.code}${mapped ? " — Mapped" : ""}`}
                             >
                               {mapped ? (
@@ -368,5 +424,40 @@ export function CoPoMappingCard({
         )}
       </CardContent>
     </Card>
+    <Dialog open={!!pendingMapping} onOpenChange={(open) => !open && setPendingMapping(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Justification of Mapping</DialogTitle>
+          <DialogDescription>
+            {pendingMapping
+              ? `Explain why ${pendingMapping.coCode} maps to ${pendingMapping.poCode}.`
+              : "Explain this mapping."}
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          autoFocus
+          rows={4}
+          value={justificationText}
+          onChange={(event) => setJustificationText(event.target.value)}
+          placeholder="Enter justification..."
+        />
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setPendingMapping(null)
+              setJustificationText("")
+            }}
+          >
+            Cancel
+          </Button>
+          <Button type="button" disabled={!justificationText.trim()} onClick={savePendingMapping}>
+            Save mapping
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

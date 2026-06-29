@@ -32,12 +32,13 @@ import { COURSE_TYPE_LABELS, type Course, type CourseCategory, type CourseAssess
 
 const SECTIONS: { slug: string; label: string; icon: LucideIcon }[] = [
   { slug: "overview", label: "Overview", icon: LayoutDashboard },
+  { slug: "mappings", label: "Outcomes & Mappings", icon: Target },
   { slug: "delivery-plan", label: "Delivery Plan", icon: CalendarDays },
   { slug: "assessment", label: "Assessment", icon: ClipboardList },
-  { slug: "mappings", label: "Outcomes & Mappings", icon: Target },
   { slug: "materials", label: "Learning Materials", icon: BookOpen },
   { slug: "sections", label: "Sections", icon: Users },
 ]
+const REQUIRED_DELIVERY_PLAN_WEEKS = 14
 
 interface Props {
   id: string
@@ -102,7 +103,7 @@ export function CourseWorkspaceShell({ id, children }: Props) {
       const { data } = await apiClient.GET(
         `/courses/${id}/lesson-plan?curriculum_id=${curriculumId}` as never
       )
-      return ((data as unknown) as { id: string }[]) ?? []
+      return ((data as unknown) as { id: string; week_number: number }[]) ?? []
     },
     enabled: !!curriculumId,
   })
@@ -121,17 +122,6 @@ export function CourseWorkspaceShell({ id, children }: Props) {
     },
     enabled: !!curriculumId,
     retry: false,
-  })
-
-  const { data: courseCOMarks = [] } = useQuery({
-    queryKey: queryKeys.courseAssessmentPattern.byCourse(id, curriculumId ?? ""),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(
-        `/courses/${id}/assessment-pattern?curriculum_id=${curriculumId}` as never
-      )
-      return ((data as unknown) as { marks: number }[]) ?? []
-    },
-    enabled: !!curriculumId,
   })
 
   const { data: assessmentTools = [] } = useQuery({
@@ -153,7 +143,14 @@ export function CourseWorkspaceShell({ id, children }: Props) {
   checks.push({ label: "Course outcomes (COs)", done: courseOutcomes.length > 0 })
   checks.push({ label: "Assessment tools", done: assessmentToolsForCheck.length > 0 })
   checks.push({ label: "CO-PO mapping", done: !!mappingSet })
-  checks.push({ label: "Delivery plan", done: lessonPlan.length > 0 })
+  const deliveryPlanWeeks = Array.from(new Set(lessonPlan.map((item) => item.week_number))).sort(
+    (a, b) => a - b
+  )
+  const hasCompleteDeliveryPlan =
+    deliveryPlanWeeks.length === REQUIRED_DELIVERY_PLAN_WEEKS &&
+    deliveryPlanWeeks[0] === 1 &&
+    deliveryPlanWeeks.at(-1) === REQUIRED_DELIVERY_PLAN_WEEKS
+  checks.push({ label: "Delivery plan", done: hasCompleteDeliveryPlan })
 
   const completedCount = checks.filter((c) => c.done).length
   const completionPct = Math.round((completedCount / checks.length) * 100)

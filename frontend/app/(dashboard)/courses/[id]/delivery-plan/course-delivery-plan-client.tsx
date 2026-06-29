@@ -19,6 +19,107 @@ import { useResolveCourseLocation } from "@/hooks/use-course-location"
 import type { LessonPlanItem, CourseOutcome, ProgramOutcome, CurriculumDetail } from "../course-types"
 
 type Program = { id: string; po_version_id?: string | null }
+const REQUIRED_DELIVERY_PLAN_WEEKS = 14
+type MappingSet = { id: string }
+type MappingEntry = {
+  id: string
+  mapping_set_id: string
+  course_outcome_id: string
+  program_outcome_id: string
+  weight: 1 | 2 | 3
+}
+type LessonPlanWeek = {
+  weekNumber: number
+  lessonSummary: string
+  lessons: (LessonPlanItem & { displayLessonLabel: string })[]
+  coIds: string[]
+  poIds: string[]
+  tla: string
+  assessmentStrategy: string
+}
+
+function formatLessonLabel(label: string | null | undefined, fallbackNumber: number) {
+  const cleaned = label?.trim()
+  if (!cleaned) return `Lesson ${fallbackNumber}`
+  if (/^\d+$/.test(cleaned)) return `Lesson ${cleaned}`
+  return cleaned
+}
+
+function lessonReference(displayLessonLabel: string) {
+  return displayLessonLabel.replace(/^lesson\s*/i, "").trim() || displayLessonLabel
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)))
+}
+
+function groupLessonPlanByWeek(items: LessonPlanItem[]): LessonPlanWeek[] {
+  const groups = new Map<number, LessonPlanWeek & { lessonReferences: string[]; tlas: string[]; assessmentStrategies: string[] }>()
+
+  for (const item of items) {
+    const existing = groups.get(item.week_number)
+    const group = existing ?? {
+      weekNumber: item.week_number,
+      lessonSummary: "",
+      lessonReferences: [],
+      lessons: [],
+      coIds: [],
+      poIds: [],
+      tlas: [],
+      assessmentStrategies: [],
+      tla: "",
+      assessmentStrategy: "",
+    }
+    const displayLessonLabel = formatLessonLabel(item.lesson_label, group.lessons.length + 1)
+
+    group.lessonReferences.push(lessonReference(displayLessonLabel))
+    group.lessons.push({ ...item, displayLessonLabel })
+    group.coIds.push(...item.co_ids)
+    group.poIds.push(...item.po_ids)
+    if (item.tla) group.tlas.push(item.tla)
+    if (item.assessment_strategy) group.assessmentStrategies.push(item.assessment_strategy)
+    groups.set(item.week_number, group)
+  }
+
+  return Array.from(groups.values()).map((group) => ({
+    weekNumber: group.weekNumber,
+    lessonSummary: `Lesson ${group.lessonReferences.join(" & ")}`,
+    lessons: group.lessons,
+    coIds: uniqueValues(group.coIds),
+    poIds: uniqueValues(group.poIds),
+    tla: uniqueValues(group.tlas).join("; "),
+    assessmentStrategy: uniqueValues(group.assessmentStrategies).join("; "),
+  }))
+}
+
+function nextLessonNumber(items: LessonPlanItemValues[]) {
+  const previousLesson = items.at(-1)?.lesson_label?.trim()
+  const previousNumber = previousLesson?.match(/\d+$/)?.[0]
+  if (previousNumber) return String(Number(previousNumber) + 1)
+  return String(items.length + 1)
+}
+
+function currentWeekNumber(items: LessonPlanItemValues[]) {
+  return items.at(-1)?.week_number ?? 1
+}
+
+function nextWeekNumber(items: LessonPlanItemValues[]) {
+  return currentWeekNumber(items) + 1
+}
+
+function buildPoIdsFromMappedCos(coIds: string[], mappingEntries: MappingEntry[]) {
+  return uniqueValues(
+    mappingEntries
+      .filter((entry) => coIds.includes(entry.course_outcome_id))
+      .map((entry) => entry.program_outcome_id)
+  )
+}
+
+function singleSelectedCoIds(previousCoIds: string[], nextCoIds: string[]) {
+  const newlySelectedCoIds = nextCoIds.filter((coId) => !previousCoIds.includes(coId))
+  if (newlySelectedCoIds.length > 0) return [newlySelectedCoIds.at(-1) as string]
+  return nextCoIds.slice(0, 1)
+}
 
 async function fetchProgramOutcomes(programId: string, poVersionId?: string | null) {
   const { data } = await apiClient.GET(`/program-outcomes?program_id=${programId}` as never)
@@ -107,8 +208,37 @@ export function CourseDeliveryPlanClient({ id }: Props) {
     enabled: !!programId,
   })
 
+  const { data: mappingSet } = useQuery({
+    queryKey: queryKeys.coPoMappings.byCourse(curriculumId ?? "", id),
+    queryFn: async () => {
+      try {
+        const { data } = await apiClient.GET(
+          `/mappings/co-po?curriculum_id=${curriculumId}&course_id=${id}` as never
+        ) as { data: unknown }
+        return ((data as unknown) as MappingSet) ?? null
+      } catch {
+        return null
+      }
+    },
+    enabled: !!curriculumId,
+    retry: false,
+  })
+
+  const { data: mappingEntries = [] } = useQuery({
+    queryKey: queryKeys.coPoMappings.entries(mappingSet?.id ?? ""),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(
+        `/mappings/co-po/${mappingSet?.id}/entries` as never
+      )
+      return ((data as unknown) as MappingEntry[]) ?? []
+    },
+    enabled: !!mappingSet?.id,
+  })
+
   const courseOutcomeById = Object.fromEntries(courseOutcomes.map((co) => [co.id, co]))
   const programOutcomeById = Object.fromEntries(programOutcomes.map((po) => [po.id, po]))
+  const groupedLessonPlanItems = groupLessonPlanByWeek(lessonPlanItems)
+  const plannedWeeksCount = new Set(lessonPlanItems.map((item) => item.week_number)).size
 
   const toLessonPlanFormValues = (item: LessonPlanItem): LessonPlanItemValues => ({
     week_number: item.week_number,
@@ -116,7 +246,7 @@ export function CourseDeliveryPlanClient({ id }: Props) {
     topic: item.topic,
     tla: item.tla ?? "",
     assessment_strategy: item.assessment_strategy ?? "",
-    co_ids: item.co_ids,
+    co_ids: item.co_ids.slice(0, 1),
     po_ids: item.po_ids,
   })
 
@@ -138,7 +268,7 @@ export function CourseDeliveryPlanClient({ id }: Props) {
               topic: item.topic.trim(),
               tla: item.tla?.trim() || undefined,
               assessment_strategy: item.assessment_strategy?.trim() || undefined,
-              co_ids: item.co_ids,
+              co_ids: item.co_ids.slice(0, 1),
               po_ids: item.po_ids,
             })),
           },
@@ -159,7 +289,15 @@ export function CourseDeliveryPlanClient({ id }: Props) {
 
   return (
     <Card>
-      <CardHeader><CardTitle>Delivery Plan</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Delivery Plan</CardTitle>
+        {curriculumId && (
+          <p className="text-sm text-muted-foreground">
+            Delivery plan must cover all {REQUIRED_DELIVERY_PLAN_WEEKS} weeks to complete course customization.
+            {lessonPlanItems.length > 0 && ` Currently planned: ${plannedWeeksCount}/${REQUIRED_DELIVERY_PLAN_WEEKS} weeks.`}
+          </p>
+        )}
+      </CardHeader>
       <CardContent>
         {!curriculumId ? (
           <p className="text-sm text-muted-foreground">
@@ -236,8 +374,19 @@ export function CourseDeliveryPlanClient({ id }: Props) {
                             <OutcomeCheckboxPopover
                               options={courseOutcomes}
                               value={coField.value}
-                              onChange={coField.onChange}
-                              placeholder="Select COs"
+                              onChange={(nextCoIds) => {
+                                const nextSingleCoIds = singleSelectedCoIds(
+                                  coField.value,
+                                  nextCoIds
+                                )
+                                coField.onChange(nextSingleCoIds)
+                                lessonPlanForm.setValue(
+                                  `items.${index}.po_ids`,
+                                  buildPoIdsFromMappedCos(nextSingleCoIds, mappingEntries),
+                                  { shouldDirty: true, shouldValidate: true }
+                                )
+                              }}
+                              placeholder="Select CO"
                             />
                           )}
                         />
@@ -291,17 +440,38 @@ export function CourseDeliveryPlanClient({ id }: Props) {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() =>
+                onClick={() => {
+                  const currentItems = lessonPlanForm.getValues("items")
                   lessonPlanFieldArray.append({
-                    week_number: lessonPlanFieldArray.fields.length + 1,
-                    lesson_label: "",
+                    week_number: currentWeekNumber(currentItems),
+                    lesson_label: nextLessonNumber(currentItems),
                     topic: "",
                     tla: "",
                     assessment_strategy: "",
                     co_ids: [],
                     po_ids: [],
                   })
-                }
+                }}
+              >
+                <Plus />
+                Add lesson
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const currentItems = lessonPlanForm.getValues("items")
+                  lessonPlanFieldArray.append({
+                    week_number: nextWeekNumber(currentItems),
+                    lesson_label: nextLessonNumber(currentItems),
+                    topic: "",
+                    tla: "",
+                    assessment_strategy: "",
+                    co_ids: [],
+                    po_ids: [],
+                  })
+                }}
               >
                 <Plus />
                 Add week
@@ -333,18 +503,29 @@ export function CourseDeliveryPlanClient({ id }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lessonPlanItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="align-top">{item.week_number}</TableCell>
-                    <TableCell className="align-top">{item.lesson_label || "—"}</TableCell>
-                    <TableCell className="align-top whitespace-normal">{item.topic}</TableCell>
-                    <TableCell className="align-top whitespace-normal">{item.tla || "—"}</TableCell>
-                    <TableCell className="align-top whitespace-normal">{item.assessment_strategy || "—"}</TableCell>
+                {groupedLessonPlanItems.map((week) => (
+                  <TableRow key={week.weekNumber}>
+                    <TableCell className="align-top">
+                      <div className="font-medium">Week-{week.weekNumber}</div>
+                    </TableCell>
+                    <TableCell className="align-top">{week.lessonSummary}</TableCell>
                     <TableCell className="align-top whitespace-normal">
-                      {item.co_ids.map((coId) => courseOutcomeById[coId]?.code).filter(Boolean).join(", ") || "—"}
+                      <div className="space-y-1">
+                        {week.lessons.map((lesson) => (
+                          <p key={lesson.id}>
+                            <span className="font-medium">{lesson.displayLessonLabel}:</span>{" "}
+                            {lesson.topic}
+                          </p>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top whitespace-normal">{week.tla || "—"}</TableCell>
+                    <TableCell className="align-top whitespace-normal">{week.assessmentStrategy || "—"}</TableCell>
+                    <TableCell className="align-top whitespace-normal">
+                      {week.coIds.map((coId) => courseOutcomeById[coId]?.code).filter(Boolean).join(", ") || "—"}
                     </TableCell>
                     <TableCell className="align-top whitespace-normal">
-                      {item.po_ids.map((poId) => programOutcomeById[poId]?.code).filter(Boolean).join(", ") || "—"}
+                      {week.poIds.map((poId) => programOutcomeById[poId]?.code).filter(Boolean).join(", ") || "—"}
                     </TableCell>
                   </TableRow>
                 ))}

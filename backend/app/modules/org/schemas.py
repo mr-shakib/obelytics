@@ -66,6 +66,7 @@ class DepartmentUpdate(BaseModel):
     description: str | None = None
     vision: str | None = None
     mission: str | None = None
+    logo_file_key: str | None = None
 
 
 class DepartmentHeadInfo(BaseModel):
@@ -93,6 +94,8 @@ class DepartmentResponse(BaseModel):
     description: str | None
     vision: str | None
     mission: str | None
+    logo_file_key: str | None
+    logo_url: str | None = None
     status: str
     archived_at: datetime | None
     created_at: datetime

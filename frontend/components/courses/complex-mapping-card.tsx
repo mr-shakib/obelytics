@@ -1,10 +1,21 @@
 "use client"
 
+import { useState } from "react"
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Grid3x3, Check, Loader2 } from "lucide-react"
 import { usePermission } from "@/hooks/use-permission"
 import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
@@ -22,10 +33,12 @@ type ComplexMapping = {
   complex_problem_id?: string
   complex_activity_id?: string
   knowledge_profile_id?: string
+  justification: string
 }
 
 const EMPTY_OPTIONS: ComplexOption[] = []
 const EMPTY_MAPPINGS: ComplexMapping[] = []
+type PendingMapping = { co: CourseOutcome; option: ComplexOption }
 
 // ── Per-kind configuration ───────────────────────────────────────────────────
 
@@ -100,6 +113,8 @@ export function ComplexMappingCard({
 }) {
   const config = KIND_CONFIG[kind]
   const qc = useQueryClient()
+  const [pendingMapping, setPendingMapping] = useState<PendingMapping | null>(null)
+  const [justificationText, setJustificationText] = useState("")
 
   const canManage = usePermission(config.managePermission)
 
@@ -142,13 +157,21 @@ export function ComplexMappingCard({
     qc.invalidateQueries({ queryKey: queryKeys.complexMappings.byCo(kind, coId) })
 
   const createMutation = useMutation({
-    mutationFn: async ({ coId, optionId }: { coId: string; optionId: string }) => {
+    mutationFn: async ({
+      coId,
+      optionId,
+      justification,
+    }: {
+      coId: string
+      optionId: string
+      justification: string
+    }) => {
       const { data } = await apiClient.POST(config.mappingsPath as never, {
-        body: { course_outcome_id: coId, [config.optionField]: optionId },
+        body: { course_outcome_id: coId, [config.optionField]: optionId, justification },
       } as never) as { data: unknown }
       return data as ComplexMapping
     },
-    onMutate: async ({ coId, optionId }) => {
+    onMutate: async ({ coId, optionId, justification }) => {
       const queryKey = queryKeys.complexMappings.byCo(kind, coId)
       await qc.cancelQueries({ queryKey })
       const prev = qc.getQueryData<ComplexMapping[]>(queryKey) ?? []
@@ -157,6 +180,7 @@ export function ComplexMappingCard({
         id: optimisticId,
         course_outcome_id: coId,
         status: "active",
+        justification,
         [config.optionField]: optionId,
       } as ComplexMapping
       qc.setQueryData<ComplexMapping[]>(queryKey, [...prev, optimisticMapping])
@@ -206,15 +230,28 @@ export function ComplexMappingCard({
     const existing = mappings.find((m) => getOptionId(m, kind) === option.id)
 
     if (!existing) {
-      createMutation.mutate({ coId: co.id, optionId: option.id })
+      setPendingMapping({ co, option })
+      setJustificationText("")
     } else {
       deleteMutation.mutate({ mappingId: existing.id, coId: co.id })
     }
   }
 
+  function savePendingMapping() {
+    if (!pendingMapping || !justificationText.trim()) return
+    createMutation.mutate({
+      coId: pendingMapping.co.id,
+      optionId: pendingMapping.option.id,
+      justification: justificationText.trim(),
+    })
+    setPendingMapping(null)
+    setJustificationText("")
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <Card id={config.cardId}>
       <CardHeader>
         <CardTitle>{config.title}</CardTitle>
@@ -333,5 +370,40 @@ export function ComplexMappingCard({
         )}
       </CardContent>
     </Card>
+    <Dialog open={!!pendingMapping} onOpenChange={(open) => !open && setPendingMapping(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Justification of Mapping</DialogTitle>
+          <DialogDescription>
+            {pendingMapping
+              ? `Explain why ${pendingMapping.co.code} maps to ${pendingMapping.option.code}.`
+              : "Explain this mapping."}
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          autoFocus
+          rows={4}
+          value={justificationText}
+          onChange={(event) => setJustificationText(event.target.value)}
+          placeholder="Enter justification..."
+        />
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setPendingMapping(null)
+              setJustificationText("")
+            }}
+          >
+            Cancel
+          </Button>
+          <Button type="button" disabled={!justificationText.trim()} onClick={savePendingMapping}>
+            Save mapping
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

@@ -53,6 +53,12 @@
     text-transform: uppercase;
   }
 
+  .doc-header .doc-logos {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
   .doc-header .doc-logo img {
     max-height: 60px;
     max-width: 220px;
@@ -118,6 +124,77 @@
   table.bordered th {
     background-color: #ddd9c3;
     font-weight: bold;
+    text-align: center;
+  }
+
+  table.bordered td.centered-cell {
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  table.delivery-plan-table {
+    margin-top: 20px;
+    border: 2px solid #000;
+  }
+
+  .section-header + table.delivery-plan-table {
+    margin-top: 20px;
+  }
+
+  .section-header + table.delivery-plan-table tr:first-child > th,
+  .section-header + table.delivery-plan-table tr:first-child > td {
+    border-top: 2px solid #000;
+  }
+
+  table.delivery-plan-table th,
+  table.delivery-plan-table td {
+    border: 2px solid #000;
+    padding: 2px 6px;
+    line-height: 1.1;
+    font-size: 10.5pt;
+  }
+
+  table.delivery-plan-table th {
+    vertical-align: middle;
+  }
+
+  table.delivery-plan-table td {
+    vertical-align: middle;
+  }
+
+  table.delivery-plan-table td.topic-cell {
+    vertical-align: top;
+    text-align: left;
+  }
+
+  table.assessment-pattern-table {
+    margin-top: 0;
+    border: 2px solid #000;
+  }
+
+  table.assessment-pattern-table th,
+  table.assessment-pattern-table td {
+    border: 1px solid #000;
+    padding: 1px 6px;
+    line-height: 1.05;
+    font-size: 10.5pt;
+  }
+
+  table.assessment-pattern-table th {
+    background-color: #ddd9c3;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  table.assessment-pattern-table td {
+    vertical-align: middle;
+  }
+
+  .assessment-band {
+    border: 1px solid #000;
+    border-bottom: none;
+    font-weight: bold;
+    line-height: 1.05;
     text-align: center;
   }
 
@@ -201,8 +278,15 @@
 
   <div class="doc-header">
     <div class="doc-title">Course<br>Outline</div>
-    {% if org.logo_url %}
-    <div class="doc-logo"><img src="{{ org.logo_url }}" alt="{{ org.name }}"></div>
+    {% if department.logo_url or org.logo_url %}
+    <div class="doc-logos">
+      {% if department.logo_url %}
+      <div class="doc-logo"><img src="{{ department.logo_url }}" alt="{{ department.name }}"></div>
+      {% endif %}
+      {% if org.logo_url %}
+      <div class="doc-logo"><img src="{{ org.logo_url }}" alt="{{ org.name }}"></div>
+      {% endif %}
+    </div>
     {% elif org.name %}
     <div class="doc-logo-text">
       {{ org.name }}
@@ -285,19 +369,17 @@
           <th style="width:13%">Learning Domains</th>
           <th style="width:11%">Knowledge Profile</th>
           <th style="width:13%">Complex Engineering Problem</th>
-          <th style="width:13%">Complex Engineering Activities</th>
         </tr>
       </thead>
       <tbody>
         {% for co in course_outcomes %}
         <tr>
-          <td>{{ co.code }}</td>
+          <td class="centered-cell">{{ co.code }}</td>
           <td>{{ co.statement }}</td>
-          <td>{{ co.po_codes | join(", ") }}</td>
-          <td>{{ co.bloom_codes | join(", ") }}</td>
-          <td>{{ co.kp_codes | join(", ") }}</td>
-          <td>{{ co.ep_codes | join(", ") }}</td>
-          <td>{{ co.ea_codes | join(", ") }}</td>
+          <td class="centered-cell">{{ co.po_codes | join(", ") }}</td>
+          <td class="centered-cell">{{ co.bloom_codes | join(", ") }}</td>
+          <td class="centered-cell">{{ co.kp_codes | join(", ") }}</td>
+          <td class="centered-cell">{{ co.ep_codes | join(", ") }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -343,9 +425,13 @@
       <tbody>
         {% for row in co_po_justifications %}
         <tr>
-          <td>{{ row.co_code }}</td>
-          <td>{{ row.codes | join("<br>") | safe }}</td>
-          <td class="blank-cell"></td>
+          <td class="centered-cell">{{ row.co_code }}</td>
+          <td class="centered-cell">{{ row.codes | join("<br>") | safe }}</td>
+          <td>
+            {% for item in row.justifications %}
+              <strong>{{ item.code }}:</strong> {{ item.justification }}{% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -366,9 +452,13 @@
       <tbody>
         {% for row in co_kp_justifications %}
         <tr>
-          <td>{{ row.co_code }}</td>
-          <td>{{ row.codes | join("<br>") | safe }}</td>
-          <td class="blank-cell"></td>
+          <td class="centered-cell">{{ row.co_code }}</td>
+          <td class="centered-cell">{{ row.codes | join("<br>") | safe }}</td>
+          <td>
+            {% for item in row.justifications %}
+              <strong>{{ item.code }}:</strong> {{ item.justification }}{% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -389,38 +479,19 @@
       <tbody>
         {% for row in co_ep_justifications %}
         <tr>
-          <td>{{ row.co_code }}</td>
-          <td>{{ row.codes | join("<br>") | safe }}</td>
-          <td class="blank-cell"></td>
+          <td class="centered-cell">{{ row.co_code }}</td>
+          <td class="centered-cell">{{ row.codes | join("<br>") | safe }}</td>
+          <td>
+            {% for item in row.justifications %}
+              <strong>{{ item.code }}:</strong> {{ item.justification }}{% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
     <p class="muted">No CO-CEP mappings defined</p>
-    {% endif %}
-  </div>
-
-  <!-- Justification of Engineering Activities (EAs) Mapping -->
-  <div class="section">
-    <div class="section-label">Justification of Engineering Activities (EAs) Mapping:</div>
-    {% if co_ea_justifications %}
-    <table class="bordered">
-      <thead>
-        <tr><th style="width:8%">COs</th><th style="width:10%">CEP Activities (EA)</th><th>Justification of Mapping</th></tr>
-      </thead>
-      <tbody>
-        {% for row in co_ea_justifications %}
-        <tr>
-          <td>{{ row.co_code }}</td>
-          <td>{{ row.codes | join("<br>") | safe }}</td>
-          <td class="blank-cell"></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No CO-EA mappings defined</p>
     {% endif %}
   </div>
 
@@ -450,27 +521,35 @@
   <!-- Course Delivery Plan -->
   <div class="section">
     <div class="section-header">Course Delivery Plan/Lesson Delivery Plan:</div>
-    {% if lesson_plan %}
-    <table class="bordered">
+    {% if lesson_plan_weeks %}
+    <table class="bordered delivery-plan-table">
       <thead>
         <tr>
-          <th style="width:6%">Weeks</th>
-          <th style="width:20%">Experiment Name with Details</th>
-          <th style="width:8%">COs</th>
-          <th>Activities</th>
-          <th style="width:14%">Tools used</th>
-          <th style="width:14%">Assessment Strategies</th>
+          <th style="width:14%">Weeks</th>
+          <th style="width:39%">Discussion Topic and Book Reference</th>
+          <th style="width:18%">Teaching Learning<br>Activities (TLA)</th>
+          <th style="width:7%">COs</th>
+          <th style="width:7%">POs</th>
+          <th style="width:15%">Assessment<br>Strategies<br>for Topics</th>
         </tr>
       </thead>
       <tbody>
-        {% for item in lesson_plan %}
+        {% for week in lesson_plan_weeks %}
         <tr>
-          <td>{{ item.week_number }}</td>
-          <td>{% if item.lesson_label %}<strong>{{ item.lesson_label }}</strong><br>{% endif %}{{ item.topic }}</td>
-          <td>{{ item.co_codes | join(", ") }}</td>
-          <td>{{ item.tla or "" }}</td>
-          <td class="blank-cell"></td>
-          <td>{{ item.assessment_strategy or "" }}</td>
+          <td class="centered-cell">
+            <strong>Week-{{ week.week_number }}</strong><br>
+            {{ week.lesson_summary }}
+            {% if week.hours_label %}<br>[{{ week.hours_label }}]{% endif %}
+          </td>
+          <td class="topic-cell">
+            {% for lesson in week.lessons %}
+              <strong>{{ lesson.display_lesson_label }}:</strong> {{ lesson.topic }}{% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
+          <td class="centered-cell">{{ week.tla or "" }}</td>
+          <td class="centered-cell">{{ week.co_codes | join(", ") }}</td>
+          <td class="centered-cell">{{ week.po_codes | join(", ") }}</td>
+          <td class="centered-cell">{{ week.assessment_strategy or "" }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -487,19 +566,19 @@
     <table class="bordered">
       <thead>
         <tr>
-          <th style="width:18%">Assessment Type</th>
-          <th style="width:14%">Mapped COs</th>
-          <th style="width:14%">Mapped POs</th>
-          <th>Justification</th>
+          <th style="width:13%">Assessment Tools</th>
+          <th style="width:17%">Mapped COs</th>
+          <th style="width:15%">Mapped POs</th>
+          <th>Assessment/Tools</th>
         </tr>
       </thead>
       <tbody>
         {% for row in po_validation %}
         <tr>
-          <td>{{ row.assessment_type_name }}</td>
+          <td><strong>{{ row.assessment_tool_name }}</strong></td>
           <td>{{ row.co_codes | join(", ") }}</td>
           <td>{{ row.po_codes | join(", ") }}</td>
-          <td class="blank-cell"></td>
+          <td>{{ row.assessment_tools }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -512,42 +591,88 @@
   <!-- Assessment Pattern -->
   <div class="section">
     <div class="section-header">Assessment Pattern:</div>
-    {% if assessment_rows %}
-    <table class="bordered">
+    {% if assessment_matrix_rows %}
+    <table class="assessment-pattern-table">
       <thead>
-        <tr><th>Assessment Tools</th><th style="width:20%">Marks (Total={{ grand_total }})</th></tr>
+        <tr>
+          <th rowspan="2" style="width:32%;text-align:left">Assessment Tools</th>
+          <th colspan="{{ assessment_co_codes | length }}">CO-wise Marks</th>
+          <th rowspan="2" style="width:15%">Marks<br>(Total={{ grand_total }})</th>
+        </tr>
+        <tr>
+          {% for co_code in assessment_co_codes %}
+          <th>{{ co_code }}</th>
+          {% endfor %}
+        </tr>
       </thead>
       <tbody>
-        {% for row in assessment_rows %}
-        {% if row.co_marks %}
+        {% for row in assessment_matrix_rows %}
         <tr>
           <td>{{ row.name }}</td>
-          <td style="padding:0">
-            <table class="matrix" style="width:100%;border-collapse:collapse;margin:0">
-              <tr>
-                <th style="border:1px solid #000;padding:2px 4px" colspan="{{ row.co_marks | length }}">CO-wise Marks</th>
-                <th style="border:1px solid #000;padding:2px 4px;vertical-align:middle;width:25%" rowspan="3">{{ row.total_marks }}</th>
-              </tr>
-              <tr>
-                {% for co_code in row.co_marks.keys() %}<th style="border:1px solid #000;padding:2px 4px">{{ co_code }}</th>{% endfor %}
-              </tr>
-              <tr>
-                {% for marks in row.co_marks.values() %}<td style="border:1px solid #000;padding:2px 4px">{{ marks }}</td>{% endfor %}
-              </tr>
-            </table>
-          </td>
+          {% if row.is_applicable %}
+            {% for mark in row.co_marks_ordered %}
+            <td class="centered-cell">{{ mark }}</td>
+            {% endfor %}
+          {% else %}
+            <td class="centered-cell" colspan="{{ assessment_co_codes | length }}"><em>Not Applicable</em></td>
+          {% endif %}
+          <td class="centered-cell">{{ row.display_total_marks }}</td>
         </tr>
-        {% else %}
-        <tr>
-          <td>{{ row.name }}</td>
-          <td>{{ row.total_marks }}</td>
-        </tr>
-        {% endif %}
         {% endfor %}
         <tr>
-          <td style="font-weight:bold">Total Marks</td>
-          <td style="font-weight:bold">{{ grand_total }}</td>
+          <td style="font-weight:bold">Total</td>
+          {% for co_code in assessment_co_codes %}
+          <td class="centered-cell">{{ assessment_co_totals[co_code] }}</td>
+          {% endfor %}
+          <td class="centered-cell">{{ grand_total }}</td>
         </tr>
+      </tbody>
+    </table>
+
+    {% if cie_tools %}
+    <div class="assessment-band">CIE – Breakup (Theory) [{{ cie_total }} marks]</div>
+    <table class="assessment-pattern-table">
+      <thead>
+        <tr>
+          <th rowspan="2" style="width:17%">Bloom’s<br>Criteria</th>
+          {% for tool in cie_tools %}
+          <th>{{ tool.name }}</th>
+          {% endfor %}
+        </tr>
+        <tr>
+          {% for tool in cie_tools %}
+          <th>{{ tool.display_total }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in cie_bloom_rows %}
+        <tr>
+          <td class="centered-cell">{{ row.name }}</td>
+          {% for mark in row.marks %}
+          <td class="centered-cell">{{ mark }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <div class="assessment-band">SEE – Semester End Examination [{{ see_total }} marks]</div>
+    <table class="assessment-pattern-table">
+      <thead>
+        <tr>
+          <th style="width:48%;text-align:left">Bloom Criteria</th>
+          <th>Score for the Test</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in see_bloom_rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="centered-cell">{{ row.marks }}</td>
+        </tr>
+        {% endfor %}
       </tbody>
     </table>
     {% else %}

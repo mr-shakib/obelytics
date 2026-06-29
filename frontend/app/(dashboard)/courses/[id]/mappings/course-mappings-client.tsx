@@ -72,7 +72,8 @@ export function CourseMappingsClient({ id }: Props) {
 
       <ComplexMappingCard kind="cp" cos={courseOutcomes} />
 
-      <ComplexMappingCard kind="ca" cos={courseOutcomes} />
+      {/* CO-CA mapping is temporarily hidden. */}
+      {/* <ComplexMappingCard kind="ca" cos={courseOutcomes} /> */}
 
       <ComplexMappingCard kind="kp" cos={courseOutcomes} />
     </div>

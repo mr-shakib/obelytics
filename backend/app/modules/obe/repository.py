@@ -402,10 +402,13 @@ class MappingEntryRepository:
         )
         return result.scalar_one_or_none()
 
-    async def upsert(self, set_id: UUID, co_id: UUID, po_id: UUID, weight: int) -> COPOMappingEntry:
+    async def upsert(
+        self, set_id: UUID, co_id: UUID, po_id: UUID, weight: int, justification: str
+    ) -> COPOMappingEntry:
         existing = await self.find_by_set_co_po(set_id, co_id, po_id)
         if existing:
             existing.weight = weight
+            existing.justification = justification
             self._session.add(existing)
             await self._session.flush()
             await self._session.refresh(existing)
@@ -415,6 +418,7 @@ class MappingEntryRepository:
             course_outcome_id=co_id,
             program_outcome_id=po_id,
             weight=weight,
+            justification=justification,
         )
         self._session.add(entry)
         await self._session.flush()

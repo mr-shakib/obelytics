@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_permission
+from app.core.dependencies import get_current_user, require_any_permission, require_permission
 from app.core.storage import presigned_get_url, put_object
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
@@ -34,6 +34,45 @@ router = APIRouter(tags=["Organization"])
 _MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
 
 
+async def _validate_logo_upload(file: UploadFile) -> tuple[bytes, str, str]:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty")
+    if len(raw) > _MAX_LOGO_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Logo must be 2MB or smaller",
+        )
+
+    content_type = (file.content_type or "").lower()
+    is_svg = content_type == "image/svg+xml" or (file.filename or "").lower().endswith(".svg")
+
+    if is_svg:
+        # Pillow cannot parse SVG — do a lightweight XML sanity check instead
+        try:
+            text = raw.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SVG file is not valid UTF-8",
+            ) from exc
+        stripped = text.lstrip()
+        if "<svg" not in stripped and "<!DOCTYPE svg" not in stripped:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File does not appear to be a valid SVG",
+            )
+        return raw, "svg", "image/svg+xml"
+
+    try:
+        image = Image.open(io.BytesIO(raw))
+        image.verify()
+        image_format = (image.format or "png").lower()
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is not a valid image") from exc
+    return raw, image_format, file.content_type or f"image/{image_format}"
+
+
 async def _org_response(org) -> OrgResponse:
     response = OrgResponse.model_validate(org)
     if org.logo_file_key:
@@ -50,6 +89,8 @@ async def _department_response(dept, db: AsyncSession) -> DepartmentResponse:
         names = dict(result.all())
 
     response = DepartmentResponse.model_validate(dept)
+    if dept.logo_file_key:
+        response.logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, dept.logo_file_key)
     current = next((h for h in history if h.effective_to is None), None)
     response.current_hod = (
         DepartmentHeadInfo(user_id=current.user_id, full_name=names.get(current.user_id, "Unknown"))
@@ -99,34 +140,7 @@ async def upload_organization_logo(
     db: Annotated[AsyncSession, Depends(get_db)],
     file: Annotated[UploadFile, File()],
 ):
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty")
-    if len(raw) > _MAX_LOGO_SIZE:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Logo must be 2MB or smaller")
-
-    content_type = (file.content_type or "").lower()
-    is_svg = content_type == "image/svg+xml" or (file.filename or "").lower().endswith(".svg")
-
-    if is_svg:
-        # Pillow cannot parse SVG — do a lightweight XML sanity check instead
-        try:
-            text = raw.decode("utf-8", errors="strict")
-        except UnicodeDecodeError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SVG file is not valid UTF-8") from exc
-        stripped = text.lstrip()
-        if "<svg" not in stripped and "<!DOCTYPE svg" not in stripped:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File does not appear to be a valid SVG")
-        image_format = "svg"
-        mime = "image/svg+xml"
-    else:
-        try:
-            image = Image.open(io.BytesIO(raw))
-            image.verify()
-            image_format = (image.format or "png").lower()
-        except Exception as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is not a valid image") from exc
-        mime = file.content_type or f"image/{image_format}"
+    raw, image_format, mime = await _validate_logo_upload(file)
 
     svc = OrgService(db)
     org = await svc.get(current_user.organization_id)
@@ -158,7 +172,8 @@ async def create_department(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = DepartmentService(db)
-    return await svc.create(body, current_user.organization_id)
+    dept = await svc.create(body, current_user.organization_id)
+    return await _department_response(dept, db)
 
 
 @router.get("/departments/{dept_id}", response_model=DepartmentResponse)
@@ -183,6 +198,32 @@ async def update_department(
 ):
     svc = DepartmentService(db)
     dept = await svc.update(dept_id, body, current_user.organization_id)
+    return await _department_response(dept, db)
+
+
+@router.post("/departments/{dept_id}/logo", response_model=DepartmentResponse)
+async def upload_department_logo(
+    dept_id: UUID,
+    _: Annotated[
+        PermissionManifestResponse,
+        Depends(require_any_permission("department.create", "department.update")),
+    ],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+):
+    raw, image_format, mime = await _validate_logo_upload(file)
+
+    svc = DepartmentService(db)
+    dept = await svc.get(dept_id, current_user.organization_id)
+    key = f"{current_user.organization_id}/departments/{dept.id}/logo.{image_format}"
+    await put_object(settings.MINIO_BUCKET_LOGOS, key, raw, mime)
+
+    dept = await svc.update(
+        dept_id,
+        DepartmentUpdate(logo_file_key=key),
+        current_user.organization_id,
+    )
     return await _department_response(dept, db)
 
 

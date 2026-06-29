@@ -60,6 +60,7 @@ class Department(Base):
     description = Column(Text, nullable=True)
     vision = Column(Text, nullable=True)
     mission = Column(Text, nullable=True)
+    logo_file_key = Column(String(500), nullable=True)
     status = Column(String(20), nullable=False, server_default="ACTIVE")
     archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))

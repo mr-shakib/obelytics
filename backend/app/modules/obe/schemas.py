@@ -166,6 +166,7 @@ class COPOMappingEntryUpsert(BaseModel):
     course_outcome_id: UUID
     program_outcome_id: UUID
     weight: int = Field(ge=1, le=3)
+    justification: str = Field(min_length=1)
 
 
 class COPOMappingEntryResponse(BaseModel):
@@ -174,6 +175,7 @@ class COPOMappingEntryResponse(BaseModel):
     course_outcome_id: UUID
     program_outcome_id: UUID
     weight: int
+    justification: str
     created_at: datetime
     updated_at: datetime
 
@@ -186,6 +188,7 @@ class COPOMappingEntryResponse(BaseModel):
 class COCPMappingCreate(BaseModel):
     course_outcome_id: UUID
     complex_problem_id: UUID
+    justification: str = Field(min_length=1)
 
 
 class COCPMappingResponse(BaseModel):
@@ -193,6 +196,7 @@ class COCPMappingResponse(BaseModel):
     organization_id: UUID
     course_outcome_id: UUID
     complex_problem_id: UUID
+    justification: str
     status: str
     created_by_user_id: UUID | None
     approved_by_user_id: UUID | None
@@ -232,6 +236,7 @@ class COCAMappingResponse(BaseModel):
 class COKPMappingCreate(BaseModel):
     course_outcome_id: UUID
     knowledge_profile_id: UUID
+    justification: str = Field(min_length=1)
 
 
 class COKPMappingResponse(BaseModel):
@@ -239,6 +244,7 @@ class COKPMappingResponse(BaseModel):
     organization_id: UUID
     course_outcome_id: UUID
     knowledge_profile_id: UUID
+    justification: str
     status: str
     created_by_user_id: UUID | None
     approved_by_user_id: UUID | None

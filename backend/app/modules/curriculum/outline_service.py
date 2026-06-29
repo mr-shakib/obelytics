@@ -8,9 +8,13 @@ import anyio
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.storage import presigned_get_url
+from app.modules.assessment.repository import MarksheetQuestionRepository
 from app.modules.curriculum.exceptions import CourseNotFoundError, CurriculumNotFoundError
 from app.modules.curriculum.repository import (
     CourseAssessmentToolRepository,
+    CourseBloomMarksRepository,
     CourseCOMarksRepository,
     CourseLearningMaterialRepository,
     CourseLessonPlanRepository,
@@ -19,9 +23,8 @@ from app.modules.curriculum.repository import (
     CurriculumRepository,
     ModuleLeaderAssignmentRepository,
     PrerequisiteRepository,
+    SectionOfferingRepository,
 )
-from app.core.config import settings
-from app.core.storage import presigned_get_url
 from app.modules.iam.repository.user_repository import UserRepository
 from app.modules.obe.repository import (
     COCAMappingRepository,
@@ -32,7 +35,7 @@ from app.modules.obe.repository import (
     MappingSetRepository,
     PORepository,
 )
-from app.modules.org.repository import OrgRepository
+from app.modules.org.repository import DepartmentRepository, OrgRepository, ProgramRepository
 from app.modules.ref_data.repository import (
     AssessmentTypeRepository,
     BloomDomainRepository,
@@ -45,6 +48,27 @@ from app.modules.ref_data.repository import (
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 _NUM_RE = re.compile(r"(\d+)")
+_LESSON_RE = re.compile(r"^lesson\s*", re.IGNORECASE)
+_KP_SHORT_LABELS = {
+    "K1": "Natural Sciences",
+    "K2": "Mathematics",
+    "K3": "Engineering Fundamentals",
+    "K4": "Specialist Knowledge",
+    "K5": "Engineering Design",
+    "K6": "Engineering Practice",
+    "K7": "Engineering in Society",
+    "K8": "Ethics",
+    "K9": "Research Literature",
+}
+_EP_SHORT_LABELS = {
+    "EP1": "Depth of Knowledge Required",
+    "EP2": "Range of Conflicting Requirements",
+    "EP3": "Depth of Analysis Required",
+    "EP4": "Familiarity of Issues",
+    "EP5": "Extent of Applicable Codes",
+    "EP6": "Extent of Stakeholder Involvement",
+    "EP7": "Interdependence",
+}
 
 
 def _natural_key(code: str) -> list:
@@ -58,6 +82,53 @@ def _fmt_marks(value: Decimal | float | int) -> str:
     return f"{f:g}"
 
 
+def _fmt_tool_marks(value: Decimal | float | int) -> str:
+    formatted = _fmt_marks(value)
+    return formatted.zfill(2) if formatted.isdigit() and 0 < int(formatted) < 10 else formatted
+
+
+def _format_lesson_label(label: str | None, fallback_number: int) -> str:
+    cleaned = (label or "").strip()
+    if not cleaned:
+        return f"Lesson {fallback_number}"
+    if cleaned.isdigit():
+        return f"Lesson {cleaned}"
+    return cleaned
+
+
+def _lesson_reference(display_label: str) -> str:
+    reference = _LESSON_RE.sub("", display_label, count=1).strip()
+    return reference or display_label
+
+
+def _format_hours_label(hours: int) -> str | None:
+    if hours <= 0:
+        return None
+    suffix = "Hour" if hours == 1 else "Hours"
+    return f"{hours} {suffix}"
+
+
+def _format_ep_code(code: str) -> str:
+    return re.sub(r"^CP", "EP", code, flags=re.IGNORECASE)
+
+
+def _format_kp_description(code: str, description: str) -> str:
+    return _KP_SHORT_LABELS.get(code.upper(), description)
+
+
+def _format_ep_description(code: str, description: str) -> str:
+    return _EP_SHORT_LABELS.get(_format_ep_code(code).upper(), description)
+
+
+def _format_assessment_tool_name(name: str) -> str:
+    normalized = name.lower()
+    if "mid" in normalized:
+        return "Midterm"
+    if "final" in normalized:
+        return "Final"
+    return name
+
+
 class CourseOutlineService:
     def __init__(self, db: AsyncSession) -> None:
         self._course_repo = CourseRepository(db)
@@ -67,8 +138,11 @@ class CourseOutlineService:
         self._lesson_plan_repo = CourseLessonPlanRepository(db)
         self._assessment_tool_repo = CourseAssessmentToolRepository(db)
         self._co_marks_repo = CourseCOMarksRepository(db)
+        self._bloom_marks_repo = CourseBloomMarksRepository(db)
         self._material_repo = CourseLearningMaterialRepository(db)
         self._module_leader_repo = ModuleLeaderAssignmentRepository(db)
+        self._section_offering_repo = SectionOfferingRepository(db)
+        self._marksheet_question_repo = MarksheetQuestionRepository(db)
 
         self._co_repo = CORepository(db)
         self._mapping_set_repo = MappingSetRepository(db)
@@ -77,6 +151,8 @@ class CourseOutlineService:
         self._co_ca_repo = COCAMappingRepository(db)
         self._co_kp_repo = COKPMappingRepository(db)
         self._po_repo = PORepository(db)
+        self._program_repo = ProgramRepository(db)
+        self._department_repo = DepartmentRepository(db)
 
         self._bloom_domain_repo = BloomDomainRepository(db)
         self._bloom_level_repo = BloomLevelRepository(db)
@@ -126,19 +202,33 @@ class CourseOutlineService:
         # ── CO-PO mapping ──────────────────────────────────────────────
         mapping_set = await self._mapping_set_repo.find_by_curriculum_course(curriculum_id, course_id)
         co_po_weights: dict[tuple[UUID, UUID], int] = {}
+        co_po_justification_by_pair: dict[tuple[UUID, UUID], str] = {}
         if mapping_set:
             for entry in await self._mapping_entry_repo.list_by_set(mapping_set.id):
                 if entry.weight > 0:
                     co_po_weights[(entry.course_outcome_id, entry.program_outcome_id)] = entry.weight
+                    co_po_justification_by_pair[
+                        (entry.course_outcome_id, entry.program_outcome_id)
+                    ] = entry.justification
 
         # ── CO-CP / CO-CA / CO-KP mappings ────────────────────────────────
         co_cp_ids: dict[UUID, set[UUID]] = {}
         co_ca_ids: dict[UUID, set[UUID]] = {}
         co_kp_ids: dict[UUID, set[UUID]] = {}
+        co_cp_justification_by_pair: dict[tuple[UUID, UUID], str] = {}
+        co_kp_justification_by_pair: dict[tuple[UUID, UUID], str] = {}
         for co in cos:
-            co_cp_ids[co.id] = {m.complex_problem_id for m in await self._co_cp_repo.list_by_co(co.id)}
+            co_cp_mappings = await self._co_cp_repo.list_by_co(co.id)
+            co_kp_mappings = await self._co_kp_repo.list_by_co(co.id)
+            co_cp_ids[co.id] = {m.complex_problem_id for m in co_cp_mappings}
             co_ca_ids[co.id] = {m.complex_activity_id for m in await self._co_ca_repo.list_by_co(co.id)}
-            co_kp_ids[co.id] = {m.knowledge_profile_id for m in await self._co_kp_repo.list_by_co(co.id)}
+            co_kp_ids[co.id] = {m.knowledge_profile_id for m in co_kp_mappings}
+            co_cp_justification_by_pair.update(
+                {(co.id, m.complex_problem_id): m.justification for m in co_cp_mappings}
+            )
+            co_kp_justification_by_pair.update(
+                {(co.id, m.knowledge_profile_id): m.justification for m in co_kp_mappings}
+            )
 
         # ── Reference data ─────────────────────────────────────────────
         bloom_domains = {d.id: d for d in await self._bloom_domain_repo.list_active(org_id)}
@@ -149,8 +239,7 @@ class CourseOutlineService:
         cas = {c.id: c for c in await self._ca_repo.list_active(org_id)}
         kps = {c.id: c for c in await self._kp_repo.list_active(org_id)}
 
-        program_id = curriculum.program_id
-        pos = await self._po_repo.list_active(org_id, program_id)
+        pos = await self._po_repo.list_active(org_id)
         po_by_id = {p.id: p for p in pos}
 
         # ── Referenced codes (for filtering legends) ─────────────────────
@@ -193,7 +282,7 @@ class CourseOutlineService:
                     key=_natural_key,
                 ),
                 "ep_codes": sorted(
-                    (cps[cid].code for cid in co_cp_ids[co.id] if cid in cps),
+                    (_format_ep_code(cps[cid].code) for cid in co_cp_ids[co.id] if cid in cps),
                     key=_natural_key,
                 ),
                 "ea_codes": sorted(
@@ -203,19 +292,51 @@ class CourseOutlineService:
             })
 
         # ── Mapping justification tables (filtered to COs with mappings) ──
-        co_po_justifications = [
-            {"co_code": co["code"], "codes": co["po_codes"]} for co in course_outcomes if co["po_codes"]
-        ]
-        co_kp_justifications = [
-            {"co_code": co["code"], "codes": co["kp_codes"]} for co in course_outcomes if co["kp_codes"]
-        ]
-        co_ep_justifications = [
-            {"co_code": co["code"], "codes": co["ep_codes"]} for co in course_outcomes if co["ep_codes"]
-        ]
-        co_ea_justifications = [
-            {"co_code": co["code"], "codes": co["ea_codes"]} for co in course_outcomes if co["ea_codes"]
-        ]
+        co_po_justifications = []
+        co_kp_justifications = []
+        co_ep_justifications = []
+        for co in cos:
+            po_rows = []
+            for (co_id, po_id), justification in co_po_justification_by_pair.items():
+                if co_id == co.id and po_id in po_by_id:
+                    po_rows.append({
+                        "code": po_by_id[po_id].code,
+                        "justification": justification,
+                    })
+            if po_rows:
+                co_po_justifications.append({
+                    "co_code": co.code,
+                    "codes": [row["code"] for row in po_rows],
+                    "justifications": sorted(po_rows, key=lambda row: _natural_key(row["code"])),
+                })
 
+            kp_rows = []
+            for kp_id in co_kp_ids[co.id]:
+                if kp_id in kps:
+                    kp_rows.append({
+                        "code": kps[kp_id].code,
+                        "justification": co_kp_justification_by_pair.get((co.id, kp_id), ""),
+                    })
+            if kp_rows:
+                co_kp_justifications.append({
+                    "co_code": co.code,
+                    "codes": [row["code"] for row in kp_rows],
+                    "justifications": sorted(kp_rows, key=lambda row: _natural_key(row["code"])),
+                })
+
+            ep_rows = []
+            for cp_id in co_cp_ids[co.id]:
+                if cp_id in cps:
+                    ep_rows.append({
+                        "code": _format_ep_code(cps[cp_id].code),
+                        "justification": co_cp_justification_by_pair.get((co.id, cp_id), ""),
+                    })
+            if ep_rows:
+                co_ep_justifications.append({
+                    "co_code": co.code,
+                    "codes": [row["code"] for row in ep_rows],
+                    "justifications": sorted(ep_rows, key=lambda row: _natural_key(row["code"])),
+                })
         # ── Legend (Bloom / Knowledge Profile / CEP, filtered to referenced) ─
         bloom_legend = []
         for domain in bloom_domains.values():
@@ -229,8 +350,17 @@ class CourseOutlineService:
                     "levels": [{"code": b.code, "name": b.name} for b in levels],
                 })
 
-        kp_legend = [{"code": c.code, "description": c.description} for c in kp_columns]
-        cp_legend = [{"code": c.code, "description": c.description} for c in cp_columns]
+        kp_legend = [
+            {"code": c.code, "description": _format_kp_description(c.code, c.description)}
+            for c in kp_columns
+        ]
+        cp_legend = [
+            {
+                "code": _format_ep_code(c.code),
+                "description": _format_ep_description(c.code, c.description),
+            }
+            for c in cp_columns
+        ]
 
         # ── Assessment tools + CO-wise marks ─────────────────────────────
         assessment_tools = await self._assessment_tool_repo.list_for_course(curriculum_id, course_id)
@@ -239,6 +369,24 @@ class CourseOutlineService:
             assessment_tools = [t for t in assessment_tools if t.id not in excluded_set]
         assessment_types = {a.id: a for a in await self._assessment_type_repo.list_active(org_id)}
         co_marks_records = await self._co_marks_repo.list_for_course(curriculum_id, course_id)
+        section_offerings = await self._section_offering_repo.list_all(org_id, course_id=course_id)
+
+        exam_co_marks_by_type: dict[str, dict[UUID, Decimal]] = {}
+        exam_assessment_tools_by_type: dict[str, str] = {}
+        for exam_type in ("MID", "FINAL"):
+            for offering in section_offerings:
+                questions = await self._marksheet_question_repo.list_by_offering(offering.id, exam_type)
+                mapped_questions = [q for q in questions if q.course_outcome_id is not None]
+                if not mapped_questions:
+                    continue
+                co_marks: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
+                for question in mapped_questions:
+                    co_marks[question.course_outcome_id] += question.max_marks
+                exam_co_marks_by_type[exam_type] = dict(co_marks)
+                exam_assessment_tools_by_type[exam_type] = ", ".join(
+                    dict.fromkeys(q.label.strip() for q in questions if q.label.strip())
+                )
+                break
 
         marks_by_tool: dict[UUID, list] = defaultdict(list)
         for record in co_marks_records:
@@ -263,12 +411,113 @@ class CourseOutlineService:
                     if co:
                         co_marks[co.code] = _fmt_marks(record.marks)
 
+            exam_type = None
+            normalized_name = name.lower()
+            if "mid" in normalized_name:
+                exam_type = "MID"
+            elif "final" in normalized_name:
+                exam_type = "FINAL"
+
+            if exam_type and not co_marks and exam_type in exam_co_marks_by_type:
+                for co_id, marks in exam_co_marks_by_type[exam_type].items():
+                    co = co_by_id.get(co_id)
+                    if co and marks > 0:
+                        co_marks[co.code] = _fmt_marks(marks)
+                if total_marks == 0:
+                    total_marks = sum(exam_co_marks_by_type[exam_type].values(), Decimal("0"))
+
             grand_total += total_marks
             assessment_rows.append({
                 "name": name,
                 "total_marks": _fmt_marks(total_marks),
+                "display_total_marks": _fmt_tool_marks(total_marks),
                 "co_marks": co_marks,
             })
+
+        assessment_co_codes = sorted((co.code for co in cos), key=_natural_key)
+        assessment_co_totals = {
+            co_code: _fmt_marks(
+                sum(
+                    Decimal(str(row["co_marks"].get(co_code, "0")))
+                    for row in assessment_rows
+                    if row["co_marks"].get(co_code)
+                )
+            )
+            for co_code in assessment_co_codes
+        }
+        assessment_matrix_rows = [
+            {
+                **row,
+                "is_applicable": bool(row["co_marks"]),
+                "co_marks_ordered": [row["co_marks"].get(co_code, "") for co_code in assessment_co_codes],
+            }
+            for row in assessment_rows
+        ]
+
+        bloom_marks = await self._bloom_marks_repo.list_for_course(curriculum_id, course_id)
+        bloom_domain_by_id = bloom_domains
+        cognitive_domain_ids = {
+            domain_id
+            for domain_id, domain in bloom_domain_by_id.items()
+            if domain.name.lower() == "cognitive"
+        }
+        cognitive_bloom_levels = [
+            level
+            for level in bloom_levels
+            if not cognitive_domain_ids or level.bloom_domain_id in cognitive_domain_ids
+        ]
+        cognitive_bloom_levels = sorted(cognitive_bloom_levels, key=lambda level: level.order_index)
+
+        bloom_marks_by_component_tool_level: dict[tuple[str, UUID, UUID], Decimal] = {}
+        for mark in bloom_marks:
+            bloom_marks_by_component_tool_level[
+                (mark.component, mark.assessment_type_id, mark.bloom_level_id)
+            ] = mark.marks
+
+        cie_tools = [
+            {
+                "id": tool.assessment_type_id,
+                "name": assessment_types[tool.assessment_type_id].name,
+                "total": _fmt_marks(
+                    next(
+                        (
+                            Decimal(str(row["total_marks"]))
+                            for row in assessment_rows
+                            if row["name"] == assessment_types[tool.assessment_type_id].name
+                        ),
+                        Decimal("0"),
+                    )
+                )
+            }
+            for tool in assessment_tools
+            if tool.assessment_type_id in assessment_types
+            and assessment_types[tool.assessment_type_id].is_sessional
+        ]
+        for tool in cie_tools:
+            tool["display_total"] = _fmt_tool_marks(Decimal(str(tool["total"])))
+        cie_total = _fmt_marks(sum(Decimal(str(tool["total"])) for tool in cie_tools))
+        cie_bloom_rows = []
+        for level in cognitive_bloom_levels:
+            marks = [
+                _fmt_marks(bloom_marks_by_component_tool_level.get(("CIE", tool["id"], level.id), 0))
+                if bloom_marks_by_component_tool_level.get(("CIE", tool["id"], level.id), 0)
+                else ""
+                for tool in cie_tools
+            ]
+            cie_bloom_rows.append({"name": level.name, "marks": marks})
+
+        see_marks_by_level: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
+        for mark in bloom_marks:
+            if mark.component == "SEE":
+                see_marks_by_level[mark.bloom_level_id] += mark.marks
+        see_total = _fmt_marks(sum(see_marks_by_level.values()))
+        see_bloom_rows = [
+            {
+                "name": level.name,
+                "marks": _fmt_marks(see_marks_by_level[level.id]) if see_marks_by_level[level.id] else "",
+            }
+            for level in cognitive_bloom_levels
+        ]
 
         # ── Mapping of Assessment Tools with COs ─────────────────────────
         tool_co_mapping = [
@@ -295,26 +544,81 @@ class CourseOutlineService:
             )
             po_validation.append({
                 "assessment_type_name": row["name"],
+                "assessment_tool_name": _format_assessment_tool_name(row["name"]),
                 "co_codes": co_codes,
                 "po_codes": po_codes,
+                "assessment_tools": (
+                    exam_assessment_tools_by_type.get("MID", "")
+                    if "mid" in row["name"].lower()
+                    else exam_assessment_tools_by_type.get("FINAL", "")
+                    if "final" in row["name"].lower()
+                    else ""
+                ),
             })
 
         # ── Lesson plan ────────────────────────────────────────────────
+        weekly_hours = course.theory_hours + course.lab_hours
         item_ids = [item.id for item in lesson_items]
         cos_by_item = await self._lesson_plan_repo.list_cos_for_items(item_ids)
-        lesson_plan = [
-            {
+        pos_by_item = await self._lesson_plan_repo.list_pos_for_items(item_ids)
+        lesson_plan = []
+        lesson_plan_by_week: dict[int, dict] = {}
+        lesson_counts_by_week: dict[int, int] = defaultdict(int)
+        for item in lesson_items:
+            lesson_counts_by_week[item.week_number] += 1
+            display_lesson_label = _format_lesson_label(
+                item.lesson_label,
+                lesson_counts_by_week[item.week_number],
+            )
+            entry = {
                 "week_number": item.week_number,
                 "lesson_label": item.lesson_label,
+                "display_lesson_label": display_lesson_label,
+                "lesson_reference": _lesson_reference(display_lesson_label),
                 "topic": item.topic,
                 "tla": item.tla,
                 "co_codes": [
                     co_by_id[cid].code for cid in cos_by_item.get(item.id, []) if cid in co_by_id
                 ],
+                "po_codes": [
+                    po_by_id[pid].code for pid in pos_by_item.get(item.id, []) if pid in po_by_id
+                ],
                 "assessment_strategy": item.assessment_strategy,
             }
-            for item in lesson_items
-        ]
+            lesson_plan.append(entry)
+
+            week_group = lesson_plan_by_week.setdefault(
+                item.week_number,
+                {
+                    "week_number": item.week_number,
+                    "lesson_references": [],
+                    "lessons": [],
+                    "co_codes": [],
+                    "po_codes": [],
+                    "tlas": [],
+                    "assessment_strategies": [],
+                    "hours_label": _format_hours_label(weekly_hours),
+                },
+            )
+            week_group["lesson_references"].append(entry["lesson_reference"])
+            week_group["lessons"].append(entry)
+            week_group["co_codes"].extend(entry["co_codes"])
+            week_group["po_codes"].extend(entry["po_codes"])
+            if item.tla:
+                week_group["tlas"].append(item.tla)
+            if item.assessment_strategy:
+                week_group["assessment_strategies"].append(item.assessment_strategy)
+
+        lesson_plan_weeks = []
+        for group in lesson_plan_by_week.values():
+            group["lesson_summary"] = f"Lesson {' & '.join(group['lesson_references'])}"
+            group["co_codes"] = sorted(set(group["co_codes"]), key=_natural_key)
+            group["po_codes"] = sorted(set(group["po_codes"]), key=_natural_key)
+            group["tla"] = "; ".join(dict.fromkeys(group.pop("tlas")))
+            group["assessment_strategy"] = "; ".join(
+                dict.fromkeys(group.pop("assessment_strategies"))
+            )
+            lesson_plan_weeks.append(group)
 
         # ── Learning materials ───────────────────────────────────────────
         materials = await self._material_repo.list_by_course(course_id)
@@ -345,6 +649,17 @@ class CourseOutlineService:
         logo_url = None
         if org and org.logo_file_key:
             logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+        department = None
+        department_logo_url = None
+        if curriculum.program_id:
+            program = await self._program_repo.get_by_id(curriculum.program_id, org_id)
+            if program:
+                department = await self._department_repo.get_by_id(program.department_id, org_id)
+                if department and department.logo_file_key:
+                    department_logo_url = await presigned_get_url(
+                        settings.MINIO_BUCKET_LOGOS,
+                        department.logo_file_key,
+                    )
 
         return {
             "course": {
@@ -352,7 +667,7 @@ class CourseOutlineService:
                 "title": course.title,
                 "course_type": course.course_type,
                 "credits": course.credits,
-                "weekly_hours": course.theory_hours + course.lab_hours,
+                "weekly_hours": weekly_hours,
                 "total_weeks": total_weeks,
                 "description": course.description,
                 "syllabus_content": course.syllabus_content,
@@ -364,14 +679,22 @@ class CourseOutlineService:
             "co_po_justifications": co_po_justifications,
             "co_kp_justifications": co_kp_justifications,
             "co_ep_justifications": co_ep_justifications,
-            "co_ea_justifications": co_ea_justifications,
             "bloom_legend": bloom_legend,
             "cp_legend": cp_legend,
             "kp_legend": kp_legend,
             "tool_co_mapping": tool_co_mapping,
             "po_validation": po_validation,
             "lesson_plan": lesson_plan,
+            "lesson_plan_weeks": lesson_plan_weeks,
             "assessment_rows": assessment_rows,
+            "assessment_co_codes": assessment_co_codes,
+            "assessment_co_totals": assessment_co_totals,
+            "assessment_matrix_rows": assessment_matrix_rows,
+            "cie_tools": cie_tools,
+            "cie_total": cie_total,
+            "cie_bloom_rows": cie_bloom_rows,
+            "see_total": see_total,
+            "see_bloom_rows": see_bloom_rows,
             "grand_total": _fmt_marks(grand_total),
             "textbooks": textbooks,
             "references": references,
@@ -380,6 +703,11 @@ class CourseOutlineService:
                 "name": org.name if org else "",
                 "short_name": org.short_name if org else "",
                 "logo_url": logo_url,
+            },
+            "department": {
+                "name": department.name if department else "",
+                "short_name": department.short_name if department else "",
+                "logo_url": department_logo_url,
             },
         }
 

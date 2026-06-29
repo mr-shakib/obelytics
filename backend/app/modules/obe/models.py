@@ -279,6 +279,7 @@ class COPOMappingEntry(Base):
         index=True,
     )
     weight = Column(SmallInteger, nullable=False)
+    justification = Column(Text, nullable=False, server_default="Justification pending.")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),
@@ -312,6 +313,7 @@ class COCPMapping(Base):
         ForeignKey("config.complex_problems.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    justification = Column(Text, nullable=False, server_default="Justification pending.")
     status = Column(String(20), nullable=False, server_default="DRAFT")
     # Plain UUIDs — no FK constraints
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
@@ -388,6 +390,7 @@ class COKPMapping(Base):
         ForeignKey("config.knowledge_profiles.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    justification = Column(Text, nullable=False, server_default="Justification pending.")
     status = Column(String(20), nullable=False, server_default="DRAFT")
     # Plain UUIDs — no FK constraints
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
