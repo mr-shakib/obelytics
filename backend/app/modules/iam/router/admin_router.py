@@ -8,7 +8,7 @@ Verify  → POST /admin/restore/verify   → validates a backup file without res
 import io
 import json
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -28,6 +28,16 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 BACKUP_TABLES: list[tuple[str, str]] = [
     # Org — organizations must come first (root of FK tree)
     ("org", "organizations"),
+    # Config reference data - many restored rows point at these IDs.
+    ("config", "bloom_domains"),
+    ("config", "bloom_levels"),
+    ("config", "delivery_methods"),
+    ("config", "course_categories"),
+    ("config", "assessment_types"),
+    ("config", "knowledge_profiles"),
+    ("config", "mapping_weight_labels"),
+    # OBE reference versions - programs and POs can point at these IDs.
+    ("obe", "po_versions"),
     ("org", "departments"),
     ("org", "programs"),
     # IAM — core identity tables
@@ -57,6 +67,9 @@ BACKUP_TABLES: list[tuple[str, str]] = [
     ("curriculum", "course_prerequisites"),
     ("curriculum", "course_learning_materials"),
     ("curriculum", "course_lesson_plan_items"),
+    # Outcomes are referenced by lesson-plan mappings and course mark tables.
+    ("obe", "program_outcomes"),
+    ("obe", "course_outcomes"),
     ("curriculum", "course_lesson_plan_item_cos"),
     ("curriculum", "course_lesson_plan_item_pos"),
     ("curriculum", "course_bloom_domains"),
@@ -64,13 +77,11 @@ BACKUP_TABLES: list[tuple[str, str]] = [
     ("curriculum", "course_co_marks"),
     ("curriculum", "course_bloom_marks"),
     # OBE
-    ("obe", "program_outcomes"),
     ("obe", "program_missions"),
     ("obe", "program_educational_objectives"),
     ("obe", "peo_po_mappings"),
     ("obe", "peo_mission_mappings"),
     ("obe", "po_knowledge_profiles"),
-    ("obe", "course_outcomes"),
     ("obe", "course_outcome_bloom_levels"),
     ("obe", "co_delivery_methods"),
     ("obe", "co_cp_mappings"),
@@ -112,15 +123,25 @@ def _serialize(value: object) -> object:
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
 )
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _deserialize_row(row: dict) -> dict:
     out: dict = {}
     for k, v in row.items():
+        if isinstance(v, (dict, list)):
+            out[k] = json.dumps(v)
+            continue
         if isinstance(v, str):
             if "T" in v:
                 try:
                     out[k] = datetime.fromisoformat(v)
+                    continue
+                except (ValueError, TypeError):
+                    pass
+            if _DATE_RE.match(v):
+                try:
+                    out[k] = date.fromisoformat(v)
                     continue
                 except (ValueError, TypeError):
                     pass

@@ -772,8 +772,22 @@ async def test_result_workflow_ml_reject_back_to_draft(client: AsyncClient, auth
 
     offering_id = chain["offering_id"]
 
-    # Submit
-    await client.post(f"/api/v1/results/{offering_id}/submit", headers=auth_headers)
+    end_report_body = {
+        "grade_distribution": {"A": 1},
+        "co_attainment": {"CO1": 55.0},
+        "unattained_co_explanations": [],
+        "teacher_feedback": "Initial feedback",
+        "course_drive_link": "https://drive.google.com/drive/folders/test",
+    }
+
+    # Submitting the end report also submits the result publication and locks the section.
+    end_report = await client.post(
+        f"/api/v1/end-reports/{offering_id}/submit",
+        headers=auth_headers,
+        json=end_report_body,
+    )
+    assert end_report.status_code == 200, end_report.text
+    assert end_report.json()["status"] == "SUBMITTED"
 
     # ML reject
     reject = await client.post(
@@ -785,6 +799,19 @@ async def test_result_workflow_ml_reject_back_to_draft(client: AsyncClient, auth
     data = reject.json()
     assert data["status"] == "DRAFT"
     assert data["ml_rejection_comment"] == "Marks seem incorrect, please re-verify"
+
+    reopened_report = await client.get(f"/api/v1/end-reports/{offering_id}", headers=auth_headers)
+    assert reopened_report.status_code == 200, reopened_report.text
+    assert reopened_report.json()["status"] == "DRAFT"
+    assert reopened_report.json()["submitted_at"] is None
+
+    save_again = await client.post(
+        f"/api/v1/end-reports/{offering_id}/save-draft",
+        headers=auth_headers,
+        json={**end_report_body, "teacher_feedback": "Revised feedback"},
+    )
+    assert save_again.status_code == 200, save_again.text
+    assert save_again.json()["teacher_feedback"] == "Revised feedback"
 
 
 async def test_cannot_submit_with_no_marks(client: AsyncClient, auth_headers):

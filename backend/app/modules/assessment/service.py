@@ -666,6 +666,14 @@ class ResultPublicationService:
             "ml_rejection_comment": comment,
         }
         result = await self._repo.update(pub, data)
+        report_result = await self._session.execute(
+            select(CourseEndReport).where(CourseEndReport.section_offering_id == offering_id)
+        )
+        report = report_result.scalar_one_or_none()
+        if report is not None and report.organization_id == org_id and report.status == "SUBMITTED":
+            report.status = "DRAFT"
+            report.submitted_at = None
+            self._session.add(report)
         write_audit_log(
             self._session,
             entity_type="result_publication",
