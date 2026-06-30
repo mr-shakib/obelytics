@@ -16,6 +16,8 @@ from app.core.dependencies import (
 from app.modules.iam.models import User
 from app.modules.iam.schemas import (
     BulkCreateResult,
+    BulkFacultyTypeUpdateRequest,
+    BulkFacultyTypeUpdateResponse,
     FacultyRosterEntry,
     PermissionManifestResponse,
     ResetPasswordRequest,
@@ -116,6 +118,20 @@ async def send_credentials(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to send email: {exc}",
         )
+
+
+@router.post("/bulk/faculty-type", response_model=BulkFacultyTypeUpdateResponse)
+async def bulk_update_faculty_type(
+    body: BulkFacultyTypeUpdateRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("user.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = UserService(db)
+    updated_count = await svc.bulk_update_faculty_type(
+        body.user_ids, body.faculty_type, current_user.organization_id
+    )
+    return BulkFacultyTypeUpdateResponse(updated_count=updated_count)
 
 
 @router.get("/{user_id}", response_model=UserResponse)

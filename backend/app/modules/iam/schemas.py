@@ -126,6 +126,15 @@ class BulkCreateResult(BaseModel):
     errors: list[dict]
 
 
+class BulkFacultyTypeUpdateRequest(BaseModel):
+    user_ids: list[UUID] = Field(min_length=1)
+    faculty_type: str = Field(min_length=1, max_length=50)
+
+
+class BulkFacultyTypeUpdateResponse(BaseModel):
+    updated_count: int
+
+
 # ── Role ─────────────────────────────────────────────────────────────────────
 
 class RoleCreate(BaseModel):

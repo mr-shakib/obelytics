@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 interface DataTableProps<TData> {
   columns: ColumnDef<TData>[]
   data: TData[]
+  getRowId?: (row: TData) => string
   loading?: boolean
   onRowClick?: (row: TData) => void
   // Server-side pagination
@@ -41,6 +42,7 @@ interface DataTableProps<TData> {
 export function DataTable<TData>({
   columns,
   data,
+  getRowId,
   loading,
   onRowClick,
   pageIndex = 0,
@@ -57,6 +59,7 @@ export function DataTable<TData>({
   const table = useReactTable({
     data,
     columns,
+    getRowId,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     manualPagination: !!pageCount,

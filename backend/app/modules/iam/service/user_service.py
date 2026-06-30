@@ -106,6 +106,25 @@ class UserService:
         await self._session.refresh(user)
         return user
 
+    async def bulk_update_faculty_type(
+        self, user_ids: list[UUID], faculty_type: str, organization_id: UUID
+    ) -> int:
+        result = await self._session.execute(
+            select(User).where(
+                and_(
+                    User.id.in_(user_ids),
+                    User.organization_id == organization_id,
+                    User.status != "DELETED",
+                )
+            )
+        )
+        users = list(result.scalars().all())
+        for user in users:
+            user.faculty_type = faculty_type
+            self._session.add(user)
+        await self._session.commit()
+        return len(users)
+
     async def reset_password(self, user_id: UUID, new_password: str) -> None:
         user = await self._users.find_by_id(user_id)
         if user is None:

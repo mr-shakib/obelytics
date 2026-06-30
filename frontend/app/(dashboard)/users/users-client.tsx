@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus, Search, Upload, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/data-table"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -44,6 +44,8 @@ type User = {
 
 type Department = { id: string; name: string; short_name: string }
 
+const FACULTY_TYPES = ["Faculty", "Administrative", "Management"] as const
+
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -53,6 +55,8 @@ export function UsersClient() {
   const [search, setSearch] = useState("")
   const [deptFilter, setDeptFilter] = useState("__all__")
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [bulkFacultyType, setBulkFacultyType] = useState<string>("Faculty")
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: queryKeys.users.list(),
@@ -84,6 +88,21 @@ export function UsersClient() {
     onError: () => toast.error("Failed to delete user"),
   })
 
+  const bulkFacultyTypeMutation = useMutation({
+    mutationFn: async ({ userIds, facultyType }: { userIds: string[]; facultyType: string }) => {
+      const { data } = await apiClient.POST("/users/bulk/faculty-type" as never, {
+        body: { user_ids: userIds, faculty_type: facultyType },
+      } as never)
+      return (data as unknown) as { updated_count: number }
+    },
+    onSuccess: (data) => {
+      toast.success(`Updated ${data.updated_count} user${data.updated_count === 1 ? "" : "s"}`)
+      setRowSelection({})
+      qc.invalidateQueries({ queryKey: queryKeys.users.all })
+    },
+    onError: () => toast.error("Failed to update faculty type"),
+  })
+
   const filtered = users.filter((u) => {
     const term = search.toLowerCase()
     const matchSearch = !term ||
@@ -94,6 +113,40 @@ export function UsersClient() {
     const matchDept = deptFilter === "__all__" || u.department_id === deptFilter
     return matchSearch && matchDept
   })
+
+  const selectedIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id)
+  const selectedUsers = users.filter((u) => selectedIds.includes(u.id))
+  const selectedCount = selectedUsers.length
+
+  const selectionColumn: ColumnDef<User> = {
+    id: "select",
+    header: ({ table }) => (
+      <input
+        type="checkbox"
+        className="h-4 w-4"
+        checked={table.getIsAllPageRowsSelected()}
+        ref={(input) => {
+          if (input) input.indeterminate = table.getIsSomePageRowsSelected()
+        }}
+        onChange={table.getToggleAllPageRowsSelectedHandler()}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select visible users"
+      />
+    ),
+    cell: ({ row }) => (
+      <input
+        type="checkbox"
+        className="h-4 w-4"
+        checked={row.getIsSelected()}
+        onChange={row.getToggleSelectedHandler()}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Select ${row.original.full_name}`}
+      />
+    ),
+    enableSorting: false,
+  }
 
   const columns: ColumnDef<User>[] = [
     {
@@ -190,7 +243,7 @@ export function UsersClient() {
       />
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-5">
+      <div className="flex flex-wrap gap-3 mb-3">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -215,9 +268,43 @@ export function UsersClient() {
         </Select>
       </div>
 
+      <PermissionGate permission="user.update">
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium">
+            Bulk faculty type
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {selectedCount > 0 ? `${selectedCount} selected` : "Select users from the table"}
+          </span>
+          <Select value={bulkFacultyType} onValueChange={(v) => { if (v != null) setBulkFacultyType(v as string) }}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Faculty type" />
+            </SelectTrigger>
+            <SelectContent>
+              {FACULTY_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>{type}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            onClick={() => bulkFacultyTypeMutation.mutate({ userIds: selectedIds, facultyType: bulkFacultyType })}
+            disabled={selectedCount === 0 || bulkFacultyTypeMutation.isPending}
+          >
+            {bulkFacultyTypeMutation.isPending ? "Updating..." : "Apply to Selected"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setRowSelection({})} disabled={selectedCount === 0}>
+            Clear
+          </Button>
+        </div>
+      </PermissionGate>
+
       <DataTable
-        columns={[...columns, deleteColumn]}
+        columns={[selectionColumn, ...columns, deleteColumn]}
         data={filtered}
+        getRowId={(row) => row.id}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
         loading={isLoading}
         onRowClick={(row) => router.push(`/users/${row.id}`)}
         emptyMessage="No users found."
