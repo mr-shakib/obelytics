@@ -1,3 +1,4 @@
+import json
 from typing import Literal
 
 from pydantic import computed_field
@@ -89,7 +90,15 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def ALLOWED_ORIGINS_LIST(self) -> list[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        raw = self.ALLOWED_ORIGINS.strip()
+        if raw.startswith("["):
+            try:
+                values = json.loads(raw)
+                if isinstance(values, list):
+                    return [str(o).strip() for o in values if str(o).strip()]
+            except json.JSONDecodeError:
+                pass
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     # Rate limiting
     RATE_LIMIT_REQUESTS: int = 100

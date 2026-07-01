@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const BACKEND = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
+export const runtime = "edge"
+export const preferredRegion = "iad1"
+
 export async function POST(req: NextRequest) {
   const refreshToken = req.cookies.get("refresh_token")?.value
 
@@ -45,6 +48,13 @@ export async function POST(req: NextRequest) {
     sameSite: "lax",
     path: "/",
     maxAge: 15 * 60, // matches backend token lifetime
+  })
+  res.cookies.set("auth-status", "authenticated", {
+    httpOnly: false,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60,
   })
 
   return res

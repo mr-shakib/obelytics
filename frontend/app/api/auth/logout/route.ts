@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const BACKEND = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
+export const runtime = "edge"
+export const preferredRegion = "iad1"
+
 export async function POST(req: NextRequest) {
   const refreshToken = req.cookies.get("refresh_token")?.value
 

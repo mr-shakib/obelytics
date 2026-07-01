@@ -15,6 +15,9 @@ from app.core.dependencies import (
 )
 from app.modules.iam.models import User
 from app.modules.iam.schemas import (
+    BootstrapProgram,
+    BootstrapScope,
+    BootstrapUser,
     BulkCreateResult,
     BulkFacultyTypeUpdateRequest,
     BulkFacultyTypeUpdateResponse,
@@ -22,12 +25,14 @@ from app.modules.iam.schemas import (
     PermissionManifestResponse,
     ResetPasswordRequest,
     RoleAssignRequest,
+    UserBootstrapResponse,
     UserCreate,
     UserResponse,
     UserRoleAssignmentResponse,
     UserUpdate,
 )
 from app.modules.iam.service.user_service import UserService
+from app.modules.org.service import ProgramService
 
 
 class SendCredentialsRequest(BaseModel):
@@ -48,6 +53,52 @@ async def get_my_permissions(
     manifest: Annotated[PermissionManifestResponse, Depends(get_permission_manifest)],
 ):
     return manifest
+
+
+@router.get("/me/bootstrap", response_model=UserBootstrapResponse)
+async def get_my_bootstrap(
+    current_user: Annotated[User, Depends(get_current_user)],
+    manifest: Annotated[PermissionManifestResponse, Depends(get_permission_manifest)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    programs: list[BootstrapProgram] = []
+    program_ids = {str(program_id) for program_id in manifest.program_ids}
+
+    if not manifest.is_super_admin and program_ids:
+        svc = ProgramService(db)
+        active_programs = await svc.list_active(current_user.organization_id)
+        programs = [
+            BootstrapProgram(id=p.id, name=p.title, acronym=p.acronym)
+            for p in active_programs
+            if str(p.id) in program_ids
+        ]
+
+    full_name = current_user.full_name or ""
+    first_name = getattr(current_user, "first_name", None)
+    last_name = getattr(current_user, "last_name", None)
+    if not first_name:
+        first_name = full_name.split(" ", 1)[0] if full_name else ""
+    if last_name is None and " " in full_name:
+        last_name = full_name.split(" ", 1)[1]
+
+    return UserBootstrapResponse(
+        user=BootstrapUser(
+            id=current_user.id,
+            email=current_user.email,
+            full_name=full_name,
+            first_name=first_name,
+            last_name=last_name or "",
+            employee_id=current_user.employee_id,
+            faculty_type=current_user.faculty_type,
+            title=getattr(current_user, "title", None),
+            designation=getattr(current_user, "designation", None),
+            department=None,
+            status=current_user.status,
+        ),
+        permissions=manifest.permissions,
+        scope=BootstrapScope(programs=programs, is_global=manifest.is_super_admin),
+        offering_ids=[],
+    )
 
 
 @router.get("", response_model=list[UserResponse])

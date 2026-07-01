@@ -78,7 +78,7 @@ Go to the **Variables** tab and add:
 | `SECRET_KEY` | Generate with: `openssl rand -hex 32` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` |
-| `ALLOWED_ORIGINS` | `["https://YOUR-FRONTEND-DOMAIN.up.railway.app"]` |
+| `ALLOWED_ORIGINS` | `https://YOUR-FRONTEND-DOMAIN.vercel.app` |
 | `MINIO_ENDPOINT` | Your S3-compatible endpoint (e.g., `s3.amazonaws.com` or R2 endpoint) |
 | `MINIO_ACCESS_KEY` | Your S3 access key |
 | `MINIO_SECRET_KEY` | Your S3 secret key |
@@ -86,7 +86,7 @@ Go to the **Variables** tab and add:
 | `RESEND_API_KEY` | Your Resend API key (optional, for emails) |
 | `EMAIL_FROM` | `Obelytics <noreply@yourdomain.com>` |
 
-> **Important**: The `ALLOWED_ORIGINS` must be a JSON array string. Update it with the actual frontend URL after deploying the frontend.
+> **Important**: `ALLOWED_ORIGINS` should be a comma-separated list with no trailing slash. JSON array strings are tolerated by the backend, but comma-separated values are the preferred format.
 
 ### 4c. Deploy
 
@@ -128,13 +128,13 @@ Click **Deploy**. Nixpacks will auto-detect Next.js, run `npm install` and `npm 
 After the frontend is live, go back to the **backend** service variables and update:
 
 ```
-ALLOWED_ORIGINS=["https://YOUR-FRONTEND.up.railway.app"]
+ALLOWED_ORIGINS=https://YOUR-FRONTEND.vercel.app
 ```
 
 If you have a custom domain, include both:
 
 ```
-ALLOWED_ORIGINS=["https://YOUR-FRONTEND.up.railway.app","https://yourdomain.com"]
+ALLOWED_ORIGINS=https://YOUR-FRONTEND.vercel.app,https://yourdomain.com
 ```
 
 ---
@@ -233,7 +233,7 @@ MINIO_SECURE=true
 | `DEBUG` | Yes | `true` | Set to `false` in production |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `30` | JWT access token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | No | `7` | Refresh token lifetime |
-| `ALLOWED_ORIGINS` | Yes | — | JSON array of allowed CORS origins |
+| `ALLOWED_ORIGINS` | Yes | — | Comma-separated allowed CORS origins |
 | `MINIO_ENDPOINT` | Yes | — | S3-compatible endpoint |
 | `MINIO_ACCESS_KEY` | Yes | — | S3 access key |
 | `MINIO_SECRET_KEY` | Yes | — | S3 secret key |

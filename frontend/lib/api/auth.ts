@@ -27,6 +27,21 @@ export async function loginApi(email: string, password: string): Promise<{
   return res.json()
 }
 
+export async function sessionApi(): Promise<{
+  access_token: string
+  user: UserProfile
+  permissions: string[]
+  scope: PermissionManifest["scope"]
+  offering_ids: string[]
+}> {
+  const res = await fetchWithTimeout("/api/auth/session", {
+    method: "POST",
+    credentials: "include",
+  })
+  if (!res.ok) throw new Error("no_session")
+  return res.json()
+}
+
 // Used by AuthProvider after silent refresh — calls backend directly with the new access token
 export async function getMeApi(accessToken: string): Promise<MeResponse> {
   const [meRes, permsRes] = await Promise.all([

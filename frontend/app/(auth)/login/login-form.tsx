@@ -43,9 +43,6 @@ export function LoginForm() {
       )
       setAuth(access_token, user, { permissions, scope, offering_ids })
 
-      // Lightweight cookie so middleware knows we're logged in
-      document.cookie = "auth-status=authenticated; path=/; SameSite=Lax"
-
       const home = isSectionTeacherView(permissions) ? "/my-sections" : "/overview"
       const next = searchParams.get("next")
       router.push(!next || next === "/overview" || next === "/" ? home : next)

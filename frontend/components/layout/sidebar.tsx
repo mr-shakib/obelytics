@@ -1,7 +1,8 @@
 "use client"
 
+import { useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { CircleDot, ChevronLeft, ChevronRight, Settings } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,7 @@ import {
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const qc = useQueryClient()
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
@@ -29,6 +31,7 @@ export function Sidebar() {
   const permissions = usePermissions()
 
   const visibleItems = getVisibleNavItems(permissions)
+  const visibleHrefs = visibleItems.map((item) => item.href).join("|")
   const homeHref = isSectionTeacherView(permissions) ? "/my-sections" : "/overview"
   const activeGroup = getActiveNavGroup(pathname, visibleItems)
   const groupItems = visibleItems.filter((item) => item.group === activeGroup)
@@ -44,6 +47,12 @@ export function Sidebar() {
       .join("")
       .toUpperCase() || "U"
   const roleLabel = user?.email ?? "Account settings"
+
+  useEffect(() => {
+    for (const href of visibleHrefs.split("|")) {
+      if (href) router.prefetch(href)
+    }
+  }, [router, visibleHrefs])
 
   return (
     <aside

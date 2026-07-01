@@ -1,8 +1,7 @@
 from datetime import datetime
 from uuid import UUID
-from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
 
+from pydantic import BaseModel, EmailStr, Field
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -193,3 +192,35 @@ class PermissionManifestResponse(BaseModel):
     program_ids: list[UUID]
     role_names: list[str]
     is_super_admin: bool
+
+
+class BootstrapProgram(BaseModel):
+    id: UUID
+    name: str
+    acronym: str
+
+
+class BootstrapScope(BaseModel):
+    programs: list[BootstrapProgram]
+    is_global: bool
+
+
+class BootstrapUser(BaseModel):
+    id: UUID
+    email: str
+    full_name: str
+    first_name: str | None = None
+    last_name: str | None = None
+    employee_id: str | None = None
+    faculty_type: str | None = None
+    title: str | None = None
+    designation: str | None = None
+    department: dict | None = None
+    status: str
+
+
+class UserBootstrapResponse(BaseModel):
+    user: BootstrapUser
+    permissions: list[str]
+    scope: BootstrapScope
+    offering_ids: list[UUID] = []

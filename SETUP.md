@@ -214,7 +214,7 @@ MINIO_SECRET_KEY=minioadmin
 MINIO_SECURE=false
 
 # CORS — must include the frontend URL
-ALLOWED_ORIGINS=["http://localhost:3000"]
+ALLOWED_ORIGINS=http://localhost:3000
 
 # Email (Resend — https://resend.com — optional for local dev)
 RESEND_API_KEY=re_your_api_key
