@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { usePermissions } from "@/hooks/use-permission"
+import { useAuthStore } from "@/lib/stores/auth-store"
 
 type POVersion = {
   id: string
@@ -45,14 +47,28 @@ export function ProgramOutcomesClient() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
   const qc = useQueryClient()
+  const permissions = usePermissions()
+  const isInitialized = useAuthStore((state) => state.isInitialized)
+  const canManageProgramOutcomes = permissions.some((permission) =>
+    ["po.create", "po.update", "po.archive"].includes(permission)
+  )
+
+  useEffect(() => {
+    if (isInitialized && !canManageProgramOutcomes) {
+      router.replace("/overview")
+    }
+  }, [canManageProgramOutcomes, isInitialized, router])
 
   const { data: versions = [], isLoading } = useQuery({
     queryKey: queryKeys.poVersions.list(),
+    enabled: isInitialized && canManageProgramOutcomes,
     queryFn: async () => {
       const { data } = await apiClient.GET("/po-versions" as never)
       return ((data as unknown) as POVersion[]) ?? []
     },
   })
+
+  if (!isInitialized || !canManageProgramOutcomes) return null
 
   const {
     register,

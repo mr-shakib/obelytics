@@ -61,13 +61,13 @@ _KP_SHORT_LABELS = {
     "K9": "Research Literature",
 }
 _EP_SHORT_LABELS = {
-    "EP1": "Depth of Knowledge Required",
-    "EP2": "Range of Conflicting Requirements",
-    "EP3": "Depth of Analysis Required",
-    "EP4": "Familiarity of Issues",
-    "EP5": "Extent of Applicable Codes",
-    "EP6": "Extent of Stakeholder Involvement",
-    "EP7": "Interdependence",
+    "CEP1": "Depth of Knowledge Required",
+    "CEP2": "Range of Conflicting Requirements",
+    "CEP3": "Depth of Analysis Required",
+    "CEP4": "Familiarity of Issues",
+    "CEP5": "Extent of Applicable Codes",
+    "CEP6": "Extent of Stakeholder Involvement",
+    "CEP7": "Interdependence",
 }
 
 
@@ -109,7 +109,9 @@ def _format_hours_label(hours: int) -> str | None:
 
 
 def _format_ep_code(code: str) -> str:
-    return re.sub(r"^CP", "EP", code, flags=re.IGNORECASE)
+    if re.match(r"^CEP", code, flags=re.IGNORECASE):
+        return code.upper()
+    return re.sub(r"^CP", "CEP", code, flags=re.IGNORECASE).upper()
 
 
 def _format_kp_description(code: str, description: str) -> str:

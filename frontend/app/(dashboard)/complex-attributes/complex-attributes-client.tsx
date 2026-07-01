@@ -8,23 +8,23 @@ export function ComplexAttributesClient() {
   return (
     <Tabs defaultValue="cp">
       <TabsList>
-        <TabsTrigger value="cp">Complex Problems</TabsTrigger>
+        <TabsTrigger value="cp">CEP</TabsTrigger>
         <TabsTrigger value="ca">Complex Activities</TabsTrigger>
         <TabsTrigger value="kp">Knowledge Profiles</TabsTrigger>
       </TabsList>
 
       <TabsContent value="cp" className="mt-4">
         <ReferenceDataManager
-          title="Complex Problems"
-          description="Manage the master list of Complex Problem (CP) attributes."
+          title="Complex Engineering Problems"
+          description="Manage the master list of Complex Engineering Problem (CEP) attributes."
           queryKey={queryKeys.refData.complexProblems}
           listPath="/ref-data/complex-problems"
           createPath="/ref-data/complex-problems"
           updatePath={(id) => `/ref-data/complex-problems/${id}`}
-          entityLabel="Complex Problem"
+          entityLabel="Complex Engineering Problem"
           permission="config.manage"
           fields={[
-            { name: "code", label: "Attribute Code", placeholder: "e.g. CP1" },
+            { name: "code", label: "Attribute Code", placeholder: "e.g. CEP1" },
             { name: "name", label: "Attribute Name", placeholder: "Short name", optional: true },
             { name: "description", label: "Characteristics", type: "textarea", placeholder: "Describe the characteristics..." },
           ]}

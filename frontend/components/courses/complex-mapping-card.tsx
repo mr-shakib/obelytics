@@ -59,7 +59,7 @@ const KIND_CONFIG: Record<
   }
 > = {
   cp: {
-    title: "CO-CP Mapping",
+    title: "CO-CEP Mapping",
     description:
       "Map course outcomes to Complex Engineering Problems (CEP). Required for any CO mapped to PO1–PO7. Click a cell to toggle the mapping on or off.",
     optionsPath: "/ref-data/complex-problems",

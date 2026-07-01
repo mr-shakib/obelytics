@@ -6,12 +6,12 @@ import { useRouter } from "next/navigation"
 import { BookCopy, Target, BarChart3, CheckSquare, ClipboardList, Award } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuthStore } from "@/lib/stores/auth-store"
-import { usePermission, usePermissions } from "@/hooks/use-permission"
+import { usePermissions } from "@/hooks/use-permission"
 import { isSectionTeacherView } from "@/lib/navigation"
 
 const QUICK_LINKS = [
   { label: "Curricula", href: "/curricula", icon: BookCopy, permission: "curriculum.read", description: "Manage curriculum versions" },
-  { label: "Program Outcomes", href: "/program-outcomes", icon: Target, permission: "po.read", description: "Define POs for your programs" },
+  { label: "Program Outcomes", href: "/program-outcomes", icon: Target, permission: ["po.create", "po.update", "po.archive"], description: "Define POs for your programs" },
   { label: "Assessments", href: "/assessments", icon: ClipboardList, permission: "assessment.read", description: "Configure assessments" },
   { label: "Attainment", href: "/attainment", icon: BarChart3, permission: "attainment.read", description: "View CO/PO attainment results" },
   { label: "Approvals", href: "/approvals", icon: CheckSquare, permission: null, description: "Review pending approvals" },
@@ -19,8 +19,11 @@ const QUICK_LINKS = [
 ]
 
 function QuickLinkCard({ item }: { item: typeof QUICK_LINKS[0] }) {
-  const hasPermission = usePermission(item.permission ?? "")
-  if (item.permission !== null && !hasPermission) return null
+  const permissions = usePermissions()
+  const hasPermission = Array.isArray(item.permission)
+    ? item.permission.some((permission) => permissions.includes(permission))
+    : item.permission === null || permissions.includes(item.permission)
+  if (!hasPermission) return null
   return (
     <Link href={item.href}>
       <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">

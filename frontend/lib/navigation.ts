@@ -50,7 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Departments", href: "/departments", icon: Building, permission: "department.update", group: "Configuration" },
   { label: "Programs", href: "/programs", icon: GraduationCap, permission: "program.update", group: "Configuration" },
   { label: "Users", href: "/users", icon: Users, permission: "user.read", group: "Configuration" },
-  { label: "Program Outcome", href: "/program-outcomes", icon: Tag, permission: ["config.manage", "po.read"], group: "Configuration" },
+  { label: "Program Outcome", href: "/program-outcomes", icon: Tag, permission: ["po.create", "po.update", "po.archive"], group: "Configuration" },
   { label: "Complex Attributes", href: "/complex-attributes", icon: Boxes, permission: "config.manage", group: "Configuration" },
 
   // Curriculum

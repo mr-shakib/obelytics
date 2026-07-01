@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { usePermissions } from "@/hooks/use-permission"
+import { useAuthStore } from "@/lib/stores/auth-store"
 
 type POVersion = {
   id: string
@@ -69,9 +71,21 @@ export function POVersionDetailClient({ versionId }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<ProgramOutcome | null>(null)
   const router = useRouter()
   const qc = useQueryClient()
+  const permissions = usePermissions()
+  const isInitialized = useAuthStore((state) => state.isInitialized)
+  const canManageProgramOutcomes = permissions.some((permission) =>
+    ["po.create", "po.update", "po.archive"].includes(permission)
+  )
+
+  useEffect(() => {
+    if (isInitialized && !canManageProgramOutcomes) {
+      router.replace("/overview")
+    }
+  }, [canManageProgramOutcomes, isInitialized, router])
 
   const { data: version, isLoading: versionLoading } = useQuery({
     queryKey: queryKeys.poVersions.detail(versionId),
+    enabled: isInitialized && canManageProgramOutcomes,
     queryFn: async () => {
       const { data } = await apiClient.GET(`/po-versions/${versionId}` as never)
       return (data as unknown) as POVersion
@@ -80,6 +94,7 @@ export function POVersionDetailClient({ versionId }: Props) {
 
   const { data: pos = [], isLoading: posLoading } = useQuery({
     queryKey: queryKeys.programOutcomes.byVersion(versionId),
+    enabled: isInitialized && canManageProgramOutcomes,
     queryFn: async () => {
       const { data } = await apiClient.GET(
         `/program-outcomes?po_version_id=${versionId}` as never
@@ -219,6 +234,8 @@ export function POVersionDetailClient({ versionId }: Props) {
   ]
 
   // ── Render ───────────────────────────────────────────────────────────────
+
+  if (!isInitialized || !canManageProgramOutcomes) return null
 
   if (versionLoading) {
     return <div className="animate-pulse h-40 bg-muted rounded-md" />
