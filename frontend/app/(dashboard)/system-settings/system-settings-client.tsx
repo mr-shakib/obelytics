@@ -8,12 +8,23 @@ import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/shared/page-header"
 import { useAuthStore } from "@/lib/stores/auth-store"
 
+function IndeterminateBar() {
+  return (
+    <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+      <div className="h-full w-1/3 rounded-full bg-primary animate-[indeterminate-bar_1.4s_ease-in-out_infinite]" />
+    </div>
+  )
+}
+
 export function SystemSettingsClient() {
   const { accessToken } = useAuthStore()
   const restoreInputRef = useRef<HTMLInputElement>(null)
   const [isRestoring, setIsRestoring] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const busy = isRestoring || isDownloading
 
   async function handleBackupDownload() {
+    setIsDownloading(true)
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/admin/backup`, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
@@ -31,6 +42,8 @@ export function SystemSettingsClient() {
       toast.success("Backup downloaded")
     } catch {
       toast.error("Failed to download backup")
+    } finally {
+      setIsDownloading(false)
     }
   }
 
@@ -78,44 +91,66 @@ export function SystemSettingsClient() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border p-4 flex items-start justify-between gap-4">
-            <div>
-              <p className="font-medium text-sm">Create a Backup</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Download a backup file of everything in the system right now. Keep this file somewhere safe — you can use it to restore the system later.
-              </p>
+          <div className="rounded-lg border p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-medium text-sm">Create a Backup</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Download a backup file of everything in the system right now. Keep this file somewhere safe — you can use it to restore the system later.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                disabled={busy}
+                onClick={handleBackupDownload}
+              >
+                {isDownloading ? <Loader2 className="animate-spin" /> : <Download />}
+                {isDownloading ? "Preparing Backup…" : "Download Backup"}
+              </Button>
             </div>
-            <Button type="button" variant="outline" className="shrink-0" onClick={handleBackupDownload}>
-              <Download />
-              Download Backup
-            </Button>
+            {isDownloading && (
+              <div className="space-y-1">
+                <IndeterminateBar />
+                <p className="text-xs text-muted-foreground">Gathering all data into a backup file — this may take a moment…</p>
+              </div>
+            )}
           </div>
 
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex items-start justify-between gap-4">
-            <div>
-              <p className="font-medium text-sm">Restore from a Backup</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Upload a backup file to replace all current data with a saved version.
-                <span className="font-medium text-destructive"> This will permanently erase everything that is not in the backup file.</span>
-              </p>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-medium text-sm">Restore from a Backup</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Upload a backup file to replace all current data with a saved version.
+                  <span className="font-medium text-destructive"> This will permanently erase everything that is not in the backup file.</span>
+                </p>
+              </div>
+              <input
+                ref={restoreInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleRestoreFile}
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                className="shrink-0"
+                disabled={busy}
+                onClick={() => restoreInputRef.current?.click()}
+              >
+                {isRestoring ? <Loader2 className="animate-spin" /> : <DatabaseBackup />}
+                {isRestoring ? "Restoring…" : "Restore Backup"}
+              </Button>
             </div>
-            <input
-              ref={restoreInputRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={handleRestoreFile}
-            />
-            <Button
-              type="button"
-              variant="destructive"
-              className="shrink-0"
-              disabled={isRestoring}
-              onClick={() => restoreInputRef.current?.click()}
-            >
-              {isRestoring ? <Loader2 className="animate-spin" /> : <DatabaseBackup />}
-              {isRestoring ? "Restoring…" : "Restore Backup"}
-            </Button>
+            {isRestoring && (
+              <div className="space-y-1">
+                <IndeterminateBar />
+                <p className="text-xs text-muted-foreground">Restoring all data from the backup file — please don&apos;t close this page…</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
