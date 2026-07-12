@@ -97,7 +97,6 @@ export function CourseAssessmentClient({ id }: Props) {
     const name = tool.assessment_type_name.toLowerCase()
     if (courseType === "LAB") return name.includes("lab final")
     if (courseType === "THEORY") return name.includes("mid") || name.includes("final")
-    if (courseType === "THEORY_LAB") return name.includes("mid") || name.includes("lab final") || (name.includes("final") && !name.includes("lab"))
     return name.includes("mid") || name.includes("final")
   })
 

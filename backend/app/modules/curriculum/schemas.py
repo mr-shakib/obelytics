@@ -64,7 +64,7 @@ class CurriculumTermDefinitionResponse(BaseModel):
 
 class CourseCreate(BaseModel):
     course_category_id: UUID
-    course_type: Literal["THEORY", "LAB", "THEORY_LAB", "THESIS_DEFENSE"]
+    course_type: Literal["THEORY", "LAB", "THESIS_DEFENSE"]
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=255)
     credits: int = Field(ge=0, le=20)
@@ -106,7 +106,7 @@ class CourseResponse(BaseModel):
 
 class CourseBulkImportItem(BaseModel):
     course_category_id: UUID
-    course_type: Literal["THEORY", "LAB", "THEORY_LAB", "THESIS_DEFENSE"]
+    course_type: Literal["THEORY", "LAB", "THESIS_DEFENSE"]
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=255)
     credits: int = Field(ge=0, le=20)

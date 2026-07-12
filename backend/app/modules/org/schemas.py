@@ -132,6 +132,22 @@ class ProgramUpdate(BaseModel):
     po_version_id: UUID | None = None
 
 
+class ProgramCoordinatorInfo(BaseModel):
+    user_id: UUID
+    full_name: str
+
+
+class ProgramCoordinatorHistoryEntry(BaseModel):
+    user_id: UUID
+    full_name: str
+    effective_from: date
+    effective_to: date | None
+
+
+class AssignProgramCoordinator(BaseModel):
+    user_id: UUID
+
+
 class ProgramResponse(BaseModel):
     id: UUID
     organization_id: UUID
@@ -148,5 +164,7 @@ class ProgramResponse(BaseModel):
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    current_coordinator: ProgramCoordinatorInfo | None = None
+    coordinator_history: list[ProgramCoordinatorHistoryEntry] = []
 
     model_config = {"from_attributes": True}

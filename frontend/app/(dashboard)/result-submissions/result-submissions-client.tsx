@@ -2,20 +2,24 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
-import { BarChart3, BookOpen, ChevronRight, GraduationCap, Loader2, Send } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { BarChart3, BookOpen, ChevronRight, GraduationCap } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PageHeader } from "@/components/shared/page-header"
-import { StatusBadge } from "@/components/shared/status-badge"
+import { ResultStatusBadge } from "@/components/shared/result-status-badge"
 import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
-import { cn } from "@/lib/utils"
+import { useAuthStore } from "@/lib/stores/auth-store"
+
+// Courses/sections a section teacher hasn't finished with yet (not even
+// submitted to their Module Leader) aren't a Program Coordinator's concern —
+// their queue should only ever show what's actually been handed up to them.
+const PC_VISIBLE_STATUSES = new Set(["ML_APPROVED", "PC_APPROVED", "PUBLISHED"])
 
 type ResultSubmission = {
   section_offering_id: string
@@ -46,17 +50,10 @@ const STATUS_OPTIONS: Record<string, string> = {
   PUBLISHED: "Published",
 }
 
-// Determines the accent shown on a course card: the most "actionable" status
-// present among its sections wins, so courses awaiting review stand out first.
+// Determines the status label shown on a course card: the most "actionable"
+// status present among its sections wins, so courses awaiting review stand
+// out first.
 const STATUS_PRIORITY = ["SUBMITTED", "ML_APPROVED", "PC_APPROVED", "DRAFT", "PUBLISHED"]
-
-const CARD_ACCENT: Record<string, string> = {
-  SUBMITTED: "border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20",
-  ML_APPROVED: "border-cyan-300 bg-cyan-50/50 dark:border-cyan-800 dark:bg-cyan-950/20",
-  PC_APPROVED: "border-teal-300 bg-teal-50/50 dark:border-teal-800 dark:bg-teal-950/20",
-  PUBLISHED: "border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20",
-  DRAFT: "border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/20",
-}
 
 function courseAccentStatus(items: ResultSubmission[]): string {
   for (const status of STATUS_PRIORITY) {
@@ -66,9 +63,16 @@ function courseAccentStatus(items: ResultSubmission[]): string {
 }
 
 export function ResultSubmissionsClient() {
-  const qc = useQueryClient()
   const [status, setStatus] = useState("ALL")
-  const canSubmitToPC = useHasAnyPermission(["result.approve.ml"])
+  const isSuperAdmin = useAuthStore((s) => s.manifest?.scope.is_global ?? false)
+  const hasPcPermission = useHasAnyPermission(["result.approve.pc"])
+  // The Program Coordinator role is granted every permission (including the
+  // Module Leader's), so a raw permission check can't tell "genuine ML"
+  // apart from "PC who happens to also hold that permission." Anyone with
+  // PC-level authority (short of a super admin doing full-org oversight)
+  // gets the PC-scoped view: only courses the ML has actually submitted up,
+  // and no ML-only actions.
+  const isPcOnlyView = hasPcPermission && !isSuperAdmin
 
   const { data: submissions = [], isLoading } = useQuery({
     queryKey: queryKeys.results.submissions({ status }),
@@ -78,22 +82,6 @@ export function ResultSubmissionsClient() {
       } as never)
       return ((data as unknown) as ResultSubmission[]) ?? []
     },
-  })
-
-  const bulkApproveMutation = useMutation({
-    mutationFn: async (courseId: string) => {
-      const { data } = await apiClient.POST("/results/bulk-approve-ml" as never, {
-        body: { course_id: courseId },
-      } as never)
-      return (data as unknown) as { approved_count: number }
-    },
-    onSuccess: (data) => {
-      toast.success(
-        `Submitted ${data.approved_count} section${data.approved_count === 1 ? "" : "s"} to the Program Coordinator`
-      )
-      qc.invalidateQueries({ queryKey: queryKeys.results.all })
-    },
-    onError: () => toast.error("Failed to submit results to the Program Coordinator"),
   })
 
   const courseGroups = useMemo(() => {
@@ -111,10 +99,16 @@ export function ResultSubmissionsClient() {
         })
       }
     }
-    return Array.from(map.values())
-  }, [submissions])
+    let groups = Array.from(map.values())
+    if (isPcOnlyView) {
+      groups = groups.filter((g) => g.items.some((i) => PC_VISIBLE_STATUSES.has(i.status)))
+    }
+    return groups
+  }, [submissions, isPcOnlyView])
 
-  const pendingReviewCount = submissions.filter((s) => s.status === "SUBMITTED").length
+  const pendingReviewCount = submissions.filter((s) =>
+    isPcOnlyView ? s.status === "ML_APPROVED" : s.status === "SUBMITTED"
+  ).length
 
   return (
     <div className="space-y-6">
@@ -164,10 +158,8 @@ export function ResultSubmissionsClient() {
           const reviewCount = course.items.filter((i) => i.status === "SUBMITTED").length
           const firstItem = course.items[0]
 
-          const isSubmitting = bulkApproveMutation.isPending && bulkApproveMutation.variables === course.course_id
-
           return (
-            <Card key={course.course_id} className={cn("h-full", CARD_ACCENT[accent])}>
+            <Card key={course.course_id} className="h-full">
               <Link href={`/result-submissions/${course.course_id}?code=${encodeURIComponent(course.course_code)}&title=${encodeURIComponent(course.course_title)}`}>
                 <CardHeader className="pb-2 transition-colors hover:bg-muted/40 rounded-t-xl">
                   <div className="flex items-start justify-between gap-3">
@@ -179,7 +171,7 @@ export function ResultSubmissionsClient() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <StatusBadge status={accent} />
+                      <ResultStatusBadge status={accent} />
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </div>
                   </div>
@@ -196,7 +188,7 @@ export function ResultSubmissionsClient() {
                       {notSubmittedCount} not submitted
                     </Badge>
                     {reviewCount > 0 && (
-                      <Badge className="text-xs font-normal bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+                      <Badge variant="outline" className="text-xs font-normal">
                         {reviewCount} awaiting review
                       </Badge>
                     )}
@@ -231,19 +223,6 @@ export function ResultSubmissionsClient() {
                   </Button>
                 )}
               </CardContent>
-              {canSubmitToPC && reviewCount > 0 && (
-                <CardContent className="pt-0">
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    disabled={isSubmitting}
-                    onClick={() => bulkApproveMutation.mutate(course.course_id)}
-                  >
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Send />}
-                    Submit {reviewCount} section{reviewCount === 1 ? "" : "s"} to Program Coordinator
-                  </Button>
-                </CardContent>
-              )}
             </Card>
           )
         })}

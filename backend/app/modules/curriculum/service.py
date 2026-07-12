@@ -507,9 +507,9 @@ class CourseAssessmentToolService:
         self, course: Course, curriculum_id: UUID, org_id: UUID
     ) -> list[CourseAssessmentTool]:
         names_with_lock: list[tuple[str, bool]] = []
-        if course.course_type in ("LAB", "THEORY_LAB"):
+        if course.course_type == "LAB":
             names_with_lock += [(name, True) for name in self._LAB_TOOL_NAMES]
-        if course.course_type in ("THEORY", "THEORY_LAB"):
+        if course.course_type == "THEORY":
             names_with_lock += [(name, False) for name in self._THEORY_TOOL_NAMES]
         if not names_with_lock:
             return []

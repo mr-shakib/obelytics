@@ -1,0 +1,45 @@
+{% extends "_report_base.html" %}
+{% block content %}
+{% if programs|length == 0 %}
+<p class="muted">No published PO attainment data was found for the programs in scope.</p>
+{% endif %}
+{% for program in programs %}
+<section>
+  <h2>{{ program.title }} ({{ program.acronym }})</h2>
+  {% if program.terms|length == 0 %}
+  <p class="muted">No published PO attainment data yet for this program.</p>
+  {% endif %}
+  {% for term in program.terms %}
+  <h3 style="font-size:10.5pt; margin: 8px 0 6px;">{{ term.term_name }} ({{ term.term_season }} {{ term.term_year }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>PO</th>
+        <th>Statement</th>
+        <th class="num">Avg. Attainment</th>
+        <th class="num">Sections Attained</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in term.rows %}
+      <tr>
+        <td>{{ row.code }}</td>
+        <td>{{ row.statement }}</td>
+        <td class="num">{{ row.avg_pct }}%</td>
+        <td class="num">{{ row.attained_count }}/{{ row.offering_count }}</td>
+        <td>
+          {% if row.avg_pct >= 50 %}
+          <span class="badge badge-ok">Attained</span>
+          {% else %}
+          <span class="badge badge-bad">Not Attained</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+</section>
+{% endfor %}
+{% endblock %}

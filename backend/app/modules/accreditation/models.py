@@ -25,9 +25,9 @@ class AccreditationCycle(Base):
         index=True,
     )
     name = Column(String(255), nullable=False)
-    accreditation_body = Column(String(50), nullable=False)
-    cycle_start_year = Column(SmallInteger, nullable=False)
-    cycle_end_year = Column(SmallInteger, nullable=False)
+    body = Column(String(50), nullable=False)
+    start_date = Column(sa.Date, nullable=False)
+    end_date = Column(sa.Date, nullable=True)
     status = Column(String(20), nullable=False, server_default=sa.text("'DRAFT'"))
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
@@ -57,6 +57,9 @@ class AccreditationCriterion(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     order_index = Column(SmallInteger, nullable=False, server_default=sa.text("0"))
+    status = Column(String(20), nullable=False, server_default=sa.text("'NOT_STARTED'"))
+    # user_id stored without ORM FK — avoids cross-schema model coupling with IAM
+    assigned_to_user_id = Column(PGUUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),

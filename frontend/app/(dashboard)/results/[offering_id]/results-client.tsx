@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { PageHeader } from "@/components/shared/page-header"
-import { StatusBadge } from "@/components/shared/status-badge"
+import { ResultStatusBadge } from "@/components/shared/result-status-badge"
 import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
@@ -116,7 +116,7 @@ export function ResultsClient({ offeringId }: Props) {
         description={result.submitted_at ? `Submitted ${new Date(result.submitted_at).toLocaleString()}` : undefined}
         actions={
           <div className="flex items-center gap-2">
-            <StatusBadge status={result.status} />
+            <ResultStatusBadge status={result.status} />
             <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isDownloading}>
               {isDownloading ? <Loader2 className="animate-spin" /> : <Download />} Download PDF
             </Button>

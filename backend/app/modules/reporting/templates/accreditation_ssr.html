@@ -1,0 +1,57 @@
+{% extends "_report_base.html" %}
+{% block content %}
+<section>
+  <h2>Summary</h2>
+  <table>
+    <tbody>
+      <tr><td>Total Criteria</td><td class="num">{{ summary.total_criteria }}</td></tr>
+      <tr><td>Completed Criteria</td><td class="num">{{ summary.completed_criteria }}</td></tr>
+      <tr><td>Overall Average PO Attainment (mapped criteria)</td><td class="num">{{ summary.overall_avg_pct }}%</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{% for criterion in criteria %}
+<section>
+  <h2>{{ criterion.code }} — {{ criterion.title }}</h2>
+  <div class="meta-grid" style="margin-bottom:8px;">
+    <div><span class="meta-label">Status:</span>
+      <span class="badge {{ 'badge-ok' if criterion.status == 'COMPLETED' else 'badge-bad' }}">{{ criterion.status.replace('_', ' ') }}</span>
+    </div>
+    <div><span class="meta-label">Assigned To:</span> <span class="meta-value">{{ criterion.assigned_to or '—' }}</span></div>
+  </div>
+  {% if criterion.description %}<p>{{ criterion.description }}</p>{% endif %}
+
+  {% if criterion.po_rows|length > 0 %}
+  <table>
+    <thead>
+      <tr>
+        <th>PO</th>
+        <th>Statement</th>
+        <th class="num">Avg. Attainment (cycle period)</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in criterion.po_rows %}
+      <tr>
+        <td>{{ row.code }}</td>
+        <td>{{ row.statement }}</td>
+        <td class="num">{{ row.avg_pct }}%</td>
+        <td>
+          {% if row.avg_pct >= 50 %}
+          <span class="badge badge-ok">Attained</span>
+          {% else %}
+          <span class="badge badge-bad">Not Attained</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No Program Outcomes mapped to this criterion.</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

@@ -98,6 +98,32 @@ class DepartmentHeadHistory(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
+class ProgramCoordinatorHistory(Base):
+    __tablename__ = "program_coordinator_history"
+    __table_args__ = (
+        Index(
+            "uq_org_program_current_coordinator",
+            "program_id",
+            unique=True,
+            postgresql_where=sa.text("effective_to IS NULL"),
+        ),
+        {"schema": "org"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    program_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.programs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    # user_id stored without ORM FK — avoids cross-schema model coupling with IAM
+    user_id = Column(PGUUID(as_uuid=True), nullable=False)
+    effective_from = Column(sa.Date, nullable=False)
+    effective_to = Column(sa.Date, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
 class Program(Base):
     __tablename__ = "programs"
     __table_args__ = (

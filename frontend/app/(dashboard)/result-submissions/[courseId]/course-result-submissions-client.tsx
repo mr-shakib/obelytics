@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageHeader } from "@/components/shared/page-header"
-import { StatusBadge } from "@/components/shared/status-badge"
+import { ResultStatusBadge } from "@/components/shared/result-status-badge"
 import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
@@ -149,6 +149,33 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
     }
   }
 
+  async function handleDownloadDriveLinks(group: { label: string; batch_id: string; academic_term_id: string }) {
+    const key = `drive-links-${group.label}`
+    setDownloadingKey(key)
+    try {
+      const { data: blob, error } = await apiClient.GET(`/results/courses/${courseId}/drive-links.xlsx` as never, {
+        params: { query: { batch_id: group.batch_id, academic_term_id: group.academic_term_id } },
+        parseAs: "blob",
+      } as never)
+      if (error || !blob) {
+        toast.error("Failed to generate the Drive links workbook")
+        return
+      }
+      const url = URL.createObjectURL(blob as Blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${headerCode ?? "course"}_drive_links.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error("Failed to generate the Drive links workbook")
+    } finally {
+      setDownloadingKey(null)
+    }
+  }
+
   const termGroups = groupByBatchTerm(submissions)
   const headerCode = code ?? submissions[0]?.course_code
   const headerTitle = title ?? submissions[0]?.course_title
@@ -188,6 +215,8 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
         {termGroups.map((group) => {
           const reviewCount = group.items.filter((i) => i.status === "SUBMITTED").length
           const pcReviewCount = group.items.filter((i) => i.status === "ML_APPROVED").length
+          const anySubmitted = group.items.some((i) => i.status !== "DRAFT")
+          const isDownloadingDriveLinks = downloadingKey === `drive-links-${group.label}`
           const isSubmitting =
             bulkApproveMutation.isPending &&
             bulkApproveMutation.variables?.batchId === group.batch_id &&
@@ -256,6 +285,17 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                   {isDownloading ? <Loader2 className="animate-spin" /> : <Download />}
                   Download Combined Report
                 </Button>
+                {canApprovePC && anySubmitted && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isDownloadingDriveLinks}
+                    onClick={() => handleDownloadDriveLinks(group)}
+                  >
+                    {isDownloadingDriveLinks ? <Loader2 className="animate-spin" /> : <Download />}
+                    Download Drive Links (Excel)
+                  </Button>
+                )}
                 {canSubmitToPC && reviewCount > 0 && (
                   <div className="flex flex-col items-end gap-1">
                     <Button
@@ -302,7 +342,7 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                       <Badge variant="outline" className="text-xs font-normal">
                         {item.student_count} student{item.student_count === 1 ? "" : "s"}
                       </Badge>
-                      <StatusBadge status={item.status} />
+                      <ResultStatusBadge status={item.status} />
                       {item.end_report_status === "SUBMITTED" && (
                         <Badge variant="outline" className="text-xs font-normal border-green-300 text-green-700">
                           End Report ✓
@@ -316,7 +356,6 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
                       <Button
                         size="sm"
                         variant={viewedLinks.has(item.section_offering_id) ? "outline" : "default"}
-                        className={viewedLinks.has(item.section_offering_id) ? "text-green-700 border-green-300" : "bg-blue-600 hover:bg-blue-700"}
                         onClick={() => handleOpenDriveLink(item.section_offering_id, item.course_drive_link!)}
                         title="Open Drive link submitted by section teacher"
                       >

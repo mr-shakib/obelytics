@@ -46,8 +46,9 @@ class ProgramOutcome(Base):
     __tablename__ = "program_outcomes"
     __table_args__ = (
         Index(
-            "uq_obe_po_org_code_active",
+            "uq_obe_po_org_program_code_active",
             "organization_id",
+            "program_id",
             "code",
             unique=True,
             postgresql_where=sa.text("status = 'ACTIVE'"),

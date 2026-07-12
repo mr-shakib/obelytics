@@ -1,6 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 from decimal import Decimal
+from datetime import datetime
+from typing import Any
 
 
 # Assessment Summary Report
@@ -65,3 +67,34 @@ class ProgramPOAttainmentReport(BaseModel):
     academic_term_id: UUID
     organization_id: UUID
     po_rows: list[ProgramPORow]
+
+
+# ── Report Runs (async report generation) ──────────────────────────────────────
+
+class ReportDefinition(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    params_schema: dict[str, Any] | None = None
+
+
+class ReportRunCreate(BaseModel):
+    definition_id: str
+
+
+class ReportRunResponse(BaseModel):
+    id: UUID
+    definition_id: str
+    definition_name: str
+    status: str = Field(pattern="^(PENDING|RUNNING|DONE|FAILED)$")
+    created_at: datetime
+    completed_at: datetime | None
+    output_url: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReportRunDetailResponse(ReportRunResponse):
+    params: dict[str, Any] | None = None
+    summary: dict[str, Any] | None = None
+    error: str | None = None

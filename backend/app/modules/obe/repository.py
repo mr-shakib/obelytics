@@ -59,6 +59,9 @@ class POVersionRepository:
         return result.scalar_one_or_none()
 
     async def count_pos(self, version_id: UUID) -> int:
+        # Counts the reusable template set only (program_id IS NULL) — same
+        # reasoning as list_active: POs already copied into a specific program
+        # shouldn't inflate the version's own PO count.
         result = await self._session.execute(
             select(func.count())
             .select_from(ProgramOutcome)
@@ -66,6 +69,7 @@ class POVersionRepository:
                 and_(
                     ProgramOutcome.po_version_id == version_id,
                     ProgramOutcome.status == "ACTIVE",
+                    ProgramOutcome.program_id.is_(None),
                 )
             )
         )
@@ -110,6 +114,12 @@ class PORepository:
         )
         if program_id:
             stmt = stmt.where(ProgramOutcome.program_id == program_id)
+        elif po_version_id:
+            # Browsing a PO version with no specific program means "the reusable
+            # template set" — exclude POs already copied into a program by
+            # _seed_pos_from_version, or each code would show up twice: once as
+            # the template, once as that program's own instantiated copy.
+            stmt = stmt.where(ProgramOutcome.program_id.is_(None))
         if po_version_id:
             stmt = stmt.where(ProgramOutcome.po_version_id == po_version_id)
         result = await self._session.execute(stmt)

@@ -1,5 +1,6 @@
 from arq.connections import RedisSettings
 from app.core.config import settings
+from app.workers.tasks.reports import generate_report_run
 
 redis_settings = RedisSettings(
     host=settings.REDIS_HOST,
@@ -11,7 +12,7 @@ redis_settings = RedisSettings(
 
 class WorkerSettings:
     redis_settings = redis_settings
-    functions: list = []  # tasks registered here as phases are built
+    functions: list = [generate_report_run]
     max_jobs = 10
     job_timeout = 300  # 5 minutes
     keep_result = 3600  # retain job results for 1 hour

@@ -38,7 +38,7 @@ const SECTIONS: { slug: string; label: string; icon: LucideIcon }[] = [
   { slug: "materials", label: "Learning Materials", icon: BookOpen },
   { slug: "sections", label: "Sections", icon: Users },
 ]
-const REQUIRED_DELIVERY_PLAN_WEEKS = 14
+const REQUIRED_DELIVERY_PLAN_WEEKS = 12
 
 interface Props {
   id: string

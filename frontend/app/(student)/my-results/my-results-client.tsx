@@ -1,14 +1,21 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { toast } from "sonner"
+import { Download, Loader2 } from "lucide-react"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell, LabelList,
+  PieChart, Pie, Legend,
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiClient } from "@/lib/api/client"
+import { CATEGORICAL_COLORS, STATUS_GOOD } from "@/lib/result-colors"
 import { cn } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,12 +41,20 @@ interface CourseResult {
   course_title: string
   term_name: string
   result_status: string
-  total_marks_obtained: number
-  total_marks: number
-  percentage: number
-  grade?: string
   co_results: COResult[]
   po_results: POResult[]
+}
+
+const PIE_COLORS = CATEGORICAL_COLORS
+
+interface ProgramOutcomeSummary {
+  po_code: string
+  po_statement?: string | null
+}
+
+interface ResultsBundle {
+  results: CourseResult[]
+  program_outcomes: ProgramOutcomeSummary[]
 }
 
 // ── PO Aggregation ────────────────────────────────────────────────────────────
@@ -53,7 +68,7 @@ interface POAggregate {
   contributions: { course_code: string; course_title: string; pct: number }[]
 }
 
-function aggregatePOs(courses: CourseResult[]): POAggregate[] {
+function aggregatePOs(courses: CourseResult[], allPOs: ProgramOutcomeSummary[] = []): POAggregate[] {
   const map = new Map<string, {
     statement: string | null
     threshold: number
@@ -73,10 +88,19 @@ function aggregatePOs(courses: CourseResult[]): POAggregate[] {
     }
   }
 
+  // Every active program outcome gets a slot even if none of the student's
+  // published courses map to it yet — those show up with no bar and no contributions.
+  const fallbackThreshold = map.size > 0 ? Array.from(map.values())[0].threshold : 50
+  for (const po of allPOs) {
+    if (!map.has(po.po_code)) {
+      map.set(po.po_code, { statement: po.po_statement ?? null, threshold: fallbackThreshold, values: [] })
+    }
+  }
+
   return Array.from(map.entries())
     .map(([po_code, { statement, threshold, values }]) => {
-      const avg_pct = values.reduce((s, v) => s + v.pct, 0) / values.length
-      return { po_code, po_statement: statement, avg_pct, threshold, is_attained: avg_pct >= threshold, contributions: values }
+      const avg_pct = values.length ? values.reduce((s, v) => s + v.pct, 0) / values.length : 0
+      return { po_code, po_statement: statement, avg_pct, threshold, is_attained: values.length > 0 && avg_pct >= threshold, contributions: values }
     })
     .sort((a, b) => a.po_code.localeCompare(b.po_code, undefined, { numeric: true }))
 }
@@ -111,14 +135,108 @@ function POChartTooltip({ active, payload }: { active?: boolean; payload?: { pay
   )
 }
 
+// ── PO Course-Contribution Pie Chart ─────────────────────────────────────────
+
+function POContributionSection({
+  courses,
+  allPOs,
+  selectedPo,
+  onSelectPo,
+}: {
+  courses: CourseResult[]
+  allPOs: ProgramOutcomeSummary[]
+  selectedPo: string
+  onSelectPo: (code: string) => void
+}) {
+  const pos = useMemo(() => aggregatePOs(courses, allPOs), [courses, allPOs])
+  const effectivePo = selectedPo || pos[0]?.po_code || ""
+  const active = pos.find((p) => p.po_code === effectivePo)
+
+  const pieData = useMemo(
+    () => (active?.contributions ?? []).map((c, i) => ({
+      name: c.course_code,
+      value: Math.round(c.pct * 10) / 10,
+      fill: PIE_COLORS[i % PIE_COLORS.length],
+    })),
+    [active]
+  )
+
+  if (pos.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div>
+            <CardTitle className="text-lg">Which Courses Earned You This PO</CardTitle>
+            <CardDescription className="mt-0.5">
+              {(active?.contributions.length ?? 0) > 1
+                ? `${effectivePo} was attained across ${active?.contributions.length} course${active?.contributions.length === 1 ? "" : "s"} — each slice is that course's share`
+                : `${effectivePo} attainment for this PO`}
+            </CardDescription>
+          </div>
+          <div className="w-28">
+            <Select value={effectivePo} onValueChange={(v) => v != null && onSelectPo(v as string)}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select PO" />
+              </SelectTrigger>
+              <SelectContent>
+                {pos.map((p) => (
+                  <SelectItem key={p.po_code} value={p.po_code}>{p.po_code}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {pieData.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">No attainment data yet for {effectivePo}.</p>
+        ) : (
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius="80%"
+                  label={(d) => `${d.name}: ${d.value}%`}
+                >
+                  {pieData.map((entry) => <Cell key={entry.name} fill={entry.fill} />)}
+                </Pie>
+                <Tooltip formatter={(value, _name, item) => [`${value}%`, item.payload.name]} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── PO Summary Chart ──────────────────────────────────────────────────────────
 
-function POSummarySection({ courses }: { courses: CourseResult[] }) {
-  const pos = aggregatePOs(courses)
+function POSummarySection({
+  courses,
+  allPOs,
+  selectedPo,
+  onSelectPo,
+}: {
+  courses: CourseResult[]
+  allPOs: ProgramOutcomeSummary[]
+  selectedPo: string
+  onSelectPo: (code: string) => void
+}) {
+  const pos = aggregatePOs(courses, allPOs)
   if (pos.length === 0) return null
 
   const threshold = pos[0]?.threshold ?? 50
   const attainedCount = pos.filter((p) => p.is_attained).length
+  const chartData = pos.map((p) => ({ ...p, bar_pct: p.is_attained ? p.avg_pct : 0 }))
 
   // collect unique courses that appear in PO data
   const allCourseCodes = Array.from(
@@ -132,7 +250,7 @@ function POSummarySection({ courses }: { courses: CourseResult[] }) {
           <div>
             <CardTitle className="text-lg">Program Outcome Attainment</CardTitle>
             <CardDescription className="mt-0.5">
-              Average PO attainment across all your courses
+              Average PO attainment across all your courses — hover a bar for the course breakdown, or click it to see the split below
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -144,32 +262,40 @@ function POSummarySection({ courses }: { courses: CourseResult[] }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Bar Chart */}
-        <div className="h-64">
+        {/* Bar Chart — all POs, hover for the course breakdown */}
+        <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={pos} margin={{ top: 20, right: 8, left: -20, bottom: 4 }} barSize={28}>
+            <BarChart data={chartData} margin={{ top: 20, right: 8, left: -20, bottom: 4 }} barSize={28}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
               <XAxis dataKey="po_code" tick={{ fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
-              <Tooltip content={<POChartTooltip />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }} />
+              <Tooltip content={<POChartTooltip />} cursor={{ fill: "var(--muted)", opacity: 0.5 }} />
               <ReferenceLine
                 y={threshold}
-                stroke="hsl(var(--destructive))"
+                stroke="var(--destructive)"
                 strokeDasharray="5 3"
-                label={{ value: `${threshold}%`, fontSize: 9, fill: "hsl(var(--destructive))", position: "insideTopRight" }}
+                label={{ value: `${threshold}%`, fontSize: 9, fill: "var(--destructive)", position: "insideTopRight" }}
               />
-              <Bar dataKey="avg_pct" radius={[4, 4, 0, 0]}>
+              <Bar
+                dataKey="bar_pct"
+                radius={[4, 4, 0, 0]}
+                background={{ fill: "var(--muted)", radius: 4 }}
+                onClick={(entry) => onSelectPo((entry as unknown as POAggregate).po_code)}
+                cursor="pointer"
+              >
                 <LabelList
-                  dataKey="avg_pct"
+                  dataKey="bar_pct"
                   position="top"
-                  formatter={(v) => `${Number(v).toFixed(0)}%`}
+                  formatter={(v) => (Number(v) > 0 ? `${Number(v).toFixed(0)}%` : "")}
                   style={{ fontSize: 10, fontWeight: 700 }}
                 />
-                {pos.map((entry) => (
+                {chartData.map((entry) => (
                   <Cell
                     key={entry.po_code}
-                    fill={entry.is_attained ? "hsl(142 71% 45%)" : "hsl(var(--destructive))"}
-                    fillOpacity={0.85}
+                    fill={STATUS_GOOD}
+                    fillOpacity={!selectedPo || selectedPo === entry.po_code ? 0.9 : 0.5}
+                    stroke={selectedPo === entry.po_code ? "var(--foreground)" : undefined}
+                    strokeWidth={selectedPo === entry.po_code ? 2 : 0}
                   />
                 ))}
               </Bar>
@@ -183,7 +309,7 @@ function POSummarySection({ courses }: { courses: CourseResult[] }) {
             <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Attained
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-destructive inline-block" /> Not attained
+            <span className="w-3 h-3 rounded-sm bg-muted border border-border inline-block" /> Not attained
           </span>
         </div>
 
@@ -285,15 +411,6 @@ function CourseCard({ course }: { course: CourseResult }) {
             <CardTitle className="text-base leading-snug">{course.course_title}</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">{course.course_code} · {course.term_name}</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {course.grade && (
-              <Badge className="text-sm font-bold px-2.5">{course.grade}</Badge>
-            )}
-            <span className="text-sm font-semibold tabular-nums">
-              {course.total_marks_obtained}/{course.total_marks}
-              <span className="text-muted-foreground font-normal ml-1">({course.percentage.toFixed(1)}%)</span>
-            </span>
-          </div>
         </div>
       </CardHeader>
 
@@ -368,13 +485,41 @@ function CourseCard({ course }: { course: CourseResult }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function MyResultsClient() {
+  const [selectedPo, setSelectedPo] = useState("")
+  const [downloading, setDownloading] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ["student", "results"],
     queryFn: async () => {
       const { data } = await apiClient.GET("/students/me/results" as never)
-      return (data as unknown) as CourseResult[]
+      return (data as unknown) as ResultsBundle
     },
   })
+
+  async function downloadReport() {
+    setDownloading(true)
+    try {
+      const { data: blob, error } = await apiClient.GET(
+        "/students/me/results/pdf" as never,
+        { parseAs: "blob" } as never
+      )
+      if (error || !blob) {
+        toast.error("Failed to generate the report")
+        return
+      }
+      const url = URL.createObjectURL(blob as Blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "PO_Attainment_Report.pdf"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error("Failed to generate the report")
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -384,23 +529,33 @@ export function MyResultsClient() {
     )
   }
 
-  if (!data?.length) {
+  const courses = data?.results ?? []
+  const allPOs = data?.program_outcomes ?? []
+
+  if (!courses.length) {
     return <p className="text-muted-foreground text-sm">No published results available yet.</p>
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">My Results</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-2xl font-bold">My Results</h1>
+        <Button variant="outline" size="sm" onClick={downloadReport} disabled={downloading}>
+          {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+          Download Official Report
+        </Button>
+      </div>
 
       {/* PO summary at the top */}
-      <POSummarySection courses={data} />
+      <POSummarySection courses={courses} allPOs={allPOs} selectedPo={selectedPo} onSelectPo={setSelectedPo} />
+      <POContributionSection courses={courses} allPOs={allPOs} selectedPo={selectedPo} onSelectPo={setSelectedPo} />
 
       {/* Per-course breakdown */}
       <div className="space-y-4">
         <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide">
           Course-wise Breakdown
         </h2>
-        {data.map((course) => (
+        {courses.map((course) => (
           <CourseCard key={course.course_code} course={course} />
         ))}
       </div>

@@ -4,7 +4,13 @@ from uuid import UUID
 from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.org.models import Department, DepartmentHeadHistory, Organization, Program
+from app.modules.org.models import (
+    Department,
+    DepartmentHeadHistory,
+    Organization,
+    Program,
+    ProgramCoordinatorHistory,
+)
 
 
 class OrgRepository:
@@ -152,3 +158,37 @@ class ProgramRepository:
         await self._session.flush()
         await self._session.refresh(program)
         return program
+
+    async def list_coordinator_history(self, program_id: UUID) -> list[ProgramCoordinatorHistory]:
+        result = await self._session.execute(
+            select(ProgramCoordinatorHistory)
+            .where(ProgramCoordinatorHistory.program_id == program_id)
+            .order_by(desc(ProgramCoordinatorHistory.effective_from))
+        )
+        return list(result.scalars().all())
+
+    async def close_current_coordinator(self, program_id: UUID, effective_to: date) -> None:
+        result = await self._session.execute(
+            select(ProgramCoordinatorHistory).where(
+                and_(
+                    ProgramCoordinatorHistory.program_id == program_id,
+                    ProgramCoordinatorHistory.effective_to.is_(None),
+                )
+            )
+        )
+        current = result.scalar_one_or_none()
+        if current is not None:
+            current.effective_to = effective_to
+            self._session.add(current)
+            await self._session.flush()
+
+    async def add_coordinator_history(
+        self, program_id: UUID, user_id: UUID, effective_from: date
+    ) -> ProgramCoordinatorHistory:
+        entry = ProgramCoordinatorHistory(
+            program_id=program_id, user_id=user_id, effective_from=effective_from
+        )
+        self._session.add(entry)
+        await self._session.flush()
+        await self._session.refresh(entry)
+        return entry

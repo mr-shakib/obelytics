@@ -26,6 +26,8 @@ from app.modules.accreditation.schemas import (
     AccreditationCycleUpdate,
     CriterionPOMappingCreate,
 )
+from app.modules.reporting.models import ReportRun
+from app.modules.reporting.service import ReportRunService
 
 
 class AccreditationCycleService:
@@ -43,9 +45,9 @@ class AccreditationCycleService:
             organization_id=org_id,
             program_id=body.program_id,
             name=body.name,
-            accreditation_body=body.accreditation_body,
-            cycle_start_year=body.cycle_start_year,
-            cycle_end_year=body.cycle_end_year,
+            body=body.body,
+            start_date=body.start_date,
+            end_date=body.end_date,
             status="DRAFT",
             created_by_user_id=created_by_user_id,
         )
@@ -96,6 +98,17 @@ class AccreditationCycleService:
         result = await self._repo.update(obj, {"status": "CLOSED"})
         await self._session.commit()
         return result
+
+    async def prepare_report_run(self, cycle_id: UUID, org_id: UUID, user_id: UUID) -> ReportRun:
+        cycle = await self.get(cycle_id, org_id)
+        report_svc = ReportRunService(self._session)
+        return await report_svc.create_run(
+            org_id,
+            user_id,
+            definition_id="accreditation_ssr",
+            definition_name=f"{cycle.name} — Self-Assessment Report",
+            params={"cycle_id": str(cycle.id)},
+        )
 
 
 class AccreditationCriterionService:

@@ -108,6 +108,14 @@ class ResultStateError(HTTPException):
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
+class BulkPublishScopeError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide a course_id, or both batch_id and academic_term_id, to bulk-approve results",
+        )
+
+
 class NoMarksEnteredError(HTTPException):
     def __init__(self):
         super().__init__(

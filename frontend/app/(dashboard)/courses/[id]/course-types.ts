@@ -84,6 +84,5 @@ export type CourseListItem = { id: string; code: string; title: string }
 export const COURSE_TYPE_LABELS: Record<string, string> = {
   THEORY: "Theory",
   LAB: "Lab",
-  THEORY_LAB: "Theory + Lab",
   THESIS_DEFENSE: "Final Year Thesis Defense",
 }

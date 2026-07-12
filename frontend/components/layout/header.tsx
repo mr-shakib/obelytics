@@ -124,7 +124,12 @@ export function Header() {
           onValueChange={(v) => setActiveProgram((v as string | null) || null)}
         >
           <SelectTrigger className="w-48 h-8 text-sm">
-            <SelectValue placeholder="Select program…" />
+            <SelectValue placeholder="Select program…">
+              {(value: string) => {
+                const p = programs.find((p) => p.id === value)
+                return p ? `${p.acronym} — ${p.name}` : value
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {programs.map((p) => (

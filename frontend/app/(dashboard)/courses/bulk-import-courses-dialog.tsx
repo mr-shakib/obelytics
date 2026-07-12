@@ -31,7 +31,6 @@ type CourseCategory = { id: string; name: string }
 const COURSE_TYPE_LABELS: Record<string, string> = {
   THEORY: "Theory",
   LAB: "Lab",
-  THEORY_LAB: "Theory + Lab",
   THESIS_DEFENSE: "Final Year Thesis Defense",
 }
 
@@ -50,7 +49,7 @@ const COLUMN_GUIDE: { key: string; required: boolean; description: string; examp
   { key: "code", required: true, description: "Unique course code (max 30 chars)", example: "CSE101" },
   { key: "title", required: true, description: "Course title (max 255 chars)", example: "Introduction to Programming" },
   { key: "credits", required: true, description: "Credit hours (0-20)", example: "3" },
-  { key: "course_type", required: true, description: "One of: THEORY, LAB, THEORY_LAB, THESIS_DEFENSE", example: "THEORY" },
+  { key: "course_type", required: true, description: "One of: THEORY, LAB, THESIS_DEFENSE", example: "THEORY" },
   { key: "course_category_name", required: true, description: "Category name — must match an existing category exactly", example: "Core" },
   { key: "theory_hours", required: false, description: "Weekly theory hours (default 0)", example: "3" },
   { key: "lab_hours", required: false, description: "Weekly lab hours (default 0)", example: "0" },
@@ -64,7 +63,7 @@ async function downloadTemplate(categories: CourseCategory[]) {
     TEMPLATE_COLUMNS,
     ["CSE101", "Introduction to Programming", 3, "THEORY", exampleCategory, 3, 0, ""],
     ["CSE102", "Programming Lab", 1, "LAB", exampleCategory, 0, 2, "Hands-on lab sessions"],
-    ["CSE201", "Data Structures", 3, "THEORY_LAB", exampleCategory, 2, 2, ""],
+    ["CSE201", "Data Structures", 3, "THEORY", exampleCategory, 3, 0, ""],
   ])
   ws["!cols"] = TEMPLATE_COLUMNS.map(() => ({ wch: 22 }))
   const wb = XLSX.utils.book_new()

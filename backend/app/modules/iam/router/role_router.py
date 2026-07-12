@@ -98,7 +98,7 @@ async def list_roles_with_permissions(
 
 # ── Parameterised routes ──────────────────────────────────────────────────────
 
-@router.get("/{role_id}", response_model=RoleResponse)
+@router.get("/{role_id}", response_model=RoleWithPermissionsResponse)
 async def get_role(
     role_id: UUID,
     _: Annotated[User, Depends(get_current_user)],
@@ -108,7 +108,13 @@ async def get_role(
     role = await repo.get_by_id(role_id)
     if not role:
         raise RoleNotFoundError()
-    return role
+    return RoleWithPermissionsResponse(
+        id=role.id,
+        name=role.name,
+        description=role.description,
+        is_system_role=role.is_system_role,
+        permission_codes=[p.code for p in role.permissions],
+    )
 
 
 @router.get("/{role_id}/permissions", response_model=list[PermissionResponse])

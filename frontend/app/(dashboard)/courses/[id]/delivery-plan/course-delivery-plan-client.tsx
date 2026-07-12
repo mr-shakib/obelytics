@@ -19,7 +19,7 @@ import { useResolveCourseLocation } from "@/hooks/use-course-location"
 import type { LessonPlanItem, CourseOutcome, ProgramOutcome, CurriculumDetail } from "../course-types"
 
 type Program = { id: string; po_version_id?: string | null }
-const REQUIRED_DELIVERY_PLAN_WEEKS = 14
+const REQUIRED_DELIVERY_PLAN_WEEKS = 12
 type MappingSet = { id: string }
 type MappingEntry = {
   id: string

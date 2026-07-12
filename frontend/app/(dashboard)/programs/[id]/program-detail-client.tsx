@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Combobox } from "@/components/ui/combobox"
 import {
   Select,
   SelectContent,
@@ -32,8 +34,17 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { formatDate } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+type ProgramCoordinatorInfo = { user_id: string; full_name: string }
+type ProgramCoordinatorHistoryEntry = {
+  user_id: string
+  full_name: string
+  effective_from: string
+  effective_to?: string | null
+}
 
 type Program = {
   id: string
@@ -48,6 +59,14 @@ type Program = {
   description?: string | null
   po_version_id?: string | null
   status: string
+  current_coordinator?: ProgramCoordinatorInfo | null
+  coordinator_history?: ProgramCoordinatorHistoryEntry[]
+}
+
+type ProgramUser = { id: string; full_name: string; employee_id?: string | null }
+
+function userDisplayLabel(user: ProgramUser) {
+  return user.employee_id ? `${user.employee_id} - ${user.full_name}` : user.full_name
 }
 
 type Department = { id: string; name: string }
@@ -757,6 +776,97 @@ function PEOMissionMappingCard({ programId }: { programId: string }) {
   )
 }
 
+// ── Program Coordinator Card ──────────────────────────────────────────────────
+
+function ProgramCoordinatorCard({
+  programId,
+  currentCoordinator,
+  history,
+}: {
+  programId: string
+  currentCoordinator?: ProgramCoordinatorInfo | null
+  history?: ProgramCoordinatorHistoryEntry[]
+}) {
+  const qc = useQueryClient()
+  const [coordinatorId, setCoordinatorId] = useState("")
+
+  const { data: users } = useQuery({
+    queryKey: queryKeys.users.list(),
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/users" as never)
+      return ((data as unknown) as ProgramUser[]) ?? []
+    },
+  })
+
+  const userOptions = (users ?? []).map((u) => ({ value: u.id, label: userDisplayLabel(u) }))
+
+  const assignMutation = useMutation({
+    mutationFn: async (user_id: string) => {
+      await apiClient.POST(`/programs/${programId}/coordinator` as never, { body: { user_id } } as never)
+    },
+    onSuccess: () => {
+      toast.success("Program Coordinator assigned")
+      qc.invalidateQueries({ queryKey: queryKeys.programs.detail(programId) })
+      setCoordinatorId("")
+    },
+    onError: () => toast.error("Failed to assign Program Coordinator"),
+  })
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Program Coordinator</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm">
+          Current:{" "}
+          <span className="font-medium">{currentCoordinator?.full_name ?? "Not assigned"}</span>
+        </p>
+
+        <PermissionGate permission="program.update">
+          <div className="flex items-end gap-2">
+            <div className="flex-1 space-y-2">
+              <Label>Assign new Program Coordinator</Label>
+              <Combobox
+                options={userOptions}
+                value={coordinatorId}
+                onValueChange={setCoordinatorId}
+                placeholder="Search by employee ID or name…"
+                searchPlaceholder="Search by employee ID or name…"
+                emptyText="No matching users"
+                triggerClassName="w-full"
+              />
+            </div>
+            <Button
+              disabled={!coordinatorId || assignMutation.isPending}
+              onClick={() => coordinatorId && assignMutation.mutate(coordinatorId)}
+            >
+              {assignMutation.isPending && <Loader2 className="animate-spin" />}
+              Assign
+            </Button>
+          </div>
+        </PermissionGate>
+
+        {history && history.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-medium">History</p>
+            <ul className="space-y-2 text-sm">
+              {history.map((h, i) => (
+                <li key={i} className="flex items-center justify-between border-b pb-2 last:border-0">
+                  <span className="font-medium">{h.full_name}</span>
+                  <span className="text-muted-foreground">
+                    {formatDate(h.effective_from)} — {h.effective_to ? formatDate(h.effective_to) : "Present"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -765,7 +875,19 @@ interface Props {
 
 export function ProgramDetailClient({ id }: Props) {
   const qc = useQueryClient()
+  const router = useRouter()
   const [selectedPoVersionId, setSelectedPoVersionId] = useState<string | null>(null)
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.DELETE(`/programs/${id}` as never)
+    },
+    onSuccess: () => {
+      toast.success("Program deleted")
+      qc.invalidateQueries({ queryKey: queryKeys.programs.all })
+      router.push("/programs")
+    },
+  })
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.programs.detail(id),
@@ -826,7 +948,25 @@ export function ProgramDetailClient({ id }: Props) {
       <PageHeader
         title={data.title}
         description={`${data.acronym} · ${formatProgramType(data.program_type)} · ${data.department_name}`}
-        actions={<StatusBadge status={data.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge status={data.status} />
+            <PermissionGate permission="program.delete">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete "${data.title}"? This cannot be undone.`))
+                    deleteMutation.mutate()
+                }}
+              >
+                {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </Button>
+            </PermissionGate>
+          </div>
+        }
       />
 
       <Card>
@@ -992,6 +1132,12 @@ export function ProgramDetailClient({ id }: Props) {
           </PermissionGate>
         </CardContent>
       </Card>
+
+      <ProgramCoordinatorCard
+        programId={id}
+        currentCoordinator={data.current_coordinator}
+        history={data.coordinator_history}
+      />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="space-y-6">

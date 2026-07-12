@@ -15,13 +15,13 @@ import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 
-type Permission = { code: string; description?: string; module: string }
+type Permission = { id: string; code: string; description?: string; module: string }
 type RoleDetail = {
   id: string
   name: string
   description?: string
-  is_system: boolean
-  permissions: string[]
+  is_system_role: boolean
+  permission_codes: string[]
 }
 
 interface Props {
@@ -54,15 +54,17 @@ export function RoleDetailClient({ id }: Props) {
   const { data: allPermissions, isLoading: permsLoading } = useQuery({
     queryKey: ["all-permissions"],
     queryFn: async () => {
-      const { data } = await apiClient.GET("/permissions" as never)
+      const { data } = await apiClient.GET("/roles/permissions/all" as never)
       return ((data as unknown) as { items?: Permission[] })?.items ?? ((data as unknown) as Permission[]) ?? []
     },
   })
 
   const saveMutation = useMutation({
     mutationFn: async (permCodes: string[]) => {
+      const idByCode = Object.fromEntries((allPermissions ?? []).map((p) => [p.code, p.id]))
+      const permissionIds = permCodes.map((code) => idByCode[code]).filter(Boolean)
       await apiClient.PUT(`/roles/${id}/permissions` as never, {
-        body: { permissions: permCodes },
+        body: { permission_ids: permissionIds },
       } as never)
     },
     onSuccess: () => {
@@ -74,7 +76,7 @@ export function RoleDetailClient({ id }: Props) {
     onSettled: () => setSaving(false),
   })
 
-  const effectivePerms = localPerms ?? new Set(role?.permissions ?? [])
+  const effectivePerms = localPerms ?? new Set(role?.permission_codes ?? [])
 
   function togglePerm(code: string) {
     const next = new Set(effectivePerms)
@@ -100,14 +102,14 @@ export function RoleDetailClient({ id }: Props) {
     <div className="space-y-6">
       <PageHeader
         title={role.name}
-        description={role.description ?? (role.is_system ? "System role — permissions can be viewed but not modified." : "")}
+        description={role.description ?? (role.is_system_role ? "System role — permissions can be viewed but not modified." : "")}
         actions={
           <div className="flex items-center gap-2">
-            {role.is_system && <Badge variant="secondary">System</Badge>}
+            {role.is_system_role && <Badge variant="secondary">System</Badge>}
             <Button variant="outline" size="sm" render={<Link href="/roles" />}>
               <ArrowLeft /> Roles
             </Button>
-            {isDirty && !role.is_system && (
+            {isDirty && !role.is_system_role && (
               <PermissionGate permission="system.permissions.grant">
                 <Button
                   size="sm"
@@ -154,10 +156,10 @@ export function RoleDetailClient({ id }: Props) {
                       key={perm.code}
                       className={cn(
                         "flex items-center gap-3 p-2 rounded-md text-sm",
-                        !role.is_system && "cursor-pointer hover:bg-muted/50",
+                        !role.is_system_role && "cursor-pointer hover:bg-muted/50",
                         checked && "bg-primary/5"
                       )}
-                      onClick={() => !role.is_system && togglePerm(perm.code)}
+                      onClick={() => !role.is_system_role && togglePerm(perm.code)}
                     >
                       <div className={cn(
                         "w-4 h-4 rounded border flex items-center justify-center shrink-0",

@@ -17,6 +17,7 @@ from app.modules.notification.writer import write_notification
 from app.modules.assessment.exceptions import (
     AssessmentLockedError,
     AssessmentNotFoundError,
+    BulkPublishScopeError,
     COWeightConflictError,
     COWeightNotFoundError,
     EnrollmentConflictError,
@@ -851,28 +852,42 @@ class ResultPublicationService:
     async def bulk_approve_pc(
         self,
         org_id: UUID,
-        course_id: UUID,
         user_id: UUID,
+        course_id: UUID | None = None,
         batch_id: UUID | None = None,
         academic_term_id: UUID | None = None,
+        program_ids: list[UUID] | None = None,
     ) -> int:
         """Program Coordinator approves every ML_APPROVED section result for a course
-        and publishes them in one action: locks assessments, records the approval and
+        (or, when `course_id` is omitted, every course in a given batch+term) and
+        publishes them in one action: locks assessments, records the approval and
         publication, notifies the submitter, and triggers CO/PO attainment computation
-        so enrolled students can see their results."""
+        so enrolled students can see their results.
+
+        When `course_id` is omitted, both `batch_id` and `academic_term_id` are
+        required — this is the "publish this whole semester" action and must not
+        silently fan out to every course in the org."""
+        if course_id is None and (batch_id is None or academic_term_id is None):
+            raise BulkPublishScopeError()
+
         query = (
             select(ResultPublication)
             .join(SectionOffering, SectionOffering.id == ResultPublication.section_offering_id)
             .where(
                 ResultPublication.organization_id == org_id,
-                SectionOffering.course_id == course_id,
                 ResultPublication.status == "ML_APPROVED",
             )
         )
+        if course_id is not None:
+            query = query.where(SectionOffering.course_id == course_id)
         if batch_id is not None:
             query = query.where(SectionOffering.batch_id == batch_id)
         if academic_term_id is not None:
             query = query.where(SectionOffering.academic_term_id == academic_term_id)
+        if program_ids is not None:
+            query = query.join(Curriculum, Curriculum.id == SectionOffering.curriculum_id).where(
+                Curriculum.program_id.in_(program_ids)
+            )
 
         pubs = (await self._session.execute(query)).scalars().all()
 
@@ -942,11 +957,16 @@ class ResultPublicationService:
         acting_user_id: UUID | None = None,
         status: str | None = None,
         course_id: UUID | None = None,
+        batch_id: UUID | None = None,
+        academic_term_id: UUID | None = None,
+        program_ids: list[UUID] | None = None,
     ) -> list[dict]:
         """
         List section result submissions for review. When `acting_user_id` is set
         (Module Leader), restricted to the batch/term/course combinations the
-        user currently leads; otherwise (PC/SA) returns all sections in the org.
+        user currently leads. Otherwise (PC/SA), returns all sections in the org,
+        further restricted to `program_ids` when given (a Program Coordinator
+        scoped to specific programs rather than the whole org).
         """
         query = (
             select(
@@ -993,6 +1013,17 @@ class ResultPublicationService:
 
         if course_id is not None:
             query = query.where(SectionOffering.course_id == course_id)
+
+        if batch_id is not None:
+            query = query.where(SectionOffering.batch_id == batch_id)
+
+        if academic_term_id is not None:
+            query = query.where(SectionOffering.academic_term_id == academic_term_id)
+
+        if program_ids is not None:
+            query = query.join(Curriculum, Curriculum.id == SectionOffering.curriculum_id).where(
+                Curriculum.program_id.in_(program_ids)
+            )
 
         query = query.order_by(
             AcademicTerm.year.desc(), AcademicTerm.season, Batch.name, Course.code, Section.name
@@ -1502,13 +1533,11 @@ class MarksheetService:
         all_marks = (await self._session.execute(
             select(MarksheetMark).where(MarksheetMark.organization_id == org_id)
         )).scalars().all()
-        marks_by_offering: dict[UUID, list[MarksheetMark]] = defaultdict(list)
         mark_map_by_offering: dict[UUID, dict[tuple[UUID, UUID], MarksheetMark]] = {}
         for m in all_marks:
             # Filter to relevant offerings by checking question_id
             for off_id, qs in questions_by_offering.items():
                 if any(q.id == m.question_id for q in qs):
-                    marks_by_offering[off_id].append(m)
                     if off_id not in mark_map_by_offering:
                         mark_map_by_offering[off_id] = {}
                     mark_map_by_offering[off_id][(m.question_id, m.student_enrollment_id)] = m
@@ -1634,32 +1663,38 @@ class MarksheetService:
 
             po_results.sort(key=lambda p: p["po_code"])
 
-            # Overall marks + grade
-            total_max = sum((Decimal(str(q.max_marks)) for q in questions), Decimal("0"))
-            obtained = Decimal("0")
-            for m in marks_by_offering.get(offering.id, []):
-                if (
-                    m.student_enrollment_id == enrollment.id
-                    and not m.is_absent
-                    and m.marks_obtained is not None
-                ):
-                    obtained += Decimal(str(m.marks_obtained))
-            pct = float(obtained / total_max * Decimal("100")) if total_max > 0 else 0.0
-
             results.append({
                 "course_code": course.code,
                 "course_title": course.title,
                 "term_name": term.name,
                 "result_status": "PUBLISHED",
-                "total_marks_obtained": round(float(obtained), 2),
-                "total_marks": round(float(total_max), 2),
-                "percentage": round(pct, 2),
-                "grade": _pct_to_grade(pct) if total_max > 0 else None,
                 "co_results": co_results,
                 "po_results": po_results,
             })
 
         return results
+
+    async def _get_active_program_outcomes(self, org_id: UUID) -> list[dict]:
+        """All active program outcomes for the organization, in definition order.
+        Program outcomes here aren't scoped by program_id in practice, so this is
+        org-wide — used so result views can show every PO (e.g. all 12) rather than
+        only the ones a student's published courses happen to map to so far."""
+        pos = (await self._session.execute(
+            select(ProgramOutcome)
+            .where(
+                ProgramOutcome.organization_id == org_id,
+                ProgramOutcome.status == "ACTIVE",
+                ProgramOutcome.program_id.is_(None),
+            )
+            .order_by(ProgramOutcome.order_index)
+        )).scalars().all()
+        return [{"po_code": po.code, "po_statement": po.statement} for po in pos]
+
+    async def get_results_bundle_for_student(self, student_id: UUID, org_id: UUID) -> dict:
+        """Published course results for a student plus the full active PO list."""
+        results = await self.get_results_for_student(student_id, org_id)
+        program_outcomes = await self._get_active_program_outcomes(org_id)
+        return {"results": results, "program_outcomes": program_outcomes}
 
     async def get_public_results_by_uid(self, uid: str) -> dict | None:
         """Public result lookup by student ID number (no authentication). Returns the
@@ -1673,11 +1708,126 @@ class MarksheetService:
         if student is None:
             return None
         results = await self.get_results_for_student(student.id, student.organization_id)
+        program_outcomes = await self._get_active_program_outcomes(student.organization_id)
         return {
             "student_id_number": student.student_id_number,
             "full_name": student.full_name,
             "results": results,
+            "program_outcomes": program_outcomes,
         }
+
+    async def _build_student_po_report_context(self, student: Student) -> dict:
+        org_id = student.organization_id
+        results = await self.get_results_for_student(student.id, org_id)
+        program_outcomes = await self._get_active_program_outcomes(org_id)
+
+        org_repo = OrgRepository(self._session)
+        org = await org_repo.get(org_id)
+        logo_url = None
+        if org and org.logo_file_key:
+            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+
+        program_acronym = ""
+        department_name = ""
+        department_logo_url = None
+        if student.batch_id:
+            batch = (await self._session.execute(
+                select(Batch).where(Batch.id == student.batch_id)
+            )).scalar_one_or_none()
+            if batch and batch.curriculum_id:
+                curriculum = (await self._session.execute(
+                    select(Curriculum).where(Curriculum.id == batch.curriculum_id)
+                )).scalar_one_or_none()
+                if curriculum and curriculum.program_id:
+                    prog = (await self._session.execute(
+                        select(Program).where(Program.id == curriculum.program_id)
+                    )).scalar_one_or_none()
+                    if prog:
+                        program_acronym = prog.acronym
+                        dept = (await self._session.execute(
+                            select(Department).where(Department.id == prog.department_id)
+                        )).scalar_one_or_none()
+                        if dept:
+                            department_name = f"{dept.name} ({dept.short_name})"
+                            if dept.logo_file_key:
+                                department_logo_url = await presigned_get_url(
+                                    settings.MINIO_BUCKET_LOGOS, dept.logo_file_key
+                                )
+
+        # Aggregate PO attainment across all published courses, same rule the UI
+        # uses: a PO with no contributing course shows as "no data yet", not as
+        # "not attained" — those are different things for a formal transcript.
+        contributions: dict[str, list[dict]] = defaultdict(list)
+        threshold_by_code: dict[str, float] = {}
+        po_statement_by_code: dict[str, str | None] = {}
+        for course in results:
+            for po in course["po_results"]:
+                code = po["po_code"]
+                contributions[code].append({"course_code": course["course_code"], "pct": po["attainment_percentage"]})
+                threshold_by_code[code] = po["threshold"]
+                po_statement_by_code[code] = po.get("po_statement")
+
+        fallback_threshold = next(iter(threshold_by_code.values()), 50.0)
+
+        po_summary = []
+        for po in program_outcomes:
+            code = po["po_code"]
+            contribs = contributions.get(code, [])
+            threshold = threshold_by_code.get(code, fallback_threshold)
+            avg_pct = sum(c["pct"] for c in contribs) / len(contribs) if contribs else 0.0
+            po_summary.append({
+                "po_code": code,
+                "po_statement": po.get("po_statement") or po_statement_by_code.get(code),
+                "avg_pct": round(avg_pct, 1),
+                "threshold": threshold,
+                "is_attained": bool(contribs) and avg_pct >= threshold,
+                "has_data": bool(contribs),
+                "contributing_courses": ", ".join(c["course_code"] for c in contribs) if contribs else "—",
+            })
+
+        attained_po_count = sum(1 for p in po_summary if p["is_attained"])
+        all_cos = [co for course in results for co in course["co_results"]]
+        met_co_count = sum(1 for co in all_cos if co["is_threshold_met"])
+
+        return {
+            "student": {
+                "full_name": student.full_name,
+                "student_id_number": student.student_id_number,
+            },
+            "org": {
+                "name": org.name if org else "",
+                "short_name": org.short_name if org else "",
+                "logo_url": logo_url,
+            },
+            "program_acronym": program_acronym,
+            "department_name": department_name,
+            "department_logo_url": department_logo_url,
+            "generated_at": datetime.now(timezone.utc).strftime("%d %B %Y"),
+            "courses": results,
+            "po_summary": po_summary,
+            "attained_po_count": attained_po_count,
+            "total_po_count": len(po_summary),
+            "met_co_count": met_co_count,
+            "total_co_count": len(all_cos),
+        }
+
+    async def build_student_po_report_context(self, student_id: UUID, org_id: UUID) -> dict | None:
+        student = (await self._session.execute(
+            select(Student).where(Student.id == student_id, Student.organization_id == org_id)
+        )).scalar_one_or_none()
+        if student is None:
+            return None
+        return await self._build_student_po_report_context(student)
+
+    async def build_student_po_report_context_by_uid(self, uid: str) -> dict | None:
+        student = (await self._session.execute(
+            select(Student)
+            .where(Student.student_id_number == uid, Student.status != "WITHDRAWN")
+            .limit(1)
+        )).scalar_one_or_none()
+        if student is None:
+            return None
+        return await self._build_student_po_report_context(student)
 
     async def build_report_context(self, offering_id: UUID, org_id: UUID) -> dict:
         offering = await self._offering_repo.get_by_id(offering_id, org_id)
@@ -1871,6 +2021,54 @@ async def render_end_report_pdf(context: dict) -> bytes:
         return HTML(string=html).write_pdf()
 
     return await anyio.to_thread.run_sync(_render)
+
+
+async def render_student_po_report_pdf(context: dict) -> bytes:
+    from weasyprint import HTML
+
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
+    html = env.get_template("student_po_report.html").render(**context)
+
+    def _render():
+        return HTML(string=html).write_pdf()
+
+    return await anyio.to_thread.run_sync(_render)
+
+
+def build_drive_links_workbook(rows: list[dict]) -> bytes:
+    """Builds an .xlsx (Section, Status, Students, Submitted At, Drive Link)
+    for the Program Coordinator's drive-links export."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Drive Links"
+
+    headers = ["Section", "Status", "Students", "Submitted At", "Drive Link"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    for row in sorted(rows, key=lambda r: r["section_name"]):
+        submitted_at = row["submitted_at"]
+        ws.append([
+            row["section_name"],
+            row["status"],
+            row["student_count"],
+            submitted_at.strftime("%Y-%m-%d %H:%M") if submitted_at else "",
+            row.get("course_drive_link") or "",
+        ])
+
+    widths = [12, 14, 10, 18, 60]
+    for i, width in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = width
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
 
 
 GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"]

@@ -60,7 +60,6 @@ type ModuleLeaderAssignment = { course_id: string }
 const COURSE_TYPE_LABELS: Record<string, string> = {
   THEORY: "Theory",
   LAB: "Lab",
-  THEORY_LAB: "Theory + Lab",
   THESIS_DEFENSE: "Final Year Thesis Defense",
 }
 
@@ -69,7 +68,7 @@ const schema = z.object({
   title: z.string().min(1, "Title is required").max(255),
   credits: z.number().int().min(0, "Credits cannot be negative").max(20),
   course_category_id: z.string().min(1, "Course category is required"),
-  course_type: z.enum(["THEORY", "LAB", "THEORY_LAB", "THESIS_DEFENSE"], {
+  course_type: z.enum(["THEORY", "LAB", "THESIS_DEFENSE"], {
     error: "Course type is required",
   }),
   theory_hours: z.number().int().min(0),

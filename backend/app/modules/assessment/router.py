@@ -23,7 +23,7 @@ from app.modules.assessment.schemas import (
     CourseEndReportResponse,
     CourseEndReportSubmit,
     PublicStudentResults,
-    StudentCourseResult,
+    StudentResultsBundle,
     EnrollmentBulkCreate,
     EnrollmentBulkResponse,
     EnrollmentCreate,
@@ -56,7 +56,9 @@ from app.modules.assessment.service import (
     MarksService,
     ResultPublicationService,
     StudentService,
+    build_drive_links_workbook,
     render_end_report_pdf,
+    render_student_po_report_pdf,
     render_marksheet_course_report_pdf,
     render_marksheet_report_pdf,
 )
@@ -86,6 +88,17 @@ def _result_scoped_user_id(manifest: PermissionManifestResponse, current_user: U
     return current_user.id
 
 
+def _result_program_scope(manifest: PermissionManifestResponse) -> list[UUID] | None:
+    """
+    Programs a Program Coordinator is restricted to, based on their PROGRAM-scoped
+    role assignment(s). Returns None (no restriction) for super admins and for
+    users whose result-review permission was granted at GLOBAL scope.
+    """
+    if manifest.is_super_admin or not manifest.program_ids:
+        return None
+    return manifest.program_ids
+
+
 # ── Public result lookup (no authentication) ──────────────────────────────────
 
 @router.get("/public/student-results", response_model=PublicStudentResults)
@@ -105,20 +118,74 @@ async def public_student_results(
     return data
 
 
+@router.get("/public/student-results/pdf")
+async def public_student_results_pdf(
+    uid: Annotated[str, Query(description="Student ID number")],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Public download of a formal Program Outcome Attainment Report PDF, looked up
+    by student ID number. No authentication required."""
+    svc = MarksheetService(db)
+    context = await svc.build_student_po_report_context_by_uid(uid.strip())
+    if context is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No student found with that ID. Please check and try again.",
+        )
+    pdf_bytes = await render_student_po_report_pdf(context)
+    filename = f"{context['student']['student_id_number']}_PO_Attainment_Report.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ── Students ──────────────────────────────────────────────────────────────────
 
-@router.get("/students/me/results", response_model=list[StudentCourseResult])
+@router.get("/students/me/results", response_model=StudentResultsBundle)
 async def get_my_results(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Published CO/PO attainment results for the logged-in student.
-    Returns an empty list if the user is not linked to a student record."""
+    """Published CO/PO attainment results for the logged-in student, plus the full
+    active program-outcome list. Returns an empty bundle if the user is not linked
+    to a student record."""
     if current_user.linked_student_id is None:
-        return []
+        return StudentResultsBundle()
     svc = MarksheetService(db)
-    return await svc.get_results_for_student(
+    return await svc.get_results_bundle_for_student(
         current_user.linked_student_id, current_user.organization_id
+    )
+
+
+@router.get("/students/me/results/pdf")
+async def get_my_results_pdf(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Download a formal Program Outcome Attainment Report PDF for the logged-in
+    student."""
+    if current_user.linked_student_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No student record is linked to this account.",
+        )
+    svc = MarksheetService(db)
+    context = await svc.build_student_po_report_context(
+        current_user.linked_student_id, current_user.organization_id
+    )
+    if context is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No student record is linked to this account.",
+        )
+    pdf_bytes = await render_student_po_report_pdf(context)
+    filename = f"{context['student']['student_id_number']}_PO_Attainment_Report.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -425,6 +492,8 @@ async def list_result_submissions(
     db: Annotated[AsyncSession, Depends(get_db)],
     status_filter: Annotated[str | None, Query(alias="status")] = None,
     course_id: Annotated[UUID | None, Query()] = None,
+    batch_id: Annotated[UUID | None, Query()] = None,
+    academic_term_id: Annotated[UUID | None, Query()] = None,
 ):
     svc = ResultPublicationService(db)
     return await svc.list_submissions(
@@ -432,6 +501,42 @@ async def list_result_submissions(
         acting_user_id=_result_scoped_user_id(manifest, current_user),
         status=status_filter,
         course_id=course_id,
+        batch_id=batch_id,
+        academic_term_id=academic_term_id,
+        program_ids=_result_program_scope(manifest),
+    )
+
+
+@router.get("/results/courses/{course_id}/drive-links.xlsx")
+async def download_course_drive_links(
+    course_id: UUID,
+    batch_id: Annotated[UUID, Query()],
+    academic_term_id: Annotated[UUID, Query()],
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.approve.pc"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Excel export (for the Program Coordinator) of every submitted section's
+    course-end-report Drive link for one course/batch/term, once results have
+    been submitted up to them."""
+    svc = ResultPublicationService(db)
+    rows = await svc.list_submissions(
+        current_user.organization_id,
+        course_id=course_id,
+        batch_id=batch_id,
+        academic_term_id=academic_term_id,
+    )
+    rows = [r for r in rows if r["status"] != "DRAFT"]
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No submitted sections found for this course/batch/term.")
+
+    xlsx_bytes = build_drive_links_workbook(rows)
+    course_code = rows[0]["course_code"]
+    filename = f"{course_code}_drive_links.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -457,17 +562,18 @@ async def bulk_approve_ml(
 @router.post("/results/bulk-approve-pc", response_model=BulkApprovePCResponse)
 async def bulk_approve_pc(
     body: BulkApprovePCRequest,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("result.approve.pc"))],
+    manifest: Annotated[PermissionManifestResponse, Depends(require_permission("result.approve.pc"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ResultPublicationService(db)
     published_count = await svc.bulk_approve_pc(
         current_user.organization_id,
-        body.course_id,
         current_user.id,
+        course_id=body.course_id,
         batch_id=body.batch_id,
         academic_term_id=body.academic_term_id,
+        program_ids=_result_program_scope(manifest),
     )
     return BulkApprovePCResponse(published_count=published_count)
 

@@ -13,9 +13,10 @@ from app.core.dependencies import get_current_user, require_any_permission, requ
 from app.core.storage import presigned_get_url, put_object
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
-from app.modules.org.repository import DepartmentRepository
+from app.modules.org.repository import DepartmentRepository, ProgramRepository
 from app.modules.org.schemas import (
     AssignDepartmentHead,
+    AssignProgramCoordinator,
     DepartmentCreate,
     DepartmentHeadHistoryEntry,
     DepartmentHeadInfo,
@@ -23,6 +24,8 @@ from app.modules.org.schemas import (
     DepartmentUpdate,
     OrgResponse,
     OrgUpdate,
+    ProgramCoordinatorHistoryEntry,
+    ProgramCoordinatorInfo,
     ProgramCreate,
     ProgramResponse,
     ProgramUpdate,
@@ -98,6 +101,32 @@ async def _department_response(dept, db: AsyncSession) -> DepartmentResponse:
     )
     response.hod_history = [
         DepartmentHeadHistoryEntry(
+            user_id=h.user_id,
+            full_name=names.get(h.user_id, "Unknown"),
+            effective_from=h.effective_from,
+            effective_to=h.effective_to,
+        )
+        for h in history
+    ]
+    return response
+
+
+async def _program_response(program, db: AsyncSession) -> ProgramResponse:
+    history = await ProgramRepository(db).list_coordinator_history(program.id)
+    names: dict[UUID, str] = {}
+    user_ids = {h.user_id for h in history}
+    if user_ids:
+        result = await db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids)))
+        names = dict(result.all())
+
+    response = ProgramResponse.model_validate(program)
+    current = next((h for h in history if h.effective_to is None), None)
+    response.current_coordinator = (
+        ProgramCoordinatorInfo(user_id=current.user_id, full_name=names.get(current.user_id, "Unknown"))
+        if current is not None else None
+    )
+    response.coordinator_history = [
+        ProgramCoordinatorHistoryEntry(
             user_id=h.user_id,
             full_name=names.get(h.user_id, "Unknown"),
             effective_from=h.effective_from,
@@ -262,7 +291,7 @@ async def list_programs(
 ):
     svc = ProgramService(db)
     programs = await svc.list_active(current_user.organization_id, department_id)
-    return [ProgramResponse.model_validate(p) for p in programs]
+    return [await _program_response(p, db) for p in programs]
 
 
 @router.post("/programs", response_model=ProgramResponse, status_code=status.HTTP_201_CREATED)
@@ -274,7 +303,7 @@ async def create_program(
 ):
     svc = ProgramService(db)
     program = await svc.create(body, current_user.organization_id)
-    return ProgramResponse.model_validate(program)
+    return await _program_response(program, db)
 
 
 @router.get("/programs/{program_id}", response_model=ProgramResponse)
@@ -286,7 +315,7 @@ async def get_program(
 ):
     svc = ProgramService(db)
     program = await svc.get(program_id, current_user.organization_id)
-    return ProgramResponse.model_validate(program)
+    return await _program_response(program, db)
 
 
 @router.patch("/programs/{program_id}", response_model=ProgramResponse)
@@ -299,7 +328,22 @@ async def update_program(
 ):
     svc = ProgramService(db)
     program = await svc.update(program_id, body, current_user.organization_id)
-    return ProgramResponse.model_validate(program)
+    return await _program_response(program, db)
+
+
+@router.post("/programs/{program_id}/coordinator", response_model=ProgramResponse)
+async def assign_program_coordinator(
+    program_id: UUID,
+    body: AssignProgramCoordinator,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("program.update"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = ProgramService(db)
+    program = await svc.assign_coordinator(
+        program_id, body.user_id, current_user.organization_id, current_user.id
+    )
+    return await _program_response(program, db)
 
 
 @router.post("/programs/{program_id}/archive", status_code=status.HTTP_200_OK, response_model=ProgramResponse)
@@ -311,4 +355,17 @@ async def archive_program(
 ):
     svc = ProgramService(db)
     program = await svc.archive(program_id, current_user.organization_id)
-    return ProgramResponse.model_validate(program)
+    return await _program_response(program, db)
+
+
+@router.delete("/programs/{program_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_program(
+    program_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("program.delete"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Permanently deletes a program. Blocked if the program has curricula,
+    students, or accreditation cycles — archive it instead in that case."""
+    svc = ProgramService(db)
+    await svc.delete(program_id, current_user.organization_id)

@@ -333,6 +333,27 @@ CREATE UNIQUE INDEX uq_current_hod
 CREATE INDEX idx_dept_head_dept ON org.department_head_history(department_id);
 
 -- ============================================================
+-- ORG.PROGRAM_COORDINATOR_HISTORY
+-- After iam.users to resolve FK order
+-- ============================================================
+
+CREATE TABLE org.program_coordinator_history (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    program_id      UUID        NOT NULL REFERENCES org.programs(id),
+    user_id         UUID        NOT NULL REFERENCES iam.users(id),
+    effective_from  DATE        NOT NULL,
+    effective_to    DATE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_coordinator_tenure CHECK (effective_to IS NULL OR effective_to >= effective_from)
+);
+
+CREATE UNIQUE INDEX uq_current_program_coordinator
+    ON org.program_coordinator_history(program_id)
+    WHERE effective_to IS NULL;
+
+CREATE INDEX idx_program_coordinator_program ON org.program_coordinator_history(program_id);
+
+-- ============================================================
 -- CURRICULUM SCHEMA
 -- ============================================================
 

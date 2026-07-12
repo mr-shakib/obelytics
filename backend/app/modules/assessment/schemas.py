@@ -239,7 +239,7 @@ class BulkApproveMLResponse(BaseModel):
 
 
 class BulkApprovePCRequest(BaseModel):
-    course_id: UUID
+    course_id: Optional[UUID] = None
     batch_id: Optional[UUID] = None
     academic_term_id: Optional[UUID] = None
 
@@ -271,12 +271,26 @@ class StudentCourseResult(BaseModel):
     course_title: str
     term_name: str
     result_status: str
-    total_marks_obtained: float
-    total_marks: float
-    percentage: float
-    grade: Optional[str] = None
     co_results: list[StudentCOResult] = Field(default_factory=list)
     po_results: list[StudentPOResult] = Field(default_factory=list)
+
+
+class ProgramOutcomeSummary(BaseModel):
+    """The full set of active program outcomes, independent of whether any of the
+    student's published courses happen to map to them yet — lets result views show
+    every PO (e.g. all 12) rather than only the ones with data so far."""
+
+    po_code: str
+    po_statement: Optional[str] = None
+
+
+class StudentResultsBundle(BaseModel):
+    """Published CO/PO attainment for the logged-in student, plus the full list of
+    active program outcomes so the UI can render every PO even where the student
+    hasn't earned attainment data for it yet."""
+
+    results: list[StudentCourseResult] = Field(default_factory=list)
+    program_outcomes: list[ProgramOutcomeSummary] = Field(default_factory=list)
 
 
 class PublicStudentResults(BaseModel):
@@ -285,6 +299,7 @@ class PublicStudentResults(BaseModel):
     student_id_number: str
     full_name: str
     results: list[StudentCourseResult] = Field(default_factory=list)
+    program_outcomes: list[ProgramOutcomeSummary] = Field(default_factory=list)
 
 
 # ── Marksheet ─────────────────────────────────────────────────────────────────

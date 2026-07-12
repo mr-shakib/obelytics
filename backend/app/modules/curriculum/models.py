@@ -82,7 +82,7 @@ class Course(Base):
             postgresql_where=sa.text("status = 'ACTIVE'"),
         ),
         CheckConstraint(
-            "course_type IN ('THEORY', 'LAB', 'THEORY_LAB', 'THESIS_DEFENSE')",
+            "course_type IN ('THEORY', 'LAB', 'THESIS_DEFENSE')",
             name="ck_curriculum_course_type_valid",
         ),
         {"schema": "curriculum"},

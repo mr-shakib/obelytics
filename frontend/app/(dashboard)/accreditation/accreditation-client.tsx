@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -16,6 +16,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -36,6 +39,8 @@ type AccreditationCycle = {
   status: "ACTIVE" | "CLOSED" | "DRAFT"
   program_name?: string
 }
+
+type ProgramOption = { id: string; title: string; acronym: string }
 
 const cycleSchema = z.object({
   name: z.string().min(1, "Name required"),
@@ -61,6 +66,14 @@ export function AccreditationClient() {
     queryFn: async () => {
       const { data } = await apiClient.GET("/accreditation/cycles" as never)
       return ((data as unknown) as { items?: AccreditationCycle[] })?.items ?? ((data as unknown) as AccreditationCycle[]) ?? []
+    },
+  })
+
+  const { data: programs } = useQuery({
+    queryKey: queryKeys.programs.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/programs" as never)
+      return ((data as unknown) as ProgramOption[]) ?? []
     },
   })
 
@@ -109,8 +122,30 @@ export function AccreditationClient() {
                     <Input id="cy-body" {...form.register("body")} placeholder="e.g. ABET, AACSB" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cy-prog">Program ID</Label>
-                    <Input id="cy-prog" {...form.register("program_id")} placeholder="Program UUID" />
+                    <Label>Program</Label>
+                    <Controller
+                      name="program_id"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select program">
+                              {(value: string) => value
+                                ? ((programs ?? []).find((p) => p.id === value)?.title ?? value)
+                                : null}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(programs ?? []).map((p) => (
+                              <SelectItem key={p.id} value={p.id}>{p.title} ({p.acronym})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {form.formState.errors.program_id && (
+                      <p className="text-xs text-destructive">{form.formState.errors.program_id.message}</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">

@@ -10,6 +10,7 @@ from app.modules.org.exceptions import (
     OrgNotFoundError,
     ProgramAcronymConflictError,
     ProgramArchivedError,
+    ProgramHasDependentDataError,
     ProgramNotFoundError,
 )
 from app.modules.org.models import Department, Program
@@ -227,3 +228,112 @@ class ProgramService:
         program.status = "ARCHIVED"
         program.archived_at = datetime.now(timezone.utc)
         return await self._repo.update(program, {})
+
+    async def delete(self, program_id: UUID, organization_id: UUID) -> None:
+        from sqlalchemy import delete as sa_delete, func, select
+
+        from app.modules.accreditation.models import AccreditationCycle
+        from app.modules.assessment.models import Student
+        from app.modules.attainment.models import AttainmentConfig
+        from app.modules.curriculum.models import Curriculum
+        from app.modules.obe.models import ProgramEducationalObjective, ProgramMission, ProgramOutcome
+        from app.modules.org.models import ProgramCoordinatorHistory
+
+        program = await self._repo.get_by_id(program_id, organization_id)
+        if program is None:
+            raise ProgramNotFoundError()
+
+        # Real academic work built on top of this program blocks deletion —
+        # the user has to remove or reassign it first (or archive instead).
+        blockers: list[str] = []
+        curricula_count = await self._session.scalar(
+            select(func.count()).select_from(Curriculum).where(Curriculum.program_id == program_id)
+        )
+        if curricula_count:
+            blockers.append(f"{curricula_count} curricula")
+        students_count = await self._session.scalar(
+            select(func.count()).select_from(Student).where(Student.program_id == program_id)
+        )
+        if students_count:
+            blockers.append(f"{students_count} students")
+        cycles_count = await self._session.scalar(
+            select(func.count()).select_from(AccreditationCycle).where(AccreditationCycle.program_id == program_id)
+        )
+        if cycles_count:
+            blockers.append(f"{cycles_count} accreditation cycles")
+        if blockers:
+            raise ProgramHasDependentDataError(blockers)
+
+        # Data that only exists to describe this specific program — safe to
+        # remove along with it rather than treating as a hard blocker.
+        await self._session.execute(sa_delete(ProgramOutcome).where(ProgramOutcome.program_id == program_id))
+        await self._session.execute(sa_delete(ProgramMission).where(ProgramMission.program_id == program_id))
+        await self._session.execute(
+            sa_delete(ProgramEducationalObjective).where(ProgramEducationalObjective.program_id == program_id)
+        )
+        await self._session.execute(
+            sa_delete(ProgramCoordinatorHistory).where(ProgramCoordinatorHistory.program_id == program_id)
+        )
+        await self._session.execute(sa_delete(AttainmentConfig).where(AttainmentConfig.program_id == program_id))
+
+        await self._session.delete(program)
+        await self._session.commit()
+
+    async def assign_coordinator(
+        self, program_id: UUID, user_id: UUID, organization_id: UUID, assigned_by: UUID
+    ) -> Program:
+        from sqlalchemy import and_, select
+
+        from app.modules.iam.models import UserRoleAssignment
+        from app.modules.iam.repository.role_repository import RoleRepository
+        from app.modules.iam.service.user_service import UserService
+        from app.modules.org.models import ProgramCoordinatorHistory
+
+        program = await self._repo.get_by_id(program_id, organization_id)
+        if program is None:
+            raise ProgramNotFoundError()
+
+        previous_result = await self._session.execute(
+            select(ProgramCoordinatorHistory.user_id).where(
+                and_(
+                    ProgramCoordinatorHistory.program_id == program_id,
+                    ProgramCoordinatorHistory.effective_to.is_(None),
+                )
+            )
+        )
+        previous_user_id = previous_result.scalar_one_or_none()
+
+        today = date.today()
+        await self._repo.close_current_coordinator(program_id, today)
+        await self._repo.add_coordinator_history(program_id, user_id, today)
+
+        # The history record is just an audit trail — actually granting (and,
+        # on replacement, revoking) the Program Coordinator role at PROGRAM
+        # scope is what gives the assignee real access to the program.
+        role_repo = RoleRepository(self._session)
+        pc_role = await role_repo.find_by_name("Program Coordinator", organization_id)
+        if pc_role is not None:
+            if previous_user_id is not None and previous_user_id != user_id:
+                revoke_result = await self._session.execute(
+                    select(UserRoleAssignment).where(
+                        and_(
+                            UserRoleAssignment.user_id == previous_user_id,
+                            UserRoleAssignment.role_id == pc_role.id,
+                            UserRoleAssignment.scope_type == "PROGRAM",
+                            UserRoleAssignment.scope_id == program_id,
+                            UserRoleAssignment.removed_at.is_(None),
+                        )
+                    )
+                )
+                for assignment in revoke_result.scalars().all():
+                    assignment.removed_at = datetime.now(timezone.utc)
+                await self._session.flush()
+
+                from app.modules.iam.service.permission_service import PermissionManifestBuilder
+
+                await PermissionManifestBuilder(self._session).invalidate(previous_user_id)
+
+            user_svc = UserService(self._session)
+            await user_svc.assign_role(user_id, pc_role.id, "PROGRAM", program_id, assigned_by)
+
+        return program

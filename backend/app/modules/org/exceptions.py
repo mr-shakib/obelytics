@@ -46,3 +46,12 @@ class ProgramArchivedError(HTTPException):
             status_code=status.HTTP_409_CONFLICT,
             detail="Program is already archived",
         )
+
+
+class ProgramHasDependentDataError(HTTPException):
+    def __init__(self, blockers: list[str]):
+        detail = (
+            "Cannot delete this program — it still has: " + ", ".join(blockers)
+            + ". Remove or reassign those first, or archive the program instead."
+        )
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
