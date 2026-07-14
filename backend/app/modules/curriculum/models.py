@@ -103,7 +103,7 @@ class Course(Base):
     course_type = Column(String(20), nullable=False)
     code = Column(String(30), nullable=False)
     title = Column(String(255), nullable=False)
-    credits = Column(SmallInteger, nullable=False)
+    credits = Column(sa.Float, nullable=False)
     theory_hours = Column(SmallInteger, nullable=False, server_default=sa.text("0"))
     lab_hours = Column(SmallInteger, nullable=False, server_default=sa.text("0"))
     description = Column(Text, nullable=True)

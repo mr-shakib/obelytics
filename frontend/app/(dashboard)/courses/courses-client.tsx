@@ -66,7 +66,7 @@ const COURSE_TYPE_LABELS: Record<string, string> = {
 const schema = z.object({
   code: z.string().min(1, "Code is required").max(30),
   title: z.string().min(1, "Title is required").max(255),
-  credits: z.number().int().min(0, "Credits cannot be negative").max(20),
+  credits: z.number().min(0, "Credits cannot be negative").max(20),
   course_category_id: z.string().min(1, "Course category is required"),
   course_type: z.enum(["THEORY", "LAB", "THESIS_DEFENSE"], {
     error: "Course type is required",
@@ -274,6 +274,7 @@ export function CoursesClient() {
                         type="number"
                         min={0}
                         max={20}
+                        step="0.25"
                         {...register("credits", { valueAsNumber: true })}
                       />
                       {errors.credits && (

@@ -48,7 +48,7 @@ const TEMPLATE_COLUMNS = [
 const COLUMN_GUIDE: { key: string; required: boolean; description: string; example: string }[] = [
   { key: "code", required: true, description: "Unique course code (max 30 chars)", example: "CSE101" },
   { key: "title", required: true, description: "Course title (max 255 chars)", example: "Introduction to Programming" },
-  { key: "credits", required: true, description: "Credit hours (0-20)", example: "3" },
+  { key: "credits", required: true, description: "Credit hours (0-20, decimals allowed e.g. 1.5)", example: "3" },
   { key: "course_type", required: true, description: "One of: THEORY, LAB, THESIS_DEFENSE", example: "THEORY" },
   { key: "course_category_name", required: true, description: "Category name — must match an existing category exactly", example: "Core" },
   { key: "theory_hours", required: false, description: "Weekly theory hours (default 0)", example: "3" },

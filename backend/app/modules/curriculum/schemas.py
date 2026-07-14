@@ -67,7 +67,7 @@ class CourseCreate(BaseModel):
     course_type: Literal["THEORY", "LAB", "THESIS_DEFENSE"]
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=255)
-    credits: int = Field(ge=0, le=20)
+    credits: float = Field(ge=0, le=20)
     theory_hours: int = Field(default=0, ge=0)
     lab_hours: int = Field(default=0, ge=0)
     description: str | None = None
@@ -75,7 +75,7 @@ class CourseCreate(BaseModel):
 
 class CourseUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
-    credits: int | None = Field(default=None, ge=0, le=20)
+    credits: float | None = Field(default=None, ge=0, le=20)
     description: str | None = None
     syllabus_content: str | None = None
     theory_hours: int | None = Field(default=None, ge=0)
@@ -89,7 +89,7 @@ class CourseResponse(BaseModel):
     course_type: str
     code: str
     title: str
-    credits: int
+    credits: float
     theory_hours: int
     lab_hours: int
     description: str | None
@@ -109,7 +109,7 @@ class CourseBulkImportItem(BaseModel):
     course_type: Literal["THEORY", "LAB", "THESIS_DEFENSE"]
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=255)
-    credits: int = Field(ge=0, le=20)
+    credits: float = Field(ge=0, le=20)
     theory_hours: int = Field(default=0, ge=0)
     lab_hours: int = Field(default=0, ge=0)
     description: str | None = None
@@ -337,6 +337,7 @@ class BatchCreate(BaseModel):
 class BatchUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     status: str | None = Field(default=None, pattern="^(ACTIVE|GRADUATED|ARCHIVED)$")
+    curriculum_id: UUID | None = None
 
 
 class BatchTermCalendarEntry(BaseModel):
@@ -387,7 +388,7 @@ class BatchTermOfferingCourse(BaseModel):
     curriculum_term_definition_id: UUID
     code: str
     title: str
-    credits: int
+    credits: float
     theory_hours: int
     lab_hours: int
     is_elective: bool
@@ -400,7 +401,7 @@ class BatchSemesterCourse(BaseModel):
     course_id: UUID
     code: str
     title: str
-    credits: int
+    credits: float
     theory_hours: int
     lab_hours: int
     is_elective: bool
@@ -415,7 +416,7 @@ class BatchSemesterPlanItem(BaseModel):
     start_date: date
     end_date: date
     status: str
-    total_credits: int
+    total_credits: float
     courses: list[BatchSemesterCourse]
 
 

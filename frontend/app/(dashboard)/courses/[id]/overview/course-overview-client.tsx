@@ -20,7 +20,7 @@ import type { Course, CourseObjective, BloomDomain, Prerequisite, CourseListItem
 
 const schema = z.object({
   title: z.string().min(1, "Title is required").max(255),
-  credits: z.number().int().min(0, "Credits cannot be negative").max(20),
+  credits: z.number().min(0, "Credits cannot be negative").max(20),
   theory_hours: z.number().int().min(0),
   lab_hours: z.number().int().min(0),
   description: z.string().max(2000).optional(),
@@ -394,7 +394,7 @@ export function CourseOverviewClient({ id }: Props) {
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="credits">Credits</Label>
-                    <Input id="credits" type="number" min={0} max={20} {...register("credits", { valueAsNumber: true })} />
+                    <Input id="credits" type="number" min={0} max={20} step="0.25" {...register("credits", { valueAsNumber: true })} />
                     {errors.credits && <p className="text-sm text-destructive">{errors.credits.message}</p>}
                   </div>
                   <div className="space-y-2">

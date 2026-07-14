@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -26,6 +26,13 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { formatDate } from "@/lib/utils"
@@ -305,8 +312,15 @@ type Batch = {
   status: string
 }
 
+type Curriculum = {
+  id: string
+  name: string
+  code: string
+}
+
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
+  curriculum_id: z.string().min(1, "Curriculum is required"),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -478,23 +492,37 @@ export function BatchDetailClient({ id }: Props) {
     enabled: !!data,
   })
 
+  const { data: curricula = [] } = useQuery({
+    queryKey: queryKeys.curricula.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/curricula" as never)
+      return ((data as unknown) as Curriculum[]) ?? []
+    },
+  })
+
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    values: data ? { name: data.name } : undefined,
+    values: data ? { name: data.name, curriculum_id: data.curriculum_id } : undefined,
   })
 
   const batchMutation = useMutation({
     mutationFn: async (values: FormValues) => {
       await apiClient.PATCH(`/batches/${id}` as never, { body: values } as never)
     },
-    onSuccess: () => {
-      toast.success("Batch updated")
+    onSuccess: (_, values) => {
+      toast.success(
+        values.curriculum_id !== data?.curriculum_id
+          ? "Batch updated — semester plan now reflects the new curriculum"
+          : "Batch updated"
+      )
       qc.invalidateQueries({ queryKey: queryKeys.batches.detail(id) })
       qc.invalidateQueries({ queryKey: queryKeys.batches.all })
+      qc.invalidateQueries({ queryKey: queryKeys.batches.semesterPlan(id) })
     },
     onError: () => toast.error("Failed to update batch"),
   })
@@ -599,6 +627,31 @@ export function BatchDetailClient({ id }: Props) {
                     <Label htmlFor="name">Batch Name</Label>
                     <Input id="name" {...register("name")} />
                     {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Curriculum</Label>
+                    <Controller
+                      name="curriculum_id"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select curriculum" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {curricula.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name} ({c.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.curriculum_id && <p className="text-sm text-destructive">{errors.curriculum_id.message}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Switching curriculum updates the semester plan (terms/courses) to match the new curriculum.
+                    </p>
                   </div>
                   <Button type="submit" disabled={!isDirty || isSubmitting || batchMutation.isPending}>
                     {(isSubmitting || batchMutation.isPending) && <Loader2 className="animate-spin" />}

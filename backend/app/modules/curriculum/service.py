@@ -1052,6 +1052,17 @@ class BatchService:
         if batch is None:
             raise BatchNotFoundError()
         data = body.model_dump(exclude_none=True)
+
+        new_curriculum_id = data.get("curriculum_id")
+        if new_curriculum_id is not None and new_curriculum_id != batch.curriculum_id:
+            curriculum = await CurriculumRepository(self._session).get_by_id(new_curriculum_id, org_id)
+            if curriculum is None:
+                raise CurriculumNotFoundError()
+            name = data.get("name", batch.name)
+            existing = await self._repo.find_by_name(name, new_curriculum_id)
+            if existing and existing.id != batch.id:
+                raise BatchNameConflictError()
+
         result = await self._repo.update(batch, data)
         await self._session.commit()
         return result
