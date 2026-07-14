@@ -725,6 +725,20 @@ async def update_batch(
     return await _batch_response(batch, db)
 
 
+@router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_batch(
+    batch_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("batch.delete"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Permanently deletes a batch. Blocked if it has section offerings or
+    students — archive it instead in that case. batch.delete is Super Admin
+    only, even though Program Coordinators can create batches."""
+    svc = BatchService(db)
+    await svc.delete(batch_id, current_user.organization_id)
+
+
 # ── Academic Terms ────────────────────────────────────────────────────────────
 
 @router.get("/academic-terms", response_model=list[AcademicTermResponse])

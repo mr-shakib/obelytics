@@ -61,6 +61,15 @@ class BatchNameConflictError(HTTPException):
         )
 
 
+class BatchHasDependentDataError(HTTPException):
+    def __init__(self, blockers: list[str]):
+        detail = (
+            "Cannot delete this batch — it still has: " + ", ".join(blockers)
+            + ". Remove or reassign those first, or archive the batch instead."
+        )
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 class AcademicTermNotFoundError(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Academic term not found")

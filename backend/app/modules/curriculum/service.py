@@ -9,6 +9,7 @@ from app.modules.ref_data.repository import AssessmentTypeRepository, BloomDomai
 from app.modules.curriculum.exceptions import (
     AcademicTermConflictError,
     AcademicTermNotFoundError,
+    BatchHasDependentDataError,
     BatchNameConflictError,
     BatchNotFoundError,
     CourseCodeConflictError,
@@ -1084,6 +1085,40 @@ class BatchService:
         if batch is None:
             raise BatchNotFoundError()
         return batch
+
+    async def delete(self, batch_id: UUID, org_id: UUID) -> None:
+        from sqlalchemy import delete as sa_delete, func, select
+
+        from app.modules.assessment.models import Student
+        from app.modules.curriculum.models import BatchTermCalendar, SectionOffering
+
+        batch = await self._repo.get_by_id(batch_id, org_id)
+        if batch is None:
+            raise BatchNotFoundError()
+
+        # Real academic work built on top of this batch blocks deletion — the
+        # user has to remove or reassign it first (or archive instead).
+        blockers: list[str] = []
+        offerings_count = await self._session.scalar(
+            select(func.count()).select_from(SectionOffering).where(SectionOffering.batch_id == batch_id)
+        )
+        if offerings_count:
+            blockers.append(f"{offerings_count} section offerings")
+        students_count = await self._session.scalar(
+            select(func.count()).select_from(Student).where(Student.batch_id == batch_id)
+        )
+        if students_count:
+            blockers.append(f"{students_count} students")
+        if blockers:
+            raise BatchHasDependentDataError(blockers)
+
+        # BatchTermCalendar rows only exist to describe this specific batch's
+        # generated semester schedule — cascades at the DB level, but deleted
+        # explicitly here for clarity.
+        await self._session.execute(sa_delete(BatchTermCalendar).where(BatchTermCalendar.batch_id == batch_id))
+
+        await self._session.delete(batch)
+        await self._session.commit()
 
 
 class AcademicTermService:

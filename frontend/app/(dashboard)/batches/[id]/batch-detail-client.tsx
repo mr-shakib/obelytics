@@ -472,6 +472,7 @@ function SemesterRow({
 
 export function BatchDetailClient({ id }: Props) {
   const qc = useQueryClient()
+  const router = useRouter()
   const canManage = usePermission("curriculum.update")
   const [changingTermId, setChangingTermId] = useState<string | null>(null)
 
@@ -542,6 +543,17 @@ export function BatchDetailClient({ id }: Props) {
     onSettled: () => setChangingTermId(null),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.DELETE(`/batches/${id}` as never)
+    },
+    onSuccess: () => {
+      toast.success("Batch deleted")
+      qc.invalidateQueries({ queryKey: queryKeys.batches.all })
+      router.push("/batches")
+    },
+  })
+
   if (isLoading) return <div className="animate-pulse h-40 bg-muted rounded-md" />
   if (!data) return <p className="text-muted-foreground">Batch not found.</p>
 
@@ -556,7 +568,25 @@ export function BatchDetailClient({ id }: Props) {
           data.num_semesters ? `${data.num_semesters} semesters` : null,
           data.start_date ? `from ${data.start_date.slice(0, 7)}` : null,
         ].filter(Boolean).join(" · ")}
-        actions={<StatusBadge status={data.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge status={data.status} />
+            <PermissionGate permission="batch.delete">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete "${data.name}"? This cannot be undone.`))
+                    deleteMutation.mutate()
+                }}
+              >
+                {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </Button>
+            </PermissionGate>
+          </div>
+        }
       />
 
       {/* Summary strip */}
