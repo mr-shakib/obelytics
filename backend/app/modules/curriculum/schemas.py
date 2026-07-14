@@ -68,8 +68,8 @@ class CourseCreate(BaseModel):
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=255)
     credits: float = Field(ge=0, le=20)
-    theory_hours: int = Field(default=0, ge=0)
-    lab_hours: int = Field(default=0, ge=0)
+    theory_hours: float = Field(default=0, ge=0)
+    lab_hours: float = Field(default=0, ge=0)
     description: str | None = None
 
 
@@ -81,8 +81,8 @@ class CourseUpdate(BaseModel):
     credits: float | None = Field(default=None, ge=0, le=20)
     description: str | None = None
     syllabus_content: str | None = None
-    theory_hours: int | None = Field(default=None, ge=0)
-    lab_hours: int | None = Field(default=None, ge=0)
+    theory_hours: float | None = Field(default=None, ge=0)
+    lab_hours: float | None = Field(default=None, ge=0)
 
 
 class CourseResponse(BaseModel):
@@ -93,8 +93,8 @@ class CourseResponse(BaseModel):
     code: str
     title: str
     credits: float
-    theory_hours: int
-    lab_hours: int
+    theory_hours: float
+    lab_hours: float
     description: str | None
     syllabus_content: str | None
     status: str
@@ -113,8 +113,8 @@ class CourseBulkImportItem(BaseModel):
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=255)
     credits: float = Field(ge=0, le=20)
-    theory_hours: int = Field(default=0, ge=0)
-    lab_hours: int = Field(default=0, ge=0)
+    theory_hours: float = Field(default=0, ge=0)
+    lab_hours: float = Field(default=0, ge=0)
     description: str | None = None
 
 
@@ -392,8 +392,8 @@ class BatchTermOfferingCourse(BaseModel):
     code: str
     title: str
     credits: float
-    theory_hours: int
-    lab_hours: int
+    theory_hours: float
+    lab_hours: float
     is_elective: bool
     offerings: list[SectionOfferingInfo]
 
@@ -405,8 +405,8 @@ class BatchSemesterCourse(BaseModel):
     code: str
     title: str
     credits: float
-    theory_hours: int
-    lab_hours: int
+    theory_hours: float
+    lab_hours: float
     is_elective: bool
 
 

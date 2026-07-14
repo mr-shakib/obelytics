@@ -51,8 +51,8 @@ const COLUMN_GUIDE: { key: string; required: boolean; description: string; examp
   { key: "credits", required: true, description: "Credit hours (0-20, decimals allowed e.g. 1.5)", example: "3" },
   { key: "course_type", required: true, description: "One of: THEORY, LAB, THESIS_DEFENSE", example: "THEORY" },
   { key: "course_category_name", required: true, description: "Category name — must match an existing category exactly", example: "Core" },
-  { key: "theory_hours", required: false, description: "Weekly theory hours (default 0)", example: "3" },
-  { key: "lab_hours", required: false, description: "Weekly lab hours (default 0)", example: "0" },
+  { key: "theory_hours", required: false, description: "Weekly theory hours (default 0, decimals allowed)", example: "3" },
+  { key: "lab_hours", required: false, description: "Weekly lab hours (default 0, decimals allowed)", example: "0" },
   { key: "description", required: false, description: "Brief course description (optional)", example: "" },
 ]
 

@@ -71,8 +71,8 @@ const schema = z.object({
   course_type: z.enum(["THEORY", "LAB", "THESIS_DEFENSE"], {
     error: "Course type is required",
   }),
-  theory_hours: z.number().int().min(0),
-  lab_hours: z.number().int().min(0),
+  theory_hours: z.number().min(0),
+  lab_hours: z.number().min(0),
   description: z.string().max(2000).optional(),
   prerequisite_course_ids: z.array(z.string()).optional(),
 })
@@ -388,6 +388,7 @@ export function CoursesClient() {
                         id="theory_hours"
                         type="number"
                         min={0}
+                        step="0.25"
                         disabled={selCourseType === "LAB"}
                         {...register("theory_hours", { valueAsNumber: true })}
                       />
@@ -401,6 +402,7 @@ export function CoursesClient() {
                         id="lab_hours"
                         type="number"
                         min={0}
+                        step="0.25"
                         disabled={selCourseType === "THEORY"}
                         {...register("lab_hours", { valueAsNumber: true })}
                       />

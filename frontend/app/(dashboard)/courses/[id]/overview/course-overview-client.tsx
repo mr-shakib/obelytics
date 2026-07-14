@@ -32,8 +32,8 @@ const schema = z.object({
   course_category_id: z.string().min(1, "Course category is required"),
   course_type: z.enum(["THEORY", "LAB", "THESIS_DEFENSE"]),
   credits: z.number().min(0, "Credits cannot be negative").max(20),
-  theory_hours: z.number().int().min(0),
-  lab_hours: z.number().int().min(0),
+  theory_hours: z.number().min(0),
+  lab_hours: z.number().min(0),
   description: z.string().max(2000).optional(),
   syllabus_content: z.string().max(5000).optional(),
 })
@@ -329,12 +329,12 @@ export function CourseOverviewClient({ id }: Props) {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="theory_hours">Theory Hours</Label>
-                    <Input id="theory_hours" type="number" min={0} disabled={watchedCourseType === "LAB"} {...register("theory_hours", { valueAsNumber: true })} />
+                    <Input id="theory_hours" type="number" min={0} step="0.25" disabled={watchedCourseType === "LAB"} {...register("theory_hours", { valueAsNumber: true })} />
                     {errors.theory_hours && <p className="text-sm text-destructive">{errors.theory_hours.message}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lab_hours">Lab Hours</Label>
-                    <Input id="lab_hours" type="number" min={0} disabled={watchedCourseType === "THEORY"} {...register("lab_hours", { valueAsNumber: true })} />
+                    <Input id="lab_hours" type="number" min={0} step="0.25" disabled={watchedCourseType === "THEORY"} {...register("lab_hours", { valueAsNumber: true })} />
                     {errors.lab_hours && <p className="text-sm text-destructive">{errors.lab_hours.message}</p>}
                   </div>
                 </div>
