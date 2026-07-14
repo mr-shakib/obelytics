@@ -74,14 +74,14 @@ class Settings(BaseSettings):
             return self.REDIS_URL_OVERRIDE
         return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    # MinIO
-    MINIO_ENDPOINT: str = "localhost:9000"
-    MINIO_ACCESS_KEY: str = "minioadmin"
-    MINIO_SECRET_KEY: str = "minioadmin"
-    MINIO_SECURE: bool = False
-    MINIO_BUCKET_REPORTS: str = "reports"
-    MINIO_BUCKET_LOGOS: str = "logos"
-    MINIO_BUCKET_ACCREDITATION: str = "accreditation"
+    # Cloudinary (file storage)
+    CLOUDINARY_CLOUD_NAME: str = "h1gsnk4q"
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_UPLOAD_PRESET: str = "obelytics"
+    CLOUDINARY_FOLDER_REPORTS: str = "reports"
+    CLOUDINARY_FOLDER_LOGOS: str = "logos"
+    CLOUDINARY_FOLDER_ACCREDITATION: str = "accreditation"
 
     # CORS — comma-separated origins (works with any format on Railway/Vercel)
     # e.g. ALLOWED_ORIGINS=https://obelytics.vercel.app,http://localhost:3000

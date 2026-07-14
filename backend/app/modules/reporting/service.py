@@ -321,7 +321,7 @@ class ReportRunService:
     async def output_url(self, run: ReportRun) -> str | None:
         if not run.output_file_key:
             return None
-        return await presigned_get_url(settings.MINIO_BUCKET_REPORTS, run.output_file_key)
+        return await presigned_get_url(settings.CLOUDINARY_FOLDER_REPORTS, run.output_file_key)
 
     # ── worker-side execution ───────────────────────────────────────────────────
 
@@ -345,7 +345,7 @@ class ReportRunService:
                 raise ValueError(f"Unknown report definition: {run.definition_id}")
 
             key = f"{run.organization_id}/{run.id}.pdf"
-            await put_object(settings.MINIO_BUCKET_REPORTS, key, pdf_bytes, "application/pdf")
+            await put_object(settings.CLOUDINARY_FOLDER_REPORTS, key, pdf_bytes, "application/pdf")
 
             await self._repo.update(
                 run,
@@ -373,7 +373,7 @@ class ReportRunService:
         ).scalar_one_or_none()
         logo_url = None
         if org and org.logo_file_key:
-            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+            logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
         return org, logo_url
 
     async def _generate_program_po_attainment(self, run: ReportRun) -> tuple[bytes, dict]:

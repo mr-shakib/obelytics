@@ -16,7 +16,7 @@ This guide deploys the **FastAPI backend** and **Next.js frontend** as two separ
                     │   ─────────────►│
                     │   PostgreSQL    │ (Railway-managed)
                     │   Redis         │ (Railway-managed)
-                    │   S3/MinIO      │ (external or Railway volume)
+                    │   Cloudinary    │ (external media storage)
                     └─────────────────┘
 ```
 
@@ -26,7 +26,7 @@ This guide deploys the **FastAPI backend** and **Next.js frontend** as two separ
 
 - A [Railway](https://railway.com) account (Hobby plan or above for production)
 - The GitHub repo pushed to GitHub (Railway deploys from Git)
-- An S3-compatible storage provider (AWS S3, Cloudflare R2, or self-hosted MinIO). Railway does not provide managed object storage
+- A [Cloudinary](https://cloudinary.com) account (free tier is generous) for logo/report storage
 
 ---
 
@@ -79,10 +79,10 @@ Go to the **Variables** tab and add:
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` |
 | `ALLOWED_ORIGINS` | `https://YOUR-FRONTEND-DOMAIN.vercel.app` |
-| `MINIO_ENDPOINT` | Your S3-compatible endpoint (e.g., `s3.amazonaws.com` or R2 endpoint) |
-| `MINIO_ACCESS_KEY` | Your S3 access key |
-| `MINIO_SECRET_KEY` | Your S3 secret key |
-| `MINIO_SECURE` | `true` |
+| `CLOUDINARY_CLOUD_NAME` | Your Cloudinary cloud name |
+| `CLOUDINARY_UPLOAD_PRESET` | Your Cloudinary unsigned upload preset |
+| `CLOUDINARY_API_KEY` | Your Cloudinary API key (optional, only needed for delete support) |
+| `CLOUDINARY_API_SECRET` | Your Cloudinary API secret (optional, only needed for delete support) |
 | `RESEND_API_KEY` | Your Resend API key (optional, for emails) |
 | `EMAIL_FROM` | `Obelytics <noreply@yourdomain.com>` |
 
@@ -191,32 +191,18 @@ Then log in at the frontend and configure the system through the UI.
 
 ---
 
-## S3-Compatible Storage Options
+## Cloudinary Storage Setup
 
-The backend uses S3-compatible storage for logos and reports. Options:
+The backend uses [Cloudinary](https://cloudinary.com) for logo and report storage, via an unsigned upload preset (no API key/secret required for uploads):
 
-### Cloudflare R2 (recommended — free tier generous)
+1. Create a Cloudinary account and note your **Cloud name**.
+2. Create an **unsigned upload preset** (Settings → Upload → Upload presets → Add upload preset, set "Signing Mode" to "Unsigned").
+3. Set the env vars:
 ```
-MINIO_ENDPOINT=YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
-MINIO_ACCESS_KEY=your_r2_access_key
-MINIO_SECRET_KEY=your_r2_secret_key
-MINIO_SECURE=true
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_UPLOAD_PRESET=your_upload_preset
 ```
-
-### AWS S3
-```
-MINIO_ENDPOINT=s3.amazonaws.com
-MINIO_ACCESS_KEY=your_aws_access_key
-MINIO_SECRET_KEY=your_aws_secret_key
-MINIO_SECURE=true
-```
-
-### Self-hosted MinIO on Railway
-1. Add a new service from Docker image: `minio/minio`
-2. Set command: `server /data --console-address :9001`
-3. Add a volume mounted at `/data`
-4. Set `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` env vars
-5. Use the internal Railway URL as `MINIO_ENDPOINT`
+4. Optionally set `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` if you need `delete_object` support (deletion requires a signed request).
 
 ---
 
@@ -234,13 +220,13 @@ MINIO_SECURE=true
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `30` | JWT access token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | No | `7` | Refresh token lifetime |
 | `ALLOWED_ORIGINS` | Yes | — | Comma-separated allowed CORS origins |
-| `MINIO_ENDPOINT` | Yes | — | S3-compatible endpoint |
-| `MINIO_ACCESS_KEY` | Yes | — | S3 access key |
-| `MINIO_SECRET_KEY` | Yes | — | S3 secret key |
-| `MINIO_SECURE` | No | `false` | Use HTTPS for S3 |
-| `MINIO_BUCKET_REPORTS` | No | `reports` | Bucket for PDF reports |
-| `MINIO_BUCKET_LOGOS` | No | `logos` | Bucket for org logos |
-| `MINIO_BUCKET_ACCREDITATION` | No | `accreditation` | Bucket for accreditation docs |
+| `CLOUDINARY_CLOUD_NAME` | Yes | — | Cloudinary cloud name |
+| `CLOUDINARY_UPLOAD_PRESET` | Yes | — | Cloudinary unsigned upload preset |
+| `CLOUDINARY_API_KEY` | No | — | Cloudinary API key (only needed for delete support) |
+| `CLOUDINARY_API_SECRET` | No | — | Cloudinary API secret (only needed for delete support) |
+| `CLOUDINARY_FOLDER_REPORTS` | No | `reports` | Folder for PDF reports |
+| `CLOUDINARY_FOLDER_LOGOS` | No | `logos` | Folder for org logos |
+| `CLOUDINARY_FOLDER_ACCREDITATION` | No | `accreditation` | Folder for accreditation docs |
 | `RESEND_API_KEY` | No | — | Email provider API key |
 | `EMAIL_FROM` | No | — | Email sender address |
 | `DB_POOL_SIZE` | No | `20` | Database connection pool size |

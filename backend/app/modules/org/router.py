@@ -79,7 +79,7 @@ async def _validate_logo_upload(file: UploadFile) -> tuple[bytes, str, str]:
 async def _org_response(org) -> OrgResponse:
     response = OrgResponse.model_validate(org)
     if org.logo_file_key:
-        response.logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+        response.logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
     return response
 
 
@@ -93,7 +93,7 @@ async def _department_response(dept, db: AsyncSession) -> DepartmentResponse:
 
     response = DepartmentResponse.model_validate(dept)
     if dept.logo_file_key:
-        response.logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, dept.logo_file_key)
+        response.logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, dept.logo_file_key)
     current = next((h for h in history if h.effective_to is None), None)
     response.current_hod = (
         DepartmentHeadInfo(user_id=current.user_id, full_name=names.get(current.user_id, "Unknown"))
@@ -174,7 +174,7 @@ async def upload_organization_logo(
     svc = OrgService(db)
     org = await svc.get(current_user.organization_id)
     key = f"{org.id}/logo.{image_format}"
-    await put_object(settings.MINIO_BUCKET_LOGOS, key, raw, mime)
+    await put_object(settings.CLOUDINARY_FOLDER_LOGOS, key, raw, mime)
 
     org = await svc.update(current_user.organization_id, OrgUpdate(logo_file_key=key))
     return await _org_response(org)
@@ -246,7 +246,7 @@ async def upload_department_logo(
     svc = DepartmentService(db)
     dept = await svc.get(dept_id, current_user.organization_id)
     key = f"{current_user.organization_id}/departments/{dept.id}/logo.{image_format}"
-    await put_object(settings.MINIO_BUCKET_LOGOS, key, raw, mime)
+    await put_object(settings.CLOUDINARY_FOLDER_LOGOS, key, raw, mime)
 
     dept = await svc.update(
         dept_id,

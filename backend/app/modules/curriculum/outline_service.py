@@ -653,7 +653,7 @@ class CourseOutlineService:
         org = await self._org_repo.get(org_id)
         logo_url = None
         if org and org.logo_file_key:
-            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+            logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
         department = None
         department_logo_url = None
         if curriculum.program_id:
@@ -662,7 +662,7 @@ class CourseOutlineService:
                 department = await self._department_repo.get_by_id(program.department_id, org_id)
                 if department and department.logo_file_key:
                     department_logo_url = await presigned_get_url(
-                        settings.MINIO_BUCKET_LOGOS,
+                        settings.CLOUDINARY_FOLDER_LOGOS,
                         department.logo_file_key,
                     )
 

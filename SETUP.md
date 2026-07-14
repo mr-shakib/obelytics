@@ -12,7 +12,7 @@ Complete instructions for getting the entire platform running on a fresh machine
 | **Backend** | FastAPI, Python 3.12, SQLAlchemy (async), Alembic |
 | **Database** | PostgreSQL 16 — 13 schemas, 51 tables |
 | **Cache / Queue** | Redis 7.2 |
-| **File Storage** | MinIO (S3-compatible) |
+| **File Storage** | Cloudinary |
 | **Container** | Docker Compose |
 
 ---
@@ -59,7 +59,7 @@ obelytics/
 
 ## 2. Infrastructure — Docker Compose
 
-All infrastructure (Postgres, Redis, MinIO) runs in Docker. The `docker-compose.yml` lives inside `backend/`.
+All infrastructure (Postgres, Redis) runs in Docker. The `docker-compose.yml` lives inside `backend/`. File storage uses Cloudinary directly — no local container needed.
 
 ### Start all services
 
@@ -74,7 +74,7 @@ docker compose up -d
 docker compose ps
 ```
 
-All three services should show `(healthy)` — usually takes ~15 seconds.
+Both services should show `(healthy)` — usually takes ~15 seconds.
 
 ### Services and ports
 
@@ -82,7 +82,6 @@ All three services should show `(healthy)` — usually takes ~15 seconds.
 |---|---|---|---|
 | PostgreSQL 16 | `postgres:16-alpine` | `5434` | `5432` |
 | Redis 7.2 | `redis:7.2-alpine` | `6381` | `6379` |
-| MinIO | `minio/minio:latest` | `9000` (API), `9001` (console) | same |
 
 ### Default credentials
 
@@ -90,7 +89,6 @@ All three services should show `(healthy)` — usually takes ~15 seconds.
 |---|---|---|
 | PostgreSQL | `obelytics` / `obelytics` | `obelytics_dev` |
 | Redis | — | `redis_dev` |
-| MinIO | `minioadmin` | `minioadmin` |
 
 ### Useful Docker commands
 
@@ -130,22 +128,9 @@ services:
     volumes:
       - redis_data:/data
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-
 volumes:
   postgres_data:
   redis_data:
-  minio_data:
 ```
 
 ---
@@ -207,11 +192,11 @@ REDIS_HOST=localhost
 REDIS_PORT=6381
 REDIS_PASSWORD=redis_dev
 
-# MinIO (file storage)
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_SECURE=false
+# Cloudinary (file storage — https://cloudinary.com)
+CLOUDINARY_CLOUD_NAME=h1gsnk4q
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+CLOUDINARY_UPLOAD_PRESET=obelytics
 
 # CORS — must include the frontend URL
 ALLOWED_ORIGINS=http://localhost:3000
@@ -493,15 +478,15 @@ Login credentials are unchanged: `admin@obelytics.local` / `Admin@123`.
 
 ---
 
-## 9. MinIO File Storage (Optional)
+## 9. Cloudinary File Storage (Optional)
 
-MinIO runs locally and mimics AWS S3. To manage buckets:
+Logos and generated report PDFs are stored on [Cloudinary](https://cloudinary.com) via an unsigned upload preset:
 
-1. Open the MinIO console at **[http://localhost:9001](http://localhost:9001)**
-2. Log in: username `minioadmin` / password `minioadmin`
-3. Create a bucket named `obelytics` (or whatever `MINIO_BUCKET` is set to in `.env`)
+1. Sign up at [cloudinary.com](https://cloudinary.com) and note your **Cloud name**.
+2. Create an unsigned upload preset: Settings → Upload → Upload presets → Add upload preset, set "Signing Mode" to "Unsigned".
+3. Set `CLOUDINARY_CLOUD_NAME` and `CLOUDINARY_UPLOAD_PRESET` in `.env` to match.
 
-For production, replace MinIO with an actual S3 bucket and update `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and set `MINIO_SECURE=true`.
+`CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` are only needed if you want `delete_object` support (deletion requires a signed request) — they can be left blank otherwise.
 
 ---
 
@@ -513,7 +498,7 @@ Before deploying to production:
 - [ ] Set `ENV=production` and `DEBUG=false`
 - [ ] Use a managed Postgres instance (not the Docker container)
 - [ ] Use a managed Redis instance (e.g., ElastiCache, Upstash)
-- [ ] Replace MinIO with AWS S3 or compatible storage, set `MINIO_SECURE=true`
+- [ ] Set production `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_UPLOAD_PRESET` (and API key/secret if delete support is needed)
 - [ ] Set `ALLOWED_ORIGINS` to your actual frontend domain(s)
 - [ ] Configure `RESEND_API_KEY` and `EMAIL_FROM` for real email delivery
 - [ ] Set `NEXT_PUBLIC_API_URL` in the frontend to the production API URL

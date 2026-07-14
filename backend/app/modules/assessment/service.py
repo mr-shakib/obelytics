@@ -1725,7 +1725,7 @@ class MarksheetService:
         org = await org_repo.get(org_id)
         logo_url = None
         if org and org.logo_file_key:
-            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+            logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
 
         program_acronym = ""
         department_name = ""
@@ -1751,7 +1751,7 @@ class MarksheetService:
                             department_name = f"{dept.name} ({dept.short_name})"
                             if dept.logo_file_key:
                                 department_logo_url = await presigned_get_url(
-                                    settings.MINIO_BUCKET_LOGOS, dept.logo_file_key
+                                    settings.CLOUDINARY_FOLDER_LOGOS, dept.logo_file_key
                                 )
 
         # Aggregate PO attainment across all published courses, same rule the UI
@@ -1867,7 +1867,7 @@ class MarksheetService:
         org = await org_repo.get(org_id)
         logo_url = None
         if org and org.logo_file_key:
-            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+            logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
 
         section_teacher_name = (await self._session.execute(
             select(User.full_name)
@@ -1967,7 +1967,7 @@ class MarksheetService:
         org = await org_repo.get(org_id)
         logo_url = None
         if org and org.logo_file_key:
-            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+            logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
 
         return {
             "course": {
@@ -2421,7 +2421,7 @@ class CourseEndReportService:
         org = await org_repo.get(org_id)
         logo_url = None
         if org and org.logo_file_key:
-            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+            logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
 
         conduct_hours = row.theory_hours + row.lab_hours
         if conduct_hours == 0:
@@ -2619,7 +2619,7 @@ class CourseEndReportService:
         org = await org_repo.get(org_id)
         logo_url = None
         if org and org.logo_file_key:
-            logo_url = await presigned_get_url(settings.MINIO_BUCKET_LOGOS, org.logo_file_key)
+            logo_url = await presigned_get_url(settings.CLOUDINARY_FOLDER_LOGOS, org.logo_file_key)
 
         ml_user = (await self._session.execute(
             select(User)
