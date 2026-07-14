@@ -63,6 +63,7 @@ from app.modules.assessment.schemas import (
     AssessmentCreate,
     AssessmentUpdate,
     COAttainmentPreview,
+    CourseEndReportResponse,
     EnrollmentBulkCreate,
     EnrollmentBulkResponse,
     EnrollmentCreate,
@@ -2117,6 +2118,85 @@ class CourseEndReportService:
         )
         return result.scalar_one_or_none()
 
+    async def get_response(self, section_offering_id: UUID, org_id: UUID) -> CourseEndReportResponse:
+        """Full on-screen response: the report's own fields plus the course/section/
+        batch/term info the reviewer needs (a Module Leader or PC reviewing someone
+        else's section can't rely on their own faculty assignments to resolve this),
+        and PO attainment computed from actual marks + the course's CO-PO mapping."""
+        row = (await self._session.execute(
+            select(
+                Course.code.label("course_code"),
+                Course.title.label("course_title"),
+                Course.credits.label("credits"),
+                AcademicTerm.name.label("term_name"),
+                AcademicTerm.year.label("term_year"),
+                AcademicTerm.season.label("term_season"),
+                Section.name.label("section_name"),
+                Batch.name.label("batch_name"),
+            )
+            .select_from(SectionOffering)
+            .join(Course, Course.id == SectionOffering.course_id)
+            .join(AcademicTerm, AcademicTerm.id == SectionOffering.academic_term_id)
+            .join(Section, Section.id == SectionOffering.section_id)
+            .join(Batch, Batch.id == SectionOffering.batch_id)
+            .where(
+                SectionOffering.id == section_offering_id,
+                SectionOffering.organization_id == org_id,
+            )
+        )).first()
+        if row is None:
+            raise SectionOfferingNotFoundError()
+
+        attainment = await MarksheetService(self._session).get_attainment(section_offering_id, org_id)
+        po_attainment = {po.po_code: float(po.attainment_pct) for po in attainment.pos}
+
+        report = await self.get(section_offering_id)
+        if report is None:
+            report_fields = {
+                "id": UUID("00000000-0000-0000-0000-000000000000"),
+                "organization_id": org_id,
+                "section_offering_id": section_offering_id,
+                "created_by_user_id": None,
+                "grade_distribution": {},
+                "co_attainment": {},
+                "unattained_co_explanations": [],
+                "teacher_feedback": None,
+                "course_drive_link": None,
+                "status": "DRAFT",
+                "submitted_at": None,
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+            }
+        else:
+            report_fields = {
+                "id": report.id,
+                "organization_id": report.organization_id,
+                "section_offering_id": report.section_offering_id,
+                "created_by_user_id": report.created_by_user_id,
+                "grade_distribution": report.grade_distribution or {},
+                "co_attainment": report.co_attainment or {},
+                "unattained_co_explanations": report.unattained_co_explanations or [],
+                "teacher_feedback": report.teacher_feedback,
+                "course_drive_link": report.course_drive_link,
+                "status": report.status,
+                "submitted_at": report.submitted_at,
+                "created_at": report.created_at,
+                "updated_at": report.updated_at,
+            }
+
+        return CourseEndReportResponse(
+            **report_fields,
+            course_code=row.course_code,
+            course_title=row.course_title,
+            section_name=row.section_name,
+            batch_name=row.batch_name,
+            term_name=row.term_name,
+            term_season=row.term_season,
+            term_year=row.term_year,
+            credits=row.credits,
+            po_attainment=po_attainment,
+        )
+
     async def save_draft(self, section_offering_id: UUID, body, org_id: UUID, user_id: UUID) -> CourseEndReport:
         report = await self.get(section_offering_id)
         if report is None:
@@ -2406,6 +2486,13 @@ class CourseEndReportService:
             for code, pct in co_attainment.items()
         ]
 
+        # Computed from actual marks + the course's CO-PO mapping — CO attainment
+        # above is manually entered by the section teacher, PO attainment isn't.
+        attainment = await MarksheetService(self._session).get_attainment(section_offering_id, org_id)
+        po_attainment_entries = [
+            {"code": po.po_code, "pct": float(po.attainment_pct)} for po in attainment.pos
+        ]
+
         threshold = float((await self._get_co_threshold(org_id, row.curriculum_id)))
         unattained = report.unattained_co_explanations or []
         # All COs attained when attainment data exists and none falls below threshold.
@@ -2448,6 +2535,7 @@ class CourseEndReportService:
             "grade_distribution": grade_distribution,
             "total_students": total_students,
             "co_attainment_entries": co_attainment_entries,
+            "po_attainment_entries": po_attainment_entries,
             "unattained_co_explanations": unattained,
             "empty_explanation_rows": empty_explanation_rows,
             "all_co_attained": all_co_attained,
@@ -2510,10 +2598,13 @@ class CourseEndReportService:
         combined_grade: dict[str, int] = {g: 0 for g in GRADES}
         co_attainment_sums: dict[str, float] = defaultdict(float)
         co_attainment_counts: dict[str, int] = defaultdict(int)
+        po_attainment_sums: dict[str, float] = defaultdict(float)
+        po_attainment_counts: dict[str, int] = defaultdict(int)
         all_unattained: list[dict] = []
         section_feedbacks: list[dict] = []
         total_submitted = 0
 
+        marksheet_svc = MarksheetService(self._session)
         for offering, section, report in rows:
             is_submitted = report is not None and report.status == "SUBMITTED"
             sections.append({
@@ -2537,10 +2628,20 @@ class CourseEndReportService:
                     "section_name": section.name,
                     "feedback": report.teacher_feedback,
                 })
+            # PO attainment isn't stored on the report — computed per section from
+            # actual marks + the course's CO-PO mapping, then averaged like CO above.
+            section_attainment = await marksheet_svc.get_attainment(offering.id, org_id)
+            for po in section_attainment.pos:
+                po_attainment_sums[po.po_code] += float(po.attainment_pct)
+                po_attainment_counts[po.po_code] += 1
 
         co_attainment_avg = {
             code: round(co_attainment_sums[code] / co_attainment_counts[code], 1)
             for code in co_attainment_sums
+        }
+        po_attainment_avg = {
+            code: round(po_attainment_sums[code] / po_attainment_counts[code], 1)
+            for code in po_attainment_sums
         }
 
         curriculum_id = rows[0][0].curriculum_id if rows else None
@@ -2563,6 +2664,8 @@ class CourseEndReportService:
             "course_code": course_row.code if course_row else "",
             "course_title": course_row.title if course_row else "",
             "credits": course_row.credits if course_row else 0,
+            "theory_hours": course_row.theory_hours if course_row else 0,
+            "lab_hours": course_row.lab_hours if course_row else 0,
             "batch_name": batch_row,
             "term_name": term_row.name if term_row else "",
             "term_season": term_row.season if term_row else "",
@@ -2572,6 +2675,7 @@ class CourseEndReportService:
             "submitted_sections": total_submitted,
             "combined_grade_distribution": combined_grade,
             "combined_co_attainment": co_attainment_avg,
+            "combined_po_attainment": po_attainment_avg,
             "all_unattained_explanations": all_unattained,
             "section_feedbacks": section_feedbacks,
             "co_threshold": threshold,
@@ -2645,6 +2749,10 @@ class CourseEndReportService:
             {"code": code, "pct": pct}
             for code, pct in data["combined_co_attainment"].items()
         ]
+        po_attainment_entries = [
+            {"code": code, "pct": pct}
+            for code, pct in data["combined_po_attainment"].items()
+        ]
 
         total_students = sum(data["combined_grade_distribution"].get(g, 0) for g in GRADES)
         # Combined report is authored by the Module Leader: section teachers' CO
@@ -2669,8 +2777,10 @@ class CourseEndReportService:
 
         ml_feedback_lines = [l.strip() for l in ml_feedback.split("\n") if l.strip()] if ml_feedback else []
 
-        conduct_hours = 0
-        if data["credits"]:
+        # Matches the single-section report's calculation exactly (theory + lab
+        # hours, falling back to credits only when that sum is 0).
+        conduct_hours = data["theory_hours"] + data["lab_hours"]
+        if conduct_hours == 0:
             conduct_hours = data["credits"]
 
         section_names = ", ".join(s["section_name"] for s in data["sections"])
@@ -2696,6 +2806,7 @@ class CourseEndReportService:
             "grade_distribution": data["combined_grade_distribution"],
             "total_students": total_students,
             "co_attainment_entries": co_attainment_entries,
+            "po_attainment_entries": po_attainment_entries,
             "unattained_co_explanations": unattained,
             "empty_explanation_rows": empty_explanation_rows,
             "all_co_attained": all_co_attained,

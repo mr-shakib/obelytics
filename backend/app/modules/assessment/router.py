@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -861,24 +860,7 @@ async def get_end_report(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = CourseEndReportService(db)
-    report = await svc.get(section_offering_id)
-    if report is None:
-        return CourseEndReportResponse(
-            id=UUID("00000000-0000-0000-0000-000000000000"),
-            organization_id=current_user.organization_id,
-            section_offering_id=section_offering_id,
-            created_by_user_id=None,
-            grade_distribution={},
-            co_attainment={},
-            unattained_co_explanations=[],
-            teacher_feedback=None,
-            course_drive_link=None,
-            status="DRAFT",
-            submitted_at=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-    return report
+    return await svc.get_response(section_offering_id, current_user.organization_id)
 
 
 @router.post("/end-reports/{section_offering_id}/save-draft", response_model=CourseEndReportResponse)

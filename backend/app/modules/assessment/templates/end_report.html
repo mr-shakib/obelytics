@@ -217,8 +217,8 @@
   <tr>
     <td class="label">Course Section:</td>
     <td>{{ section.section_name }}</td>
-    <td class="label"></td>
-    <td></td>
+    <td class="label">Batch:</td>
+    <td>{{ section.batch_name }}</td>
   </tr>
   {% if ml %}
   <tr>
@@ -336,8 +336,36 @@
   </tr>
 </table>
 
-<!-- 4. Unattained CO Explanation -->
-<p class="section-title">4. Unattained CO Explanation:</p>
+<!-- 4. PO Attainment -->
+<p class="section-title">4. PO Attainment</p>
+<table class="bordered co-table">
+  {% if po_attainment_entries %}
+  <tr>
+    <td colspan="{{ po_attainment_entries | length + 1 }}" style="text-align:center; font-weight:bold;">
+      PO attainment in the course (derived from CO-PO mapping)
+    </td>
+  </tr>
+  <tr>
+    <th>PO#</th>
+    {% for entry in po_attainment_entries %}
+    <th>{{ entry.code }}</th>
+    {% endfor %}
+  </tr>
+  <tr>
+    <td><strong>Percentage (%)</strong></td>
+    {% for entry in po_attainment_entries %}
+    <td>{{ entry.pct }}</td>
+    {% endfor %}
+  </tr>
+  {% else %}
+  <tr>
+    <td style="text-align:center; font-style:italic;">No program outcomes mapped for this course.</td>
+  </tr>
+  {% endif %}
+</table>
+
+<!-- 5. Unattained CO Explanation -->
+<p class="section-title">5. Unattained CO Explanation:</p>
 <table class="bordered">
   <tr>
     <th style="width:120px;">Unattained CO</th>

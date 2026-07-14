@@ -449,8 +449,19 @@ class CourseEndReportResponse(BaseModel):
     organization_id: UUID
     section_offering_id: UUID
     created_by_user_id: UUID | None
+    course_code: str
+    course_title: str
+    section_name: str
+    batch_name: str
+    term_name: str
+    term_season: str
+    term_year: int
+    credits: float
     grade_distribution: dict[str, int]
     co_attainment: dict[str, float]
+    # Computed from actual marksheet marks + the course's CO-PO mapping — not
+    # manually entered by the section teacher, unlike co_attainment above.
+    po_attainment: dict[str, float]
     unattained_co_explanations: list[UnattainedCOExplanation]
     teacher_feedback: str | None
     course_drive_link: str | None

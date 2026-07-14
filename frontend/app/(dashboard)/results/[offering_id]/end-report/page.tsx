@@ -21,8 +21,19 @@ const GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"]
 type EndReport = {
   id: string
   section_offering_id: string
+  course_code: string
+  course_title: string
+  section_name: string
+  batch_name: string
+  term_name: string
+  term_season: string
+  term_year: number
+  credits: number
   grade_distribution: Record<string, number>
   co_attainment: Record<string, number>
+  // Computed from actual marks + the course's CO-PO mapping, not manually
+  // entered like co_attainment above.
+  po_attainment: Record<string, number>
   unattained_co_explanations: { co_code: string; reason: string; suggestion: string }[]
   teacher_feedback: string | null
   course_drive_link: string | null
@@ -75,16 +86,6 @@ export default function EndReportReviewPage() {
     },
   })
 
-  const { data: sections = [] } = useQuery({
-    queryKey: queryKeys.facultyAssignments.mySections,
-    queryFn: async () => {
-      const { data } = await apiClient.GET("/faculty-assignments/my-sections" as never)
-      return ((data as unknown) as { section_offering_id: string; course_code: string; course_title: string; section_name: string; batch_name: string; term_name: string; term_year: number; term_season: string }[]) ?? []
-    },
-  })
-
-  const section = sections.find((s) => s.section_offering_id === sectionOfferingId)
-
   async function handleDownloadEndReportPdf() {
     setIsDownloading(true)
     try {
@@ -99,7 +100,7 @@ export default function EndReportReviewPage() {
       const url = URL.createObjectURL(blob as Blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `${section?.course_code ?? "section"}_end_report.pdf`
+      a.download = `${endReport?.course_code ?? "section"}_end_report.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -135,11 +136,7 @@ export default function EndReportReviewPage() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <PageHeader
         title="Course End Report"
-        description={
-          section
-            ? `${section.course_code} — ${section.course_title} · Section ${section.section_name} · ${section.batch_name}`
-            : undefined
-        }
+        description={`${endReport.course_code} — ${endReport.course_title} · Section ${endReport.section_name} · ${endReport.batch_name}`}
         actions={
           <div className="flex items-center gap-2">
             <Badge variant={endReport.status === "SUBMITTED" ? "default" : "secondary"}>
@@ -162,10 +159,10 @@ export default function EndReportReviewPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-            <div><span className="text-muted-foreground">Course:</span> <strong>{section?.course_code} — {section?.course_title}</strong></div>
-            <div><span className="text-muted-foreground">Section:</span> <strong>{section?.section_name}</strong></div>
-            <div><span className="text-muted-foreground">Batch:</span> <strong>{section?.batch_name}</strong></div>
-            <div><span className="text-muted-foreground">Term:</span> <strong>{section?.term_name} ({section?.term_season} {section?.term_year})</strong></div>
+            <div><span className="text-muted-foreground">Course:</span> <strong>{endReport.course_code} — {endReport.course_title}</strong></div>
+            <div><span className="text-muted-foreground">Section:</span> <strong>{endReport.section_name}</strong></div>
+            <div><span className="text-muted-foreground">Batch:</span> <strong>{endReport.batch_name}</strong></div>
+            <div><span className="text-muted-foreground">Term:</span> <strong>{endReport.term_name} ({endReport.term_season} {endReport.term_year})</strong></div>
           </div>
         </CardContent>
       </Card>
@@ -282,6 +279,36 @@ export default function EndReportReviewPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No CO attainment data.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* PO Attainment */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">PO Attainment</CardTitle>
+          <CardDescription>Computed from marks and the course&apos;s CO-PO mapping.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {Object.keys(endReport.po_attainment).length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {Object.entries(endReport.po_attainment).map(([poCode, pct]) => {
+                const attained = pct >= 50
+                return (
+                  <div key={poCode} className="text-center p-3 rounded-lg border">
+                    <div className="font-mono font-semibold text-lg">{poCode}</div>
+                    <div className={`text-2xl font-bold ${attained ? "text-green-600" : "text-red-600"}`}>
+                      {pct}%
+                    </div>
+                    <Badge variant={attained ? "default" : "destructive"} className="mt-1 text-xs">
+                      {attained ? "Attained" : "Not Attained"}
+                    </Badge>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No program outcomes mapped for this course.</p>
           )}
         </CardContent>
       </Card>

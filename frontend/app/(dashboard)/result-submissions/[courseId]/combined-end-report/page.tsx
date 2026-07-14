@@ -32,6 +32,9 @@ type CombinedData = {
   submitted_sections: number
   combined_grade_distribution: Record<string, number>
   combined_co_attainment: Record<string, number>
+  // Computed from actual marks + the course's CO-PO mapping, averaged across
+  // submitted sections the same way combined_co_attainment is.
+  combined_po_attainment: Record<string, number>
   all_unattained_explanations: { co_code: string; reason: string; suggestion: string; section_name: string }[]
   section_feedbacks: { section_name: string; feedback: string }[]
   co_threshold: number
@@ -235,6 +238,36 @@ export default function CombinedEndReportPage() {
         </CardContent>
       </Card>
 
+      {/* Combined PO Attainment */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Combined PO Attainment (Average)</CardTitle>
+          <CardDescription>Computed from marks and the course&apos;s CO-PO mapping, averaged across submitted sections.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {Object.keys(data.combined_po_attainment).length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {Object.entries(data.combined_po_attainment).map(([poCode, pct]) => {
+                const attained = pct >= 50
+                return (
+                  <div key={poCode} className="text-center p-3 rounded-lg border">
+                    <div className="font-mono font-semibold text-lg">{poCode}</div>
+                    <div className={`text-2xl font-bold ${attained ? "text-green-600" : "text-red-600"}`}>
+                      {pct}%
+                    </div>
+                    <Badge variant={attained ? "default" : "destructive"} className="mt-1 text-xs">
+                      {attained ? "Attained" : "Not Attained"}
+                    </Badge>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No program outcomes mapped for this course.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Unattained CO Explanations (from all sections) */}
       {data.all_unattained_explanations.length > 0 && (
         <Card>
@@ -290,7 +323,7 @@ export default function CombinedEndReportPage() {
           <CardTitle className="text-lg">Unattained CO Justification (Module Leader)</CardTitle>
           <CardDescription>
             {data.unattained_cos.length > 0
-              ? `These COs have combined attainment below the ${data.co_threshold}% threshold. Provide your justification — it appears in Section 4 of the PDF.`
+              ? `These COs have combined attainment below the ${data.co_threshold}% threshold. Provide your justification — it appears in Section 5 of the PDF.`
               : "All COs meet the attainment threshold. The PDF will state that all COs are attained."}
           </CardDescription>
         </CardHeader>
