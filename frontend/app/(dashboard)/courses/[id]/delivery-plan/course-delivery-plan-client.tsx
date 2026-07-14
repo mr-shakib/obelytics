@@ -293,7 +293,7 @@ export function CourseDeliveryPlanClient({ id }: Props) {
         <CardTitle>Delivery Plan</CardTitle>
         {curriculumId && (
           <p className="text-sm text-muted-foreground">
-            Delivery plan must cover all {REQUIRED_DELIVERY_PLAN_WEEKS} weeks to complete course customization.
+            Delivery plan must cover at least {REQUIRED_DELIVERY_PLAN_WEEKS} weeks (1 through {REQUIRED_DELIVERY_PLAN_WEEKS}, with no gaps) to complete course customization.
             {lessonPlanItems.length > 0 && ` Currently planned: ${plannedWeeksCount}/${REQUIRED_DELIVERY_PLAN_WEEKS} weeks.`}
           </p>
         )}

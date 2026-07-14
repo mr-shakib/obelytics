@@ -143,13 +143,13 @@ export function CourseWorkspaceShell({ id, children }: Props) {
   checks.push({ label: "Course outcomes (COs)", done: courseOutcomes.length > 0 })
   checks.push({ label: "Assessment tools", done: assessmentToolsForCheck.length > 0 })
   checks.push({ label: "CO-PO mapping", done: !!mappingSet })
-  const deliveryPlanWeeks = Array.from(new Set(lessonPlan.map((item) => item.week_number))).sort(
-    (a, b) => a - b
-  )
-  const hasCompleteDeliveryPlan =
-    deliveryPlanWeeks.length === REQUIRED_DELIVERY_PLAN_WEEKS &&
-    deliveryPlanWeeks[0] === 1 &&
-    deliveryPlanWeeks.at(-1) === REQUIRED_DELIVERY_PLAN_WEEKS
+  // Complete once every week from 1 through the required minimum is covered —
+  // a longer plan (13+ weeks) still counts, it just can't have gaps in 1..12.
+  const plannedWeekSet = new Set(lessonPlan.map((item) => item.week_number))
+  const hasCompleteDeliveryPlan = Array.from(
+    { length: REQUIRED_DELIVERY_PLAN_WEEKS },
+    (_, i) => i + 1
+  ).every((week) => plannedWeekSet.has(week))
   checks.push({ label: "Delivery plan", done: hasCompleteDeliveryPlan })
 
   const completedCount = checks.filter((c) => c.done).length
