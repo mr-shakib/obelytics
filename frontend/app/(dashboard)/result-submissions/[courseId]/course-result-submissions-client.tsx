@@ -16,6 +16,7 @@ import { ResultStatusBadge } from "@/components/shared/result-status-badge"
 import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { colorForId } from "@/lib/result-colors"
 
 type ResultSubmission = {
   section_offering_id: string
@@ -51,7 +52,7 @@ function groupByBatchTerm(items: ResultSubmission[]) {
   >()
   for (const item of items) {
     const key = `${item.batch_id}__${item.academic_term_id}`
-    const label = `${item.batch_name} · ${item.term_name} (${item.term_season} ${item.term_year})`
+    const label = `${item.batch_name} · ${item.term_name}`
     const group = map.get(key)
     if (group) {
       group.items.push(item)
@@ -236,7 +237,11 @@ export function CourseResultSubmissionsClient({ courseId }: Props) {
           return (
           <div key={group.label} className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: colorForId(group.batch_id) }}
+                />
                 {group.label}
               </p>
               <div className="flex flex-wrap items-center gap-2">

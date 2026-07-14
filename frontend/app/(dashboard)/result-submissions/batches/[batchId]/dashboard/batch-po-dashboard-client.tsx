@@ -172,7 +172,7 @@ export function BatchPoDashboardClient({ batchId }: Props) {
 
   const isLoading = loadingSubmissions || loadingDetails
   const resolvedBatchName = batchName ?? submissions[0]?.batch_name ?? "Batch"
-  const resolvedTermLabel = termLabel ?? (submissions[0] ? `${submissions[0].term_name} (${submissions[0].term_season} ${submissions[0].term_year})` : "")
+  const resolvedTermLabel = termLabel ?? (submissions[0]?.term_name ?? "")
   const totalCourses = new Set(submissions.map((s) => s.course_id)).size
   const totalSections = submissions.length
   const pcReviewCount = submissions.filter((s) => s.status === "ML_APPROVED").length
@@ -333,7 +333,7 @@ export function BatchPoDashboardClient({ batchId }: Props) {
                         <div className="font-mono text-xs">{row.course.course_code}</div>
                         <div>{row.course.course_title}</div>
                       </TableCell>
-                      <TableCell>{row.course.term_name} ({row.course.term_season} {row.course.term_year})</TableCell>
+                      <TableCell>{row.course.term_name}</TableCell>
                       {dashboard.poCodes.map((po) => (
                         <TableCell key={po} className="text-right">
                           {row.po[po] ? `${row.po[po]}%` : "—"}

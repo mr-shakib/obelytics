@@ -96,7 +96,7 @@ function naturalSort(a: string, b: string) {
 }
 
 function groupLabel(item: ResultSubmission) {
-  return `${item.batch_name} · ${item.term_name} (${item.term_season} ${item.term_year})`
+  return `${item.batch_name} · ${item.term_name}`
 }
 
 export function CourseResultDashboardClient({ courseId }: Props) {

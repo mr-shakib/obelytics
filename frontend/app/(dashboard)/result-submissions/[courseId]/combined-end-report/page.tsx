@@ -121,7 +121,7 @@ export default function CombinedEndReportPage() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <PageHeader
         title="Combined Course End Report"
-        description={`${code || data.course_code} — ${title || data.course_title} · ${data.batch_name} · ${data.term_name} (${data.term_season} ${data.term_year})`}
+        description={`${code || data.course_code} — ${title || data.course_title} · ${data.batch_name} · ${data.term_name}`}
         actions={
           <div className="flex items-center gap-2">
             <Button

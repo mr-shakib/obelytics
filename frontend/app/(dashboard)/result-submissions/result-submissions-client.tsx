@@ -15,6 +15,7 @@ import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { useAuthStore } from "@/lib/stores/auth-store"
+import { colorForId } from "@/lib/result-colors"
 
 // Courses/sections a section teacher hasn't finished with yet (not even
 // submitted to their Module Leader) aren't a Program Coordinator's concern —
@@ -62,8 +63,30 @@ function courseAccentStatus(items: ResultSubmission[]): string {
   return "DRAFT"
 }
 
+// Which semester each of a course's sections belongs to — a course can be
+// offered to more than one batch/term at once, so this can't be flattened
+// into a single count.
+function groupByBatchTerm(items: ResultSubmission[]) {
+  const map = new Map<
+    string,
+    { label: string; batch_id: string; batch_name: string; academic_term_id: string; items: ResultSubmission[] }
+  >()
+  for (const item of items) {
+    const key = `${item.batch_id}__${item.academic_term_id}`
+    const label = item.term_name
+    const group = map.get(key)
+    if (group) {
+      group.items.push(item)
+    } else {
+      map.set(key, { label, batch_id: item.batch_id, batch_name: item.batch_name, academic_term_id: item.academic_term_id, items: [item] })
+    }
+  }
+  return Array.from(map.values())
+}
+
 export function ResultSubmissionsClient() {
   const [status, setStatus] = useState("ALL")
+  const [batchFilter, setBatchFilter] = useState("ALL")
   const isSuperAdmin = useAuthStore((s) => s.manifest?.scope.is_global ?? false)
   const hasPcPermission = useHasAnyPermission(["result.approve.pc"])
   // The Program Coordinator role is granted every permission (including the
@@ -84,9 +107,18 @@ export function ResultSubmissionsClient() {
     },
   })
 
+  const batchOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of submissions) map.set(item.batch_id, item.batch_name)
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
+  }, [submissions])
+
   const courseGroups = useMemo(() => {
+    const filtered = batchFilter === "ALL" ? submissions : submissions.filter((i) => i.batch_id === batchFilter)
     const map = new Map<string, { course_id: string; course_code: string; course_title: string; items: ResultSubmission[] }>()
-    for (const item of submissions) {
+    for (const item of filtered) {
       const group = map.get(item.course_id)
       if (group) {
         group.items.push(item)
@@ -103,8 +135,8 @@ export function ResultSubmissionsClient() {
     if (isPcOnlyView) {
       groups = groups.filter((g) => g.items.some((i) => PC_VISIBLE_STATUSES.has(i.status)))
     }
-    return groups
-  }, [submissions, isPcOnlyView])
+    return groups.map((g) => ({ ...g, batchTermGroups: groupByBatchTerm(g.items) }))
+  }, [submissions, isPcOnlyView, batchFilter])
 
   const pendingReviewCount = submissions.filter((s) =>
     isPcOnlyView ? s.status === "ML_APPROVED" : s.status === "SUBMITTED"
@@ -125,6 +157,19 @@ export function ResultSubmissionsClient() {
           <SelectContent>
             {Object.entries(STATUS_OPTIONS).map(([value, label]) => (
               <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={batchFilter} onValueChange={(v) => v != null && setBatchFilter(v as string)}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="All batches">
+              {batchFilter === "ALL" ? "All batches" : batchOptions.find((b) => b.id === batchFilter)?.name}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All batches</SelectItem>
+            {batchOptions.map((b) => (
+              <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -159,7 +204,11 @@ export function ResultSubmissionsClient() {
           const firstItem = course.items[0]
 
           return (
-            <Card key={course.course_id} className="h-full">
+            <Card
+              key={course.course_id}
+              className="h-full border-l-4"
+              style={{ borderLeftColor: colorForId(firstItem.batch_id) }}
+            >
               <Link href={`/result-submissions/${course.course_id}?code=${encodeURIComponent(course.course_code)}&title=${encodeURIComponent(course.course_title)}`}>
                 <CardHeader className="pb-2 transition-colors hover:bg-muted/40 rounded-t-xl">
                   <div className="flex items-start justify-between gap-3">
@@ -192,6 +241,29 @@ export function ResultSubmissionsClient() {
                         {reviewCount} awaiting review
                       </Badge>
                     )}
+                  </div>
+
+                  {/* Which batch/semester each of this course's sections belongs to —
+                      a course can run across more than one at once. The colored dot
+                      is a stable per-batch color, matching that batch wherever else
+                      it shows up. */}
+                  <div className="mt-2.5 space-y-1.5 border-t pt-2.5">
+                    {course.batchTermGroups.map((g) => {
+                      const gSubmitted = g.items.filter((i) => i.status !== "DRAFT").length
+                      return (
+                        <div key={`${g.batch_id}__${g.academic_term_id}`} className="flex items-center gap-2 text-xs">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: colorForId(g.batch_id) }}
+                          />
+                          <span className="font-medium text-foreground">{g.batch_name}</span>
+                          <span className="text-muted-foreground">· {g.label}</span>
+                          <span className="ml-auto shrink-0 text-muted-foreground">
+                            {gSubmitted}/{g.items.length} submitted
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </CardContent>
               </Link>

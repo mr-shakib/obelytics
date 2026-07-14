@@ -19,6 +19,15 @@ export const CATEGORICAL_COLORS = [
   "#eb6834", // orange
 ]
 
+// Stable color per entity id (e.g. a batch), hashed rather than assigned by
+// array position, so the same entity reads as the same color everywhere it
+// appears — across different cards, pages, and re-renders.
+export function colorForId(id: string) {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
+  return CATEGORICAL_COLORS[Math.abs(hash) % CATEGORICAL_COLORS.length]
+}
+
 // Default hue for single-series magnitude charts (a course's average CO/PO
 // bar, a radar series, a gauge) — one consistent "this is the data" color
 // instead of a different hue per chart.
