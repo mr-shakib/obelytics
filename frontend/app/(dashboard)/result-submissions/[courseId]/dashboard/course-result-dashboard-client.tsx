@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
@@ -9,7 +10,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  ComposedChart,
   LabelList,
   Legend,
   PolarAngleAxis,
@@ -29,13 +29,16 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { PageHeader } from "@/components/shared/page-header"
 import { ResultStatusBadge } from "@/components/shared/result-status-badge"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
-import { CATEGORICAL_COLORS, GRADE_RAMP, SEQUENTIAL_PRIMARY, STATUS_GOOD } from "@/lib/result-colors"
+import { CATEGORICAL_COLORS, GRADE_RAMP, SEQUENTIAL_PRIMARY, STATUS_CRITICAL, STATUS_GOOD } from "@/lib/result-colors"
 
 type ResultSubmission = {
   section_offering_id: string
@@ -73,6 +76,12 @@ const GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"]
 const CO_COLOR = SEQUENTIAL_PRIMARY
 const PO_COLOR = CATEGORICAL_COLORS[4]
 const GRADE_COLORS = GRADES.map((g) => GRADE_RAMP[g])
+const ALL_VALUE = "__all__"
+// Per-outcome-code color in the "All" grouped view — fixed order, wraps if
+// there are more codes than swatches rather than reassigning on re-render.
+function codeColor(index: number) {
+  return CATEGORICAL_COLORS[index % CATEGORICAL_COLORS.length]
+}
 
 function pct(count: number, total: number) {
   return total > 0 ? Math.round((count / total) * 1000) / 10 : 0
@@ -94,6 +103,8 @@ export function CourseResultDashboardClient({ courseId }: Props) {
   const searchParams = useSearchParams()
   const headerCode = searchParams.get("code")
   const headerTitle = searchParams.get("title")
+  const [selectedCo, setSelectedCo] = useState("")
+  const [selectedPo, setSelectedPo] = useState("")
 
   const { data: submissions = [], isLoading: loadingSubmissions } = useQuery({
     queryKey: queryKeys.results.submissions({ course_id: courseId, dashboard: true }),
@@ -126,29 +137,39 @@ export function CourseResultDashboardClient({ courseId }: Props) {
       const coValues = new Map<string, number[]>()
       const poValues = new Map<string, number[]>()
       const gradeTotals: GradeDistribution = Object.fromEntries(GRADES.map((g) => [g, 0]))
-      const sectionComparison = rows.map((row) => {
-        const coAttainment = (row.attainment?.cos ?? []).map((co) => pct(co.students_above_threshold, co.total_students))
-        const poAttainment = (row.attainment?.pos ?? []).map((po) => pct(po.students_above_threshold, po.total_students))
-        return {
-          section: `Sec ${row.section.section_name}`,
-          students: row.section.student_count,
-          coAvg: average(coAttainment),
-          poAvg: average(poAttainment),
-          status: row.section.status,
-        }
-      })
+
+      // Per-outcome, per-section breakdown — section labels can repeat (e.g. the
+      // same section name offered in different terms), so values are averaged
+      // rather than assumed to be a single data point.
+      const coBySection: Record<string, Record<string, number[]>> = {}
+      const poBySection: Record<string, Record<string, number[]>> = {}
+      const sectionOrder: string[] = []
 
       for (const row of rows) {
+        const label = `Sec ${row.section.section_name}`
+        if (!sectionOrder.includes(label)) sectionOrder.push(label)
+
         for (const grade of GRADES) gradeTotals[grade] = (gradeTotals[grade] ?? 0) + Number(row.grades[grade] ?? 0)
+
         for (const co of row.attainment?.cos ?? []) {
           const values = coValues.get(co.co_code) ?? []
-          values.push(pct(co.students_above_threshold, co.total_students))
+          const value = pct(co.students_above_threshold, co.total_students)
+          values.push(value)
           coValues.set(co.co_code, values)
+
+          if (!coBySection[co.co_code]) coBySection[co.co_code] = {}
+          if (!coBySection[co.co_code][label]) coBySection[co.co_code][label] = []
+          coBySection[co.co_code][label].push(value)
         }
         for (const po of row.attainment?.pos ?? []) {
           const values = poValues.get(po.po_code) ?? []
-          values.push(pct(po.students_above_threshold, po.total_students))
+          const value = pct(po.students_above_threshold, po.total_students)
+          values.push(value)
           poValues.set(po.po_code, values)
+
+          if (!poBySection[po.po_code]) poBySection[po.po_code] = {}
+          if (!poBySection[po.po_code][label]) poBySection[po.po_code][label] = []
+          poBySection[po.po_code][label].push(value)
         }
       }
 
@@ -162,14 +183,72 @@ export function CourseResultDashboardClient({ courseId }: Props) {
       const coSummary = coCodes.map((code) => ({ code, value: average(coValues.get(code) ?? []) }))
       const poSummary = poCodes.map((code) => ({ code, value: average(poValues.get(code) ?? []) }))
 
+      // Section breakdown per outcome code, plus a trailing "Average" bar —
+      // the same across-sections average already plotted on the spider graph —
+      // so a section's attainment can be read against it directly.
+      const coSectionSeries: Record<string, Array<{ section: string; value: number; isAverage?: boolean }>> = {}
+      for (const code of coCodes) {
+        coSectionSeries[code] = [
+          ...sectionOrder
+            .filter((label) => coBySection[code]?.[label])
+            .map((label) => ({ section: label, value: average(coBySection[code][label]) })),
+          { section: "Average", value: average(coValues.get(code) ?? []), isAverage: true },
+        ]
+      }
+      const poSectionSeries: Record<string, Array<{ section: string; value: number; isAverage?: boolean }>> = {}
+      for (const code of poCodes) {
+        poSectionSeries[code] = [
+          ...sectionOrder
+            .filter((label) => poBySection[code]?.[label])
+            .map((label) => ({ section: label, value: average(poBySection[code][label]) })),
+          { section: "Average", value: average(poValues.get(code) ?? []), isAverage: true },
+        ]
+      }
+
+      // "All" view: one grouped-bar row per section (plus a trailing "Average"
+      // row matching coSummary/poSummary), one bar series per outcome code.
+      type GroupedRow = { section: string; isAverage?: boolean } & Record<string, number | null | string | boolean | undefined>
+      const coGrouped: GroupedRow[] = [
+        ...sectionOrder.map((label) => {
+          const row: GroupedRow = { section: label }
+          for (const code of coCodes) row[code] = coBySection[code]?.[label] ? average(coBySection[code][label]) : null
+          return row
+        }),
+        (() => {
+          const row: GroupedRow = { section: "Average", isAverage: true }
+          for (const code of coCodes) row[code] = average(coValues.get(code) ?? [])
+          return row
+        })(),
+      ]
+      const poGrouped: GroupedRow[] = [
+        ...sectionOrder.map((label) => {
+          const row: GroupedRow = { section: label }
+          for (const code of poCodes) row[code] = poBySection[code]?.[label] ? average(poBySection[code][label]) : null
+          return row
+        }),
+        (() => {
+          const row: GroupedRow = { section: "Average", isAverage: true }
+          for (const code of poCodes) row[code] = average(poValues.get(code) ?? [])
+          return row
+        })(),
+      ]
+
+      const threshold = Number(
+        rows.find((row) => row.attainment)?.attainment?.threshold_co_score_pct ?? 50
+      )
+
       return {
         rows,
         gradeChart,
         coSummary,
         poSummary,
-        sectionComparison,
-        overallCo: average(coSummary.map((item) => item.value)),
-        overallPo: average(poSummary.map((item) => item.value)),
+        coCodes,
+        poCodes,
+        coSectionSeries,
+        poSectionSeries,
+        coGrouped,
+        poGrouped,
+        threshold,
       }
     },
   })
@@ -181,6 +260,10 @@ export function CourseResultDashboardClient({ courseId }: Props) {
   const submittedSections = submissions.filter((s) => s.status !== "DRAFT").length
   const totalStudents = submissions.reduce((sum, s) => sum + Number(s.student_count ?? 0), 0)
   const submittedPct = pct(submittedSections, totalSections)
+  const activeCo = selectedCo || dashboard?.coCodes[0] || ""
+  const activePo = selectedPo || dashboard?.poCodes[0] || ""
+  const activeCoData = (activeCo && dashboard?.coSectionSeries[activeCo]) || []
+  const activePoData = (activePo && dashboard?.poSectionSeries[activePo]) || []
 
   return (
     <div className="space-y-6">
@@ -194,35 +277,167 @@ export function CourseResultDashboardClient({ courseId }: Props) {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Sections</p><p className="text-2xl font-semibold">{totalSections}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Submitted</p><p className="text-2xl font-semibold">{submittedSections}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Students</p><p className="text-2xl font-semibold">{totalStudents}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Average CO</p><p className="text-2xl font-semibold">{dashboard?.overallCo ?? 0}%</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Average PO</p><p className="text-2xl font-semibold">{dashboard?.overallPo ?? 0}%</p></CardContent></Card>
       </div>
 
       {isLoading && <div className="h-40 animate-pulse rounded-lg bg-muted" />}
 
       {!isLoading && dashboard && (
         <>
-          <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+          <div className="grid gap-4 lg:grid-cols-2">
             <ChartCard
-              title="Section Attainment Comparison"
+              title="CO Attainment by Section"
               icon={<ChartNoAxesCombined className="h-4 w-4" />}
-              empty={dashboard.sectionComparison.length === 0}
+              empty={dashboard.coCodes.length === 0}
+              actions={
+                <Select value={activeCo} onValueChange={(v) => setSelectedCo((v as string) ?? "")}>
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue placeholder="CO">{activeCo === ALL_VALUE ? "All" : (activeCo || undefined)}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_VALUE}>All</SelectItem>
+                    {dashboard.coCodes.map((code) => (
+                      <SelectItem key={code} value={code}>{code}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
             >
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={dashboard.sectionComparison} margin={{ top: 16, right: 16, bottom: 8, left: -16 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="section" tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 100]} tickLine={false} axisLine={false} unit="%" />
-                  <RechartsTooltip formatter={(value) => [`${value}%`, "Attainment"]} />
-                  <Legend />
-                  <Bar dataKey="coAvg" name="CO average" fill={CO_COLOR} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="poAvg" name="PO average" fill={PO_COLOR} radius={[4, 4, 0, 0]} />
-                </ComposedChart>
-              </ResponsiveContainer>
+              {activeCo === ALL_VALUE ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dashboard.coGrouped} margin={{ top: 16, right: 16, bottom: 8, left: -16 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="section" tickLine={false} axisLine={false} />
+                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} unit="%" />
+                    <RechartsTooltip formatter={(value, name) => [`${value}%`, name]} />
+                    <Legend />
+                    {dashboard.coCodes.map((code, i) => (
+                      <Bar key={code} dataKey={code} name={code} fill={codeColor(i)} radius={[3, 3, 0, 0]}>
+                        {dashboard.coGrouped.map((row) => {
+                          const value = row[code] as number | null
+                          const below = value != null && value < dashboard.threshold
+                          return (
+                            <Cell
+                              key={row.section}
+                              fill={codeColor(i)}
+                              stroke={below ? STATUS_CRITICAL : undefined}
+                              strokeWidth={below ? 2 : 0}
+                            />
+                          )
+                        })}
+                      </Bar>
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={activeCoData} margin={{ top: 16, right: 16, bottom: 8, left: -16 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="section" tickLine={false} axisLine={false} />
+                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} unit="%" />
+                    <RechartsTooltip formatter={(value) => [`${value}%`, `${activeCo} attainment`]} />
+                    <Bar dataKey="value" name={`${activeCo} attainment`} radius={[4, 4, 0, 0]}>
+                      {activeCoData.map((entry) => (
+                        <Cell
+                          key={entry.section}
+                          fill={entry.value < dashboard.threshold ? STATUS_CRITICAL : CO_COLOR}
+                          stroke={entry.isAverage ? "#111827" : undefined}
+                          strokeWidth={entry.isAverage ? 2 : 0}
+                          strokeDasharray={entry.isAverage ? "3 2" : undefined}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              title="PO Attainment by Section"
+              icon={<ChartNoAxesCombined className="h-4 w-4" />}
+              empty={dashboard.poCodes.length === 0}
+              actions={
+                <Select value={activePo} onValueChange={(v) => setSelectedPo((v as string) ?? "")}>
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue placeholder="PO">{activePo === ALL_VALUE ? "All" : (activePo || undefined)}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_VALUE}>All</SelectItem>
+                    {dashboard.poCodes.map((code) => (
+                      <SelectItem key={code} value={code}>{code}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+            >
+              {activePo === ALL_VALUE ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dashboard.poGrouped} margin={{ top: 16, right: 16, bottom: 8, left: -16 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="section" tickLine={false} axisLine={false} />
+                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} unit="%" />
+                    <RechartsTooltip formatter={(value, name) => [`${value}%`, name]} />
+                    <Legend />
+                    {dashboard.poCodes.map((code, i) => (
+                      <Bar key={code} dataKey={code} name={code} fill={codeColor(i)} radius={[3, 3, 0, 0]}>
+                        {dashboard.poGrouped.map((row) => {
+                          const value = row[code] as number | null
+                          const below = value != null && value < dashboard.threshold
+                          return (
+                            <Cell
+                              key={row.section}
+                              fill={codeColor(i)}
+                              stroke={below ? STATUS_CRITICAL : undefined}
+                              strokeWidth={below ? 2 : 0}
+                            />
+                          )
+                        })}
+                      </Bar>
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={activePoData} margin={{ top: 16, right: 16, bottom: 8, left: -16 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="section" tickLine={false} axisLine={false} />
+                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} unit="%" />
+                    <RechartsTooltip formatter={(value) => [`${value}%`, `${activePo} attainment`]} />
+                    <Bar dataKey="value" name={`${activePo} attainment`} radius={[4, 4, 0, 0]}>
+                      {activePoData.map((entry) => (
+                        <Cell
+                          key={entry.section}
+                          fill={entry.value < dashboard.threshold ? STATUS_CRITICAL : PO_COLOR}
+                          stroke={entry.isAverage ? "#111827" : undefined}
+                          strokeWidth={entry.isAverage ? 2 : 0}
+                          strokeDasharray={entry.isAverage ? "3 2" : undefined}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <ChartCard
+              title="CO Attainment Spider Graph"
+              icon={<Radar className="h-4 w-4" />}
+              empty={dashboard.coSummary.length === 0}
+            >
+              <AttainmentRadar data={dashboard.coSummary} color={CO_COLOR} />
+            </ChartCard>
+
+            <ChartCard
+              title="PO Attainment Spider Graph"
+              icon={<Radar className="h-4 w-4" />}
+              empty={dashboard.poSummary.length === 0}
+            >
+              <AttainmentRadar data={dashboard.poSummary} color={PO_COLOR} />
             </ChartCard>
 
             <ChartCard
@@ -251,27 +466,9 @@ export function CourseResultDashboardClient({ courseId }: Props) {
             </ChartCard>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard
-              title="CO Attainment Spider Graph"
-              icon={<Radar className="h-4 w-4" />}
-              empty={dashboard.coSummary.length === 0}
-            >
-              <AttainmentRadar data={dashboard.coSummary} color={CO_COLOR} />
-            </ChartCard>
-
-            <ChartCard
-              title="PO Attainment Spider Graph"
-              icon={<Radar className="h-4 w-4" />}
-              empty={dashboard.poSummary.length === 0}
-            >
-              <AttainmentRadar data={dashboard.poSummary} color={PO_COLOR} />
-            </ChartCard>
-          </div>
-
           <div className="grid gap-4 xl:grid-cols-[1fr_1.25fr]">
-            <SummaryCard title="Average CO Attainment Across Sections" items={dashboard.coSummary} />
-            <SummaryCard title="Average PO Attainment Across Sections" items={dashboard.poSummary} />
+            <SummaryCard title="Average CO Attainment Across Sections" items={dashboard.coSummary} threshold={dashboard.threshold} />
+            <SummaryCard title="Average PO Attainment Across Sections" items={dashboard.poSummary} threshold={dashboard.threshold} />
           </div>
 
           <ChartCard
@@ -331,7 +528,7 @@ export function CourseResultDashboardClient({ courseId }: Props) {
   )
 }
 
-function SummaryCard({ title, items }: { title: string; items: Array<{ code: string; value: number }> }) {
+function SummaryCard({ title, items, threshold }: { title: string; items: Array<{ code: string; value: number }>; threshold: number }) {
   return (
     <Card>
       <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><BarChart3 className="h-4 w-4" />{title}</CardTitle></CardHeader>
@@ -339,7 +536,7 @@ function SummaryCard({ title, items }: { title: string; items: Array<{ code: str
         {items.length === 0 ? <p className="text-sm text-muted-foreground">No attainment data yet.</p> : items.map((item) => (
           <div key={item.code} className="flex items-center justify-between rounded border px-3 py-2">
             <span className="font-medium">{item.code}</span>
-            <Badge variant={item.value >= 50 ? "default" : "destructive"}>{item.value}%</Badge>
+            <Badge variant={item.value >= threshold ? "default" : "destructive"}>{item.value}%</Badge>
           </div>
         ))}
       </CardContent>
@@ -353,20 +550,23 @@ function ChartCard({
   empty,
   children,
   heightClassName = "h-72",
+  actions,
 }: {
   title: string
   icon: React.ReactNode
   empty: boolean
   children: React.ReactNode
   heightClassName?: string
+  actions?: React.ReactNode
 }) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2 text-sm">
           {icon}
           {title}
         </CardTitle>
+        {actions}
       </CardHeader>
       <CardContent>
         {empty ? (

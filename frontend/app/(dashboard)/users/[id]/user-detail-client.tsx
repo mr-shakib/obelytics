@@ -291,6 +291,21 @@ export function UserDetailClient({ id }: Props) {
     onError: () => toast.error("Failed to assign role"),
   })
 
+  const [removingRoleId, setRemovingRoleId] = useState<string | null>(null)
+
+  const removeRole = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      setRemovingRoleId(assignmentId)
+      await apiClient.DELETE(`/users/${id}/roles/${assignmentId}` as never)
+    },
+    onSuccess: () => {
+      toast.success("Role removed")
+      qc.invalidateQueries({ queryKey: queryKeys.users.roles(id) })
+    },
+    onError: () => toast.error("Failed to remove role"),
+    onSettled: () => setRemovingRoleId(null),
+  })
+
   if (isLoading) return <div className="animate-pulse h-40 bg-muted rounded-md" />
   if (!user) return <p className="text-muted-foreground">User not found.</p>
 
@@ -593,7 +608,7 @@ export function UserDetailClient({ id }: Props) {
           ) : (
             <ul className="space-y-2">
               {(userRoles ?? []).map((r) => (
-                <li key={r.id} className="flex items-center gap-2 text-sm">
+                <li key={r.id} className="flex items-center gap-2 text-sm group">
                   <ShieldCheck className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="font-medium">{r.role_name}</span>
                   <Badge variant="secondary" className="text-xs">
@@ -602,6 +617,21 @@ export function UserDetailClient({ id }: Props) {
                   {r.scope_name && (
                     <span className="text-muted-foreground">{r.scope_name}</span>
                   )}
+                  <PermissionGate permission="user.update">
+                    <button
+                      type="button"
+                      className="ml-auto h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                      disabled={removeRole.isPending && removingRoleId === r.id}
+                      onClick={() => removeRole.mutate(r.id)}
+                      aria-label={`Remove ${r.role_name} role`}
+                    >
+                      {removeRole.isPending && removingRoleId === r.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </PermissionGate>
                 </li>
               ))}
             </ul>
