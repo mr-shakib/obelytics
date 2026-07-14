@@ -74,6 +74,9 @@ class CourseCreate(BaseModel):
 
 
 class CourseUpdate(BaseModel):
+    course_category_id: UUID | None = None
+    course_type: Literal["THEORY", "LAB", "THESIS_DEFENSE"] | None = None
+    code: str | None = Field(default=None, min_length=1, max_length=30)
     title: str | None = Field(default=None, min_length=1, max_length=255)
     credits: float | None = Field(default=None, ge=0, le=20)
     description: str | None = None

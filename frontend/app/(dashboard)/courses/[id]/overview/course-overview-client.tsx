@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -12,14 +12,25 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { usePermission } from "@/hooks/use-permission"
-import type { Course, CourseObjective, BloomDomain, Prerequisite, CourseListItem } from "../course-types"
+import type { Course, CourseObjective, BloomDomain, Prerequisite, CourseListItem, CourseCategory } from "../course-types"
+import { COURSE_TYPE_LABELS } from "../course-types"
 
 const schema = z.object({
+  code: z.string().min(1, "Code is required").max(30),
   title: z.string().min(1, "Title is required").max(255),
+  course_category_id: z.string().min(1, "Course category is required"),
+  course_type: z.enum(["THEORY", "LAB", "THESIS_DEFENSE"]),
   credits: z.number().min(0, "Credits cannot be negative").max(20),
   theory_hours: z.number().int().min(0),
   lab_hours: z.number().int().min(0),
@@ -57,6 +68,14 @@ export function CourseOverviewClient({ id }: Props) {
     },
   })
 
+  const { data: courseCategories = [] } = useQuery({
+    queryKey: queryKeys.courseCategories.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/ref-data/course-categories" as never)
+      return ((data as unknown) as CourseCategory[]) ?? []
+    },
+  })
+
   const { data: courseBloomDomainIds = [] } = useQuery({
     queryKey: queryKeys.courseBloomDomains.byCourse(id),
     queryFn: async () => {
@@ -87,12 +106,18 @@ export function CourseOverviewClient({ id }: Props) {
   const {
     register,
     handleSubmit,
+    control,
+    watch,
+    setValue,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     values: data
       ? {
+          code: data.code,
           title: data.title,
+          course_category_id: data.course_category_id,
+          course_type: data.course_type as FormValues["course_type"],
           credits: data.credits,
           theory_hours: data.theory_hours,
           lab_hours: data.lab_hours,
@@ -102,11 +127,16 @@ export function CourseOverviewClient({ id }: Props) {
       : undefined,
   })
 
+  const watchedCourseType = watch("course_type")
+
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
       await apiClient.PATCH(`/courses/${id}` as never, {
         body: {
+          code: values.code,
           title: values.title,
+          course_category_id: values.course_category_id,
+          course_type: values.course_type,
           credits: values.credits,
           theory_hours: values.theory_hours,
           lab_hours: values.lab_hours,
@@ -217,6 +247,106 @@ export function CourseOverviewClient({ id }: Props) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6 max-w-3xl">
+        <PermissionGate permission="course.update">
+          <Card>
+            <CardHeader><CardTitle>Edit Details</CardTitle></CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="code">Code</Label>
+                    <Input id="code" {...register("code")} />
+                    {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Title</Label>
+                    <Input id="title" {...register("title")} />
+                    {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Course Category</Label>
+                    <Controller
+                      name="course_category_id"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select category">
+                              {(value: string) => courseCategories.find((c) => c.id === value)?.name ?? value}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {courseCategories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.course_category_id && <p className="text-sm text-destructive">{errors.course_category_id.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Course Type</Label>
+                    <Controller
+                      name="course_type"
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value ?? ""}
+                          onValueChange={(v) => {
+                            field.onChange(v)
+                            if (v === "THEORY") setValue("lab_hours", 0, { shouldValidate: true, shouldDirty: true })
+                            else if (v === "LAB") setValue("theory_hours", 0, { shouldValidate: true, shouldDirty: true })
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select course type">
+                              {(value: string) => COURSE_TYPE_LABELS[value] ?? value}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(COURSE_TYPE_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.course_type && <p className="text-sm text-destructive">{errors.course_type.message}</p>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="credits">Credits</Label>
+                    <Input id="credits" type="number" min={0} max={20} step="0.25" {...register("credits", { valueAsNumber: true })} />
+                    {errors.credits && <p className="text-sm text-destructive">{errors.credits.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="theory_hours">Theory Hours</Label>
+                    <Input id="theory_hours" type="number" min={0} disabled={watchedCourseType === "LAB"} {...register("theory_hours", { valueAsNumber: true })} />
+                    {errors.theory_hours && <p className="text-sm text-destructive">{errors.theory_hours.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lab_hours">Lab Hours</Label>
+                    <Input id="lab_hours" type="number" min={0} disabled={watchedCourseType === "THEORY"} {...register("lab_hours", { valueAsNumber: true })} />
+                    {errors.lab_hours && <p className="text-sm text-destructive">{errors.lab_hours.message}</p>}
+                  </div>
+                </div>
+                <Button type="submit" disabled={!isDirty || isSubmitting || mutation.isPending}>
+                  {(isSubmitting || mutation.isPending) && <Loader2 className="animate-spin" />}
+                  Save Changes
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </PermissionGate>
+
         <Card>
           <CardHeader><CardTitle>Course Description / Rationale</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -380,45 +510,6 @@ export function CourseOverviewClient({ id }: Props) {
             </PermissionGate>
           </CardContent>
         </Card>
-
-        <PermissionGate permission="course.update">
-          <Card>
-            <CardHeader><CardTitle>Edit Details</CardTitle></CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
-                  <Input id="title" {...register("title")} />
-                  {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="credits">Credits</Label>
-                    <Input id="credits" type="number" min={0} max={20} step="0.25" {...register("credits", { valueAsNumber: true })} />
-                    {errors.credits && <p className="text-sm text-destructive">{errors.credits.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="theory_hours">Theory Hours</Label>
-                    <Input id="theory_hours" type="number" min={0} disabled={data.course_type === "LAB"} {...register("theory_hours", { valueAsNumber: true })} />
-                    {errors.theory_hours && <p className="text-sm text-destructive">{errors.theory_hours.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lab_hours">Lab Hours</Label>
-                    <Input id="lab_hours" type="number" min={0} disabled={data.course_type === "THEORY"} {...register("lab_hours", { valueAsNumber: true })} />
-                    {errors.lab_hours && <p className="text-sm text-destructive">{errors.lab_hours.message}</p>}
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Code, course category, and course type are fixed after creation. Archive and recreate the course to change them.
-                </p>
-                <Button type="submit" disabled={!isDirty || isSubmitting || mutation.isPending}>
-                  {(isSubmitting || mutation.isPending) && <Loader2 className="animate-spin" />}
-                  Save Changes
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </PermissionGate>
       </div>
 
       <aside className="space-y-6">

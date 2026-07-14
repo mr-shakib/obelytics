@@ -636,12 +636,17 @@ export function BatchDetailClient({ id }: Props) {
                       render={({ field }) => (
                         <Select value={field.value ?? ""} onValueChange={field.onChange}>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select curriculum" />
+                            <SelectValue placeholder="Select curriculum">
+                              {(value: string) => {
+                                const c = curricula.find((c) => c.id === value)
+                                return c ? c.name : value
+                              }}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {curricula.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
-                                {c.name} ({c.code})
+                                {c.name}
                               </SelectItem>
                             ))}
                           </SelectContent>

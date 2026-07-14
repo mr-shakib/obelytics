@@ -272,6 +272,13 @@ class CourseService:
         if course is None:
             raise CourseNotFoundError()
         data = body.model_dump(exclude_none=True)
+
+        new_code = data.get("code")
+        if new_code is not None and new_code != course.code:
+            existing = await self._repo.find_by_code(new_code, org_id)
+            if existing and existing.id != course.id:
+                raise CourseCodeConflictError()
+
         result = await self._repo.update(course, data)
         await self._session.commit()
         return result
