@@ -16,7 +16,6 @@ import {
   ClipboardList,
   Bell,
   FileText,
-  Award,
   ScrollText,
   CheckSquare,
   Settings,
@@ -71,9 +70,9 @@ export const NAV_ITEMS: NavItem[] = [
   // { label: "Assessments", href: "/assessments", icon: ClipboardList, permission: "assessment.read", group: "Assessment" },
   // { label: "Attainment", href: "/attainment", icon: BarChart3, permission: "attainment.read", group: "Assessment" },
 
-  // Reports & Accreditation
-  { label: "Reports", href: "/reports", icon: FileText, permission: "report.generate", group: "Reports" },
-  { label: "Accreditation", href: "/accreditation", icon: Award, permission: "accreditation.read", group: "Reports" },
+  // Reports & Accreditation — hidden for now; routes remain available for future use.
+  // { label: "Reports", href: "/reports", icon: FileText, permission: "report.generate", group: "Reports" },
+  // { label: "Accreditation", href: "/accreditation", icon: Award, permission: "accreditation.read", group: "Reports" },
 
   // System
   { label: "Notifications", href: "/notifications", icon: Bell, permission: null, group: "System" },
