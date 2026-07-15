@@ -99,6 +99,9 @@ export const queryKeys = {
     all: ["academic-terms"] as const,
     list: (filters?: Record<string, unknown>) => ["academic-terms", "list", filters] as const,
   },
+  sections: {
+    all: ["sections"] as const,
+  },
   sectionOfferings: {
     all: ["section-offerings"] as const,
     byCourse: (courseId: string) => ["section-offerings", "course", courseId] as const,

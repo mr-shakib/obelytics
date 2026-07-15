@@ -70,7 +70,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <span className="hidden sm:block">{user?.first_name} {user?.last_name}</span>
           </div>
           <div className="relative">
-            <Button variant="ghost" size="icon" render={<Link href="/notifications" />}>
+            <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/notifications" />}>
               <Bell className="h-4 w-4" />
             </Button>
             {unreadCount > 0 && (

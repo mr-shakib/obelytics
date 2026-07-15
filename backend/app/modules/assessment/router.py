@@ -336,13 +336,15 @@ async def unenroll_student(
 
 @router.get("/assessments", response_model=list[AssessmentResponse])
 async def list_assessments(
-    section_offering_id: UUID,
     _: Annotated[PermissionManifestResponse, Depends(require_permission("assessment.read"))],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    section_offering_id: UUID | None = None,
 ):
     svc = AssessmentService(db)
-    return await svc.list_by_offering(section_offering_id, current_user.organization_id)
+    if section_offering_id is not None:
+        return await svc.list_by_offering(section_offering_id, current_user.organization_id)
+    return await svc.list_all(current_user.organization_id)
 
 
 @router.post("/assessments", response_model=AssessmentResponse, status_code=status.HTTP_201_CREATED)

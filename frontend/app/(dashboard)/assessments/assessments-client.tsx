@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -42,16 +42,20 @@ type AssessmentType = {
 
 type SectionOffering = {
   id: string
-  name: string
+  course_id: string
+  section_id: string
 }
+
+type Course = { id: string; code: string; title: string }
+type Section = { id: string; name: string }
 
 type Assessment = {
   id: string
-  title: string
-  assessment_type: string
+  section_offering_id: string
+  assessment_type_id: string
+  name: string
   total_marks: number
-  weightage: number
-  offering_name?: string
+  weightage_percent: number
   status: string
 }
 
@@ -64,29 +68,41 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-const columns: ColumnDef<Assessment>[] = [
-  { accessorKey: "title", header: "Title" },
-  { accessorKey: "assessment_type", header: "Type" },
-  { accessorKey: "total_marks", header: "Total Marks" },
-  {
-    accessorKey: "weightage",
-    header: "Weightage (%)",
-    cell: ({ row }) => `${row.original.weightage}%`,
-  },
-  {
-    accessorKey: "offering_name",
-    header: "Offering",
-    cell: ({ row }) =>
-      row.original.offering_name ?? (
-        <span className="text-muted-foreground">—</span>
-      ),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
-  },
-]
+function buildColumns(
+  typeNameById: Record<string, string>,
+  offeringLabelById: Record<string, string>,
+): ColumnDef<Assessment>[] {
+  return [
+    { accessorKey: "name", header: "Name" },
+    {
+      accessorKey: "assessment_type_id",
+      header: "Type",
+      cell: ({ row }) =>
+        typeNameById[row.original.assessment_type_id] ?? (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    { accessorKey: "total_marks", header: "Total Marks" },
+    {
+      accessorKey: "weightage_percent",
+      header: "Weightage (%)",
+      cell: ({ row }) => `${row.original.weightage_percent}%`,
+    },
+    {
+      accessorKey: "section_offering_id",
+      header: "Offering",
+      cell: ({ row }) =>
+        offeringLabelById[row.original.section_offering_id] ?? (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+  ]
+}
 
 export function AssessmentsClient() {
   const [open, setOpen] = useState(false)
@@ -99,8 +115,8 @@ export function AssessmentsClient() {
     queryKey: queryKeys.assessments.list({ offering_id: offeringId }),
     queryFn: async () => {
       const url = offeringId
-        ? `/assessment/assessments?offering_id=${offeringId}`
-        : "/assessment/assessments"
+        ? `/assessments?section_offering_id=${offeringId}`
+        : "/assessments"
       const { data } = await apiClient.GET(url as never)
       return ((data as unknown) as { items?: Assessment[] })?.items ?? ((data as unknown) as Assessment[]) ?? []
     },
@@ -122,6 +138,46 @@ export function AssessmentsClient() {
     },
   })
 
+  const { data: courses = [] } = useQuery({
+    queryKey: queryKeys.courses.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/courses" as never)
+      return ((data as unknown) as Course[]) ?? []
+    },
+  })
+
+  const { data: sections = [] } = useQuery({
+    queryKey: queryKeys.sections.all,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/sections" as never)
+      return ((data as unknown) as Section[]) ?? []
+    },
+  })
+
+  const typeNameById = useMemo(
+    () => Object.fromEntries(assessmentTypes.map((t) => [t.id, t.name])),
+    [assessmentTypes]
+  )
+  const offeringLabelById = useMemo(() => {
+    const courseById = Object.fromEntries(courses.map((c) => [c.id, c]))
+    const sectionById = Object.fromEntries(sections.map((s) => [s.id, s]))
+    return Object.fromEntries(
+      sectionOfferings.map((o) => {
+        const course = courseById[o.course_id]
+        const section = sectionById[o.section_id]
+        const label = [course?.code, section ? `Section ${section.name}` : null]
+          .filter(Boolean)
+          .join(" — ")
+        return [o.id, label || o.id]
+      })
+    )
+  }, [sectionOfferings, courses, sections])
+
+  const columns = useMemo(
+    () => buildColumns(typeNameById, offeringLabelById),
+    [typeNameById, offeringLabelById]
+  )
+
   const {
     register,
     handleSubmit,
@@ -132,7 +188,15 @@ export function AssessmentsClient() {
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      await apiClient.POST("/assessment/assessments" as never, { body: values } as never)
+      await apiClient.POST("/assessments" as never, {
+        body: {
+          section_offering_id: values.section_offering_id,
+          assessment_type_id: values.assessment_type_id,
+          name: values.title,
+          total_marks: values.total_marks,
+          weightage_percent: values.weightage,
+        },
+      } as never)
     },
     onSuccess: () => {
       toast.success("Assessment created")
@@ -220,7 +284,7 @@ export function AssessmentsClient() {
                       <SelectContent>
                         {sectionOfferings.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
-                            {s.name}
+                            {offeringLabelById[s.id] ?? s.id}
                           </SelectItem>
                         ))}
                       </SelectContent>

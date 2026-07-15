@@ -144,7 +144,7 @@ export function ReportsClient() {
                   {run.status}
                 </Badge>
                 {run.status === "DONE" && (
-                  <Button variant="outline" size="sm" render={<Link href={`/reports/${run.id}`} />}>
+                  <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/${run.id}`} />}>
                     View
                   </Button>
                 )}

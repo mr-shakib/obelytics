@@ -106,7 +106,7 @@ export function RoleDetailClient({ id }: Props) {
         actions={
           <div className="flex items-center gap-2">
             {role.is_system_role && <Badge variant="secondary">System</Badge>}
-            <Button variant="outline" size="sm" render={<Link href="/roles" />}>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/roles" />}>
               <ArrowLeft /> Roles
             </Button>
             {isDirty && !role.is_system_role && (

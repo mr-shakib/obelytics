@@ -88,7 +88,7 @@ export function AttainmentClient() {
         description="Compute and track course and program outcome attainment."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" render={<Link href="/attainment/trends" />}>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/attainment/trends" />}>
               <TrendingUp /> Trends
             </Button>
             <PermissionGate permission="attainment.initiate">
@@ -158,7 +158,7 @@ export function AttainmentClient() {
                 </p>
               </div>
               {run.status === "DONE" && (
-                <Button variant="outline" size="sm" render={<Link href={`/attainment/${run.id}`} />}>
+                <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/attainment/${run.id}`} />}>
                   View Results
                 </Button>
               )}

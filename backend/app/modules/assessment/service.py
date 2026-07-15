@@ -308,6 +308,14 @@ class AssessmentService:
     async def list_by_offering(self, offering_id: UUID, org_id: UUID) -> list[Assessment]:
         return await self._repo.list_by_offering(offering_id)
 
+    async def list_all(self, org_id: UUID) -> list[Assessment]:
+        result = await self._session.execute(
+            select(Assessment)
+            .where(Assessment.organization_id == org_id)
+            .order_by(Assessment.created_at.desc())
+        )
+        return list(result.scalars().all())
+
     async def get(self, assessment_id: UUID, org_id: UUID) -> Assessment:
         assessment = await self._repo.get_by_id(assessment_id, org_id)
         if assessment is None:

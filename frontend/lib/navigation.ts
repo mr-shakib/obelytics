@@ -10,12 +10,10 @@ import {
   BookOpen,
   BookCopy,
   Users2,
-  CalendarDays,
   Target,
   ListChecks,
   UserCog,
   ClipboardList,
-  BarChart3,
   Bell,
   FileText,
   Award,
@@ -66,8 +64,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Sections", href: "/my-sections", icon: FileSpreadsheet, permission: "marks.enter", group: "Assessment" },
   { label: "Result Submissions", href: "/result-submissions", icon: FileCheck2, permission: ["result.approve.ml", "result.approve.pc", "result.publish"], group: "Assessment" },
   { label: "Students", href: "/students", icon: IdCard, permission: "assessment.configure", group: "Assessment" },
-  { label: "Assessments", href: "/assessments", icon: ClipboardList, permission: "assessment.read", group: "Assessment" },
-  { label: "Attainment", href: "/attainment", icon: BarChart3, permission: "attainment.read", group: "Assessment" },
+  // Hidden for now: the real workflow never uses these admin pages directly —
+  // assessments are managed through course setup, and attainment computes
+  // automatically on result publication (results feed the Reports module).
+  // The routes still work by URL; re-add here to restore them to the nav.
+  // { label: "Assessments", href: "/assessments", icon: ClipboardList, permission: "assessment.read", group: "Assessment" },
+  // { label: "Attainment", href: "/attainment", icon: BarChart3, permission: "attainment.read", group: "Assessment" },
 
   // Reports & Accreditation
   { label: "Reports", href: "/reports", icon: FileText, permission: "report.generate", group: "Reports" },

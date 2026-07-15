@@ -87,7 +87,7 @@ export function AssessmentDetailClient({ id }: Props) {
           <div className="flex items-center gap-2">
             <StatusBadge status={data.status} />
             <PermissionGate permission="marks.enter">
-              <Button render={<Link href={`/assessments/${id}/marks`} />}>
+              <Button nativeButton={false} render={<Link href={`/assessments/${id}/marks`} />}>
                 Enter Marks
               </Button>
             </PermissionGate>

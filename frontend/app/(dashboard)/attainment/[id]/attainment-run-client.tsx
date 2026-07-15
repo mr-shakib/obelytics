@@ -87,7 +87,7 @@ export function AttainmentRunClient({ id }: Props) {
             <Badge variant={data.status === "DONE" ? "default" : "secondary"}>
               {data.status}
             </Badge>
-            <Button variant="outline" size="sm" render={<Link href="/attainment" />}>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/attainment" />}>
               <ArrowLeft /> Back
             </Button>
           </div>

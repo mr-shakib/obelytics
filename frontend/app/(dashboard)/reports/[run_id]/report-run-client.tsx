@@ -56,7 +56,7 @@ export function ReportRunClient({ runId }: Props) {
               {isActive && <Loader2 className="animate-spin mr-1 h-3 w-3" />}
               {data.status}
             </Badge>
-            <Button variant="outline" size="sm" render={<Link href="/reports" />}>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/reports" />}>
               <ArrowLeft /> Reports
             </Button>
             {data.output_url && (

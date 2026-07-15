@@ -200,7 +200,7 @@ export function AccreditationClient() {
                 {format(new Date(cycle.start_date), "MMM yyyy")}
                 {cycle.end_date && ` — ${format(new Date(cycle.end_date), "MMM yyyy")}`}
               </p>
-              <Button variant="outline" size="sm" className="w-full mt-1" render={<Link href={`/accreditation/${cycle.id}`} />}>
+              <Button variant="outline" size="sm" className="w-full mt-1" nativeButton={false} render={<Link href={`/accreditation/${cycle.id}`} />}>
                 Open Cycle
               </Button>
             </CardContent>

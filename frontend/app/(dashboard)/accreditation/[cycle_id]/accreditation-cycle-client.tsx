@@ -262,7 +262,7 @@ export function AccreditationCycleClient({ cycleId }: Props) {
         actions={
           <div className="flex items-center gap-2">
             <Badge variant={data.status === "ACTIVE" ? "default" : "secondary"}>{data.status}</Badge>
-            <Button variant="outline" size="sm" render={<Link href="/accreditation" />}>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/accreditation" />}>
               <ArrowLeft /> Back
             </Button>
             <PermissionGate permission="accreditation.manage">
