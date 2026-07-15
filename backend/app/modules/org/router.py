@@ -1,6 +1,6 @@
 import io
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from PIL import Image
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_any_permission, require_permission
-from app.core.storage import presigned_get_url, put_object
+from app.core.storage import delete_object, presigned_get_url, put_object
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
 from app.modules.org.repository import DepartmentRepository, ProgramRepository
@@ -70,9 +70,23 @@ async def _validate_logo_upload(file: UploadFile) -> tuple[bytes, str, str]:
     try:
         image = Image.open(io.BytesIO(raw))
         image.verify()
-        image_format = (image.format or "png").lower()
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is not a valid image") from exc
+
+    # .verify() leaves the image object unusable for further operations, so reopen it.
+    image = Image.open(io.BytesIO(raw))
+    image_format = (image.format or "png").lower()
+
+    if image.mode not in ("RGB", "RGBA"):
+        # Non-RGB modes (notably CMYK, common in Photoshop/Illustrator-exported logos)
+        # are misread as RGB by browser <img> decoders, rendering as a red/orange tint.
+        has_alpha = image.mode in ("LA", "PA") or (image.mode == "P" and "transparency" in image.info)
+        target_mode = "RGBA" if has_alpha and image_format != "jpeg" else "RGB"
+        image = image.convert(target_mode)
+        buffer = io.BytesIO()
+        image.save(buffer, format=image_format.upper())
+        raw = buffer.getvalue()
+
     return raw, image_format, file.content_type or f"image/{image_format}"
 
 
@@ -173,10 +187,18 @@ async def upload_organization_logo(
 
     svc = OrgService(db)
     org = await svc.get(current_user.organization_id)
-    key = f"{org.id}/logo.{image_format}"
+    old_key = org.logo_file_key
+    # A unique key per upload forces a new Cloudinary delivery URL, avoiding a CDN/browser
+    # cache serving the previous (potentially bad) logo bytes at a reused URL.
+    key = f"{org.id}/logo-{uuid4().hex[:12]}.{image_format}"
     await put_object(settings.CLOUDINARY_FOLDER_LOGOS, key, raw, mime)
 
     org = await svc.update(current_user.organization_id, OrgUpdate(logo_file_key=key))
+    if old_key and old_key != key:
+        try:
+            await delete_object(settings.CLOUDINARY_FOLDER_LOGOS, old_key)
+        except Exception:
+            pass  # best-effort cleanup of the orphaned asset; the new upload already succeeded
     return await _org_response(org)
 
 
@@ -245,7 +267,10 @@ async def upload_department_logo(
 
     svc = DepartmentService(db)
     dept = await svc.get(dept_id, current_user.organization_id)
-    key = f"{current_user.organization_id}/departments/{dept.id}/logo.{image_format}"
+    old_key = dept.logo_file_key
+    # A unique key per upload forces a new Cloudinary delivery URL, avoiding a CDN/browser
+    # cache serving the previous (potentially bad) logo bytes at a reused URL.
+    key = f"{current_user.organization_id}/departments/{dept.id}/logo-{uuid4().hex[:12]}.{image_format}"
     await put_object(settings.CLOUDINARY_FOLDER_LOGOS, key, raw, mime)
 
     dept = await svc.update(
@@ -253,6 +278,11 @@ async def upload_department_logo(
         DepartmentUpdate(logo_file_key=key),
         current_user.organization_id,
     )
+    if old_key and old_key != key:
+        try:
+            await delete_object(settings.CLOUDINARY_FOLDER_LOGOS, old_key)
+        except Exception:
+            pass  # best-effort cleanup of the orphaned asset; the new upload already succeeded
     return await _department_response(dept, db)
 
 

@@ -207,6 +207,33 @@ class UserService:
         if role is None:
             raise RoleNotFoundError()
 
+        # A program can have at most one active Program Coordinator. This is the
+        # single choke point both the dedicated "assign coordinator" flow and the
+        # generic role-assignment UI go through, so enforce it here rather than
+        # relying on callers to revoke the previous holder themselves.
+        if role.name == "Program Coordinator" and scope_type == "PROGRAM" and scope_id is not None:
+            displaced_result = await self._session.execute(
+                select(UserRoleAssignment).where(
+                    and_(
+                        UserRoleAssignment.role_id == role_id,
+                        UserRoleAssignment.scope_type == scope_type,
+                        UserRoleAssignment.scope_id == scope_id,
+                        UserRoleAssignment.user_id != user_id,
+                        UserRoleAssignment.removed_at.is_(None),
+                    )
+                )
+            )
+            now = datetime.now(timezone.utc)
+            displaced_user_ids = []
+            for displaced in displaced_result.scalars().all():
+                displaced.removed_at = now
+                displaced_user_ids.append(displaced.user_id)
+            if displaced_user_ids:
+                await self._session.flush()
+                builder = PermissionManifestBuilder(self._session)
+                for displaced_user_id in displaced_user_ids:
+                    await builder.invalidate(displaced_user_id)
+
         # A user may hold multiple roles, but only one per scope — re-assigning
         # within the same scope replaces whatever role currently occupies it.
         scope_filter = (
