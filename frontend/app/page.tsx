@@ -1,212 +1,143 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import Link from 'next/link'
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Landing concept: "The evidence ledger"
+   Light editorial paper, ink typography, hairline rules, one green accent.
+   The hero shows the product itself: attainment bars, a trend sparkline,
+   the approval pipeline, and the CO–PO heatmap — evidence, not decoration.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const PO_BARS = [
+  { label: 'PO1', pct: 87 },
+  { label: 'PO2', pct: 78 },
+  { label: 'PO3', pct: 92 },
+  { label: 'PO4', pct: 64 },
+  { label: 'PO5', pct: 81 },
+  { label: 'PO6', pct: 73 },
+]
+
+const SPARK = [58, 63, 61, 68, 72, 70, 77, 82, 80, 86, 89, 92]
+
+const PIPELINE = [
+  { stage: 'Draft', n: 12 },
+  { stage: 'Submitted', n: 27 },
+  { stage: 'ML approved', n: 9 },
+  { stage: 'Published', n: 214 },
+]
+
+const WORKFLOW = [
+  { num: '01', title: 'Configure', desc: 'Programs, curricula, courses and outcome statements — versioned from day one.' },
+  { num: '02', title: 'Map', desc: 'Course outcomes link to program outcomes with weighted intensity, on the record.' },
+  { num: '03', title: 'Assess', desc: 'Teachers enter marks against outcomes; nothing is copied twice.' },
+  { num: '04', title: 'Approve', desc: 'Module leaders and coordinators sign off in a chain that leaves a trail.' },
+  { num: '05', title: 'Report', desc: 'Attainment computes itself. Accreditation reports export in one click.' },
+]
 
 const FEATURES = [
   {
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
-      </svg>
-    ),
-    title: 'CO–PO Matrix Mapping',
-    desc: 'Define course outcomes and map them to program outcomes with weighted intensity. Every connection is traceable, auditable, and version-controlled.',
+    num: '01',
+    title: 'CO–PO matrix, versioned',
+    desc: 'Every mapping between a course outcome and a program outcome is weighted, dated, and auditable. When the curriculum changes, history stays.',
   },
   {
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-      </svg>
-    ),
-    title: 'Automated Attainment',
-    desc: 'Assessment marks flow directly into CO and PO attainment calculations — no spreadsheets, no manual errors, real-time insight.',
+    num: '02',
+    title: 'Attainment that computes itself',
+    desc: 'Marks flow into CO attainment; CO attainment rolls up to PO attainment. No spreadsheets, no transcription, no Friday-night reconciliation.',
   },
   {
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
-      </svg>
-    ),
-    title: 'Approval Workflows',
-    desc: 'Multi-stage approval chains for mappings, assessments, and results. Draft → Submitted → Approved → Published → Locked.',
+    num: '03',
+    title: 'Approval chains with teeth',
+    desc: 'Draft → Submitted → ML approved → Published. Each step is a real gate held by a real role — not a checkbox everyone shares.',
   },
   {
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-      </svg>
-    ),
-    title: 'Accreditation Reports',
-    desc: 'Generate OBE-ready PDF and Excel reports for accreditation bodies in seconds — curriculum maps, attainment summaries, gap analyses.',
+    num: '04',
+    title: 'Accreditation-ready exports',
+    desc: 'Curriculum maps, attainment summaries, section end reports and gap analyses in PDF and Excel, shaped for the reviewer across the table.',
   },
   {
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 0 1 21.75 8.25Z" />
-      </svg>
-    ),
-    title: 'Role-Based Access',
-    desc: 'Super Admin → Program Coordinator → Module Leader → Section Teacher → Student. Granular permissions at every level.',
+    num: '05',
+    title: 'Roles that match your faculty',
+    desc: 'Super Admin, Program Coordinator, Module Leader, Section Teacher, Student — each sees exactly their slice, scoped by program.',
   },
   {
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
-      </svg>
-    ),
-    title: 'Trend Analytics',
-    desc: 'Track attainment across semesters, batches, and years. Identify gaps before your next accreditation cycle with visual dashboards.',
+    num: '06',
+    title: 'Trends across semesters',
+    desc: 'Watch attainment move across batches and years. Find the gap two semesters before the accreditation visit does.',
   },
 ]
 
-const STEPS = [
-  { num: '01', title: 'Configure', desc: 'Set up programs, courses, and outcomes for your institution.', color: '#60A5FA', glow: 'rgba(96,165,250,0.28)' },
-  { num: '02', title: 'Map', desc: 'Link course outcomes to program outcomes with weighted intensity.', color: '#A78BFA', glow: 'rgba(167,139,250,0.28)' },
-  { num: '03', title: 'Assess', desc: 'Section teachers enter marks; module leaders review and approve.', color: '#34D399', glow: 'rgba(52,211,153,0.28)' },
-  { num: '04', title: 'Calculate', desc: 'Attainment runs automatically across CO, course, and PO levels.', color: '#FB923C', glow: 'rgba(251,146,60,0.28)' },
-  { num: '05', title: 'Report', desc: 'Export accreditation-ready reports with a single click.', color: '#F472B6', glow: 'rgba(244,114,182,0.28)' },
+/* Placeholder entries — replace with the real team (name, role, optional link) */
+const TEAM = [
+  { name: 'Shakib', role: 'Founder & Lead Engineer', note: 'Architecture, backend, and the attainment engine.' },
+  { name: 'Team Member', role: 'Frontend Engineer', note: 'Dashboard, analytics views, and design system.' },
+  { name: 'Team Member', role: 'OBE Domain Advisor', note: 'Curriculum mapping methodology and accreditation alignment.' },
+  { name: 'Team Member', role: 'QA & Operations', note: 'Faculty onboarding, data imports, and release quality.' },
 ]
 
-const MODULES = [
-  { name: 'Organization Setup', icon: '🏛️' },
-  { name: 'Curriculum Versioning', icon: '📚' },
-  { name: 'Course Outcomes', icon: '🎯' },
-  { name: 'CO–PO Matrix', icon: '⚡' },
-  { name: 'Assessment Config', icon: '📝' },
-  { name: 'Marks & Enrollment', icon: '✏️' },
-  { name: 'Attainment Engine', icon: '🔢' },
-  { name: 'Approval Chains', icon: '✅' },
-  { name: 'Accreditation Cycles', icon: '🏅' },
-  { name: 'Role-Based Access', icon: '🔐' },
-  { name: 'Trend Analytics', icon: '📈' },
-  { name: 'PDF / Excel Reports', icon: '📄' },
-  { name: 'Audit Logging', icon: '🔍' },
+/* CO–PO heatmap sample: 0–3 mapping intensity (sequential single-hue ramp) */
+const HEAT_COS = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']
+const HEAT_POS = ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8']
+const HEAT = [
+  [3, 2, 1, 0, 0, 1, 0, 0],
+  [2, 3, 2, 1, 0, 0, 0, 0],
+  [0, 1, 3, 2, 1, 0, 1, 0],
+  [0, 0, 1, 3, 2, 1, 0, 1],
+  [1, 0, 0, 1, 3, 2, 0, 0],
 ]
+const HEAT_FILL = ['rgba(22,27,24,0.045)', '#c9e6d6', '#7cc4a0', '#1d7254']
 
-const COS = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6']
-const POS = ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PO12']
-const MAPPING = [
-  [3, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-  [2, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 1, 3, 2, 1, 0, 0, 0, 1, 0, 0, 0],
-  [0, 0, 1, 3, 2, 1, 0, 1, 0, 0, 0, 0],
-  [0, 0, 0, 1, 3, 2, 0, 0, 0, 1, 2, 0],
-  [1, 0, 0, 0, 1, 3, 2, 0, 0, 0, 1, 3],
-]
-
-function MatrixCell({ value, delay }: { value: number; delay: number }) {
-  const opacity = value === 0 ? 0.06 : value === 1 ? 0.35 : value === 2 ? 0.65 : 1
+function Sparkline() {
+  const w = 220
+  const h = 56
+  const pad = 4
+  const min = Math.min(...SPARK)
+  const max = Math.max(...SPARK)
+  const pts = SPARK.map((v, i) => {
+    const x = pad + (i * (w - pad * 2)) / (SPARK.length - 1)
+    const y = h - pad - ((v - min) * (h - pad * 2)) / (max - min)
+    return [x, y] as const
+  })
+  const line = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+  const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${h - pad} L${pts[0][0].toFixed(1)},${h - pad} Z`
+  const [lx, ly] = pts[pts.length - 1]
 
   return (
-    <div
-      className="matrix-cell"
-      style={{
-        animationDelay: `${delay}ms`,
-        background: value === 0
-          ? 'rgba(255,255,255,0.04)'
-          : `rgba(37, 168, 118, ${opacity})`,
-        boxShadow: value === 3 ? '0 0 12px rgba(37,168,118,0.5)' : 'none',
-      }}
-    >
-      {value !== 0 ? '✓' : ''}
-    </div>
+    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="CO attainment trend across 12 terms, rising from 58 to 92 percent" className="spark">
+      <path d={area} fill="rgba(29,114,84,0.10)" />
+      <path d={line} fill="none" stroke="#1d7254" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lx} cy={ly} r="4" fill="#1d7254" stroke="#fdfdfb" strokeWidth="2" />
+    </svg>
   )
 }
 
 export default function LandingPage() {
-  const countersStarted = useRef(false)
-  const rafRef = useRef<number>(0)
-
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
+        for (const entry of entries) {
           if (entry.isIntersecting) {
             entry.target.setAttribute('data-visible', 'true')
+            observer.unobserve(entry.target)
           }
-        })
-      },
-      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
-    )
-    document.querySelectorAll('[data-animate]').forEach((el) => observer.observe(el))
-
-    const statsEl = document.getElementById('stats-section')
-    const counterObs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !countersStarted.current) {
-          countersStarted.current = true
-          document.querySelectorAll<HTMLElement>('[data-counter]').forEach((el) => {
-            const target = parseInt(el.getAttribute('data-counter') ?? '0', 10)
-            const duration = 2200
-            const start = performance.now()
-            const tick = (now: number) => {
-              const progress = Math.min((now - start) / duration, 1)
-              const eased = 1 - Math.pow(1 - progress, 3)
-              el.textContent = Math.floor(eased * target).toLocaleString()
-              if (progress < 1) requestAnimationFrame(tick)
-            }
-            requestAnimationFrame(tick)
-          })
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.12, rootMargin: '0px 0px -32px 0px' }
     )
-    if (statsEl) counterObs.observe(statsEl)
+    document.querySelectorAll('[data-reveal]').forEach((el) => observer.observe(el))
 
-    const nav = document.getElementById('main-nav')
-
-    // Parallax targets: [id, speed] — positive = scrolls slower, negative = opposite dir
-    const parallaxLayers: Array<[string, number]> = [
-      ['px-grid',   0.18],
-      ['px-glow1',  0.30],
-      ['px-glow2', -0.18],
-      ['px-orb1',   0.42],
-      ['px-orb2',  -0.28],
-      ['px-orb3',   0.55],
-      ['px-copy',   0.10],
-      ['px-matrix', 0.16],
-    ]
-
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    let scrollY = window.scrollY
-    let ticking = false
-
-    const heroEl = document.querySelector('.hero') as HTMLElement | null
-
-    const applyParallax = () => {
-      if (prefersReducedMotion) return
-      const heroH = heroEl?.offsetHeight ?? window.innerHeight
-      const clamped = Math.min(scrollY, heroH)
-
-      parallaxLayers.forEach(([id, speed]) => {
-        const el = document.getElementById(id) as HTMLElement | null
-        if (el) el.style.transform = `translateY(${clamped * speed}px)`
-      })
-
-      if (scrollY > 60) nav?.setAttribute('data-scrolled', 'true')
-      else nav?.removeAttribute('data-scrolled')
-
-      ticking = false
-    }
-
+    const nav = document.getElementById('ledger-nav')
     const onScroll = () => {
-      scrollY = window.scrollY
-      if (!ticking) {
-        rafRef.current = requestAnimationFrame(applyParallax)
-        ticking = true
-      }
+      if (window.scrollY > 24) nav?.setAttribute('data-scrolled', 'true')
+      else nav?.removeAttribute('data-scrolled')
     }
-
     window.addEventListener('scroll', onScroll, { passive: true })
-    applyParallax()
-
+    onScroll()
     return () => {
       observer.disconnect()
-      counterObs.disconnect()
       window.removeEventListener('scroll', onScroll)
-      cancelAnimationFrame(rafRef.current)
     }
   }, [])
 
@@ -214,670 +145,542 @@ export default function LandingPage() {
     <>
       <style>{`
         :root {
-          --charcoal: #111110;
-          --charcoal-mid: #1C1C1A;
-          --charcoal-light: #2A2A28;
-          --charcoal-border: rgba(255,255,255,0.08);
-          --cream: #FAF7F2;
-          --cream-pale: #F3EFE6;
-          --cream-card: #FFFFFF;
-          --text-dark: #18181A;
-          --text-muted: #6B6560;
-          --text-light: rgba(255,255,255,0.72);
-          --accent: #1d7254;
-          --accent-bright: #25a876;
+          --paper: #faf9f6;
+          --paper-2: #f2f0ea;
+          --card: #fdfdfb;
+          --ink: #161b18;
+          --ink-70: rgba(22,27,24,0.70);
+          --ink-50: rgba(22,27,24,0.50);
+          --ink-35: rgba(22,27,24,0.35);
+          --rule: rgba(22,27,24,0.10);
+          --rule-strong: rgba(22,27,24,0.18);
+          --green: #1d7254;
+          --green-deep: #14523d;
+          --green-wash: rgba(29,114,84,0.08);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+          background: var(--paper);
+          color: var(--ink);
+          font-family: var(--font-poppins), system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+        }
+        ::selection { background: var(--green); color: #fff; }
 
-        body { background: var(--cream); color: var(--text-dark); font-family: var(--font-poppins), system-ui, sans-serif; }
+        .wrap { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
 
-        /* ─── NAV ─── */
-        #main-nav {
+        /* Reveal */
+        [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+        [data-reveal][data-visible] { opacity: 1; transform: none; }
+        @media (prefers-reduced-motion: reduce) {
+          [data-reveal] { opacity: 1; transform: none; transition: none; }
+        }
+
+        /* ── Nav ── */
+        #ledger-nav {
           position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-          padding: 1.25rem 2rem;
+          background: transparent;
+          transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        #ledger-nav[data-scrolled] {
+          background: rgba(250,249,246,0.92);
+          backdrop-filter: blur(12px);
+          box-shadow: 0 1px 0 var(--rule);
+        }
+        .nav-inner {
           display: flex; align-items: center; justify-content: space-between;
-          transition: background 0.4s ease, box-shadow 0.4s ease, padding 0.3s ease;
+          height: 68px;
         }
-        #main-nav[data-scrolled] {
-          background: rgba(17, 17, 16, 0.96);
-          backdrop-filter: blur(16px);
-          box-shadow: 0 1px 0 rgba(255,255,255,0.06);
-          padding: 0.875rem 2rem;
+        .logo {
+          font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em;
+          color: var(--ink); text-decoration: none;
         }
-        .nav-logo { font-size: 1.4rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
-        .nav-logo span { color: var(--cream-pale); }
-        .nav-links { display: flex; gap: 2rem; align-items: center; }
-        .nav-links a:not(.nav-cta) { color: rgba(255,255,255,0.65); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .nav-links a:not(.nav-cta):hover { color: #fff; }
-        .nav-cta {
-          background: #ffffff;
-          color: #111110; border: none; border-radius: 8px;
-          padding: 0.5rem 1.5rem; font-size: 0.875rem; font-weight: 700;
-          cursor: pointer; text-decoration: none;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-          transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+        .logo b { color: var(--green); font-weight: 700; }
+        .nav-links { display: flex; align-items: center; gap: 1.75rem; }
+        .nav-links a:not(.btn) {
+          color: var(--ink-70); text-decoration: none;
+          font-size: 0.85rem; font-weight: 500;
+          transition: color 0.15s;
         }
-        .nav-cta:hover { background: var(--cream-pale); color: #111110; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+        .nav-links a:not(.btn):hover { color: var(--ink); }
+        @media (max-width: 720px) { .nav-links a:not(.btn) { display: none; } }
 
-        /* ─── HERO ─── */
-        .hero {
-          min-height: 100vh;
-          background: var(--charcoal);
-          display: flex; align-items: center;
-          position: relative; overflow: hidden;
-          padding: 7rem 2rem 4rem;
-        }
-        .hero-bg-grid {
-          position: absolute; inset: 0;
-          background-image:
-            linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-          background-size: 48px 48px;
-          animation: gridDrift 20s linear infinite;
-          will-change: transform;
-        }
-        @keyframes gridDrift {
-          0% { background-position: 0 0; }
-          100% { background-position: 48px 48px; }
-        }
-        .hero-glow {
-          position: absolute; top: -20%; left: -10%;
-          width: 700px; height: 700px;
-          background: radial-gradient(circle, rgba(250,247,242,0.04) 0%, transparent 70%);
-          animation: glowPulse 6s ease-in-out infinite alternate;
-          pointer-events: none; will-change: transform;
-        }
-        .hero-glow-2 {
-          position: absolute; bottom: -30%; right: -5%;
-          width: 600px; height: 600px;
-          background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%);
-          animation: glowPulse 8s ease-in-out infinite alternate-reverse;
-          pointer-events: none;
-        }
-        .px-orb {
-          position: absolute; border-radius: 50%;
-          pointer-events: none; will-change: transform;
-        }
-        @keyframes glowPulse {
-          from { opacity: 0.5; transform: scale(1); }
-          to { opacity: 1; transform: scale(1.15); }
-        }
-        .hero-inner {
-          max-width: 1280px; margin: 0 auto; width: 100%;
-          display: grid; grid-template-columns: 1fr 1fr; gap: 5rem; align-items: center;
-          position: relative; z-index: 2;
-        }
-        .hero-badge {
+        .btn {
           display: inline-flex; align-items: center; gap: 0.5rem;
-          background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 100px; padding: 0.375rem 1rem;
-          color: rgba(255,255,255,0.75); font-size: 0.8rem; font-weight: 600;
-          letter-spacing: 0.05em; text-transform: uppercase;
-          margin-bottom: 1.5rem;
-          animation: fadeSlideDown 0.8s ease both;
+          text-decoration: none; font-weight: 600; font-size: 0.875rem;
+          border-radius: 10px; padding: 0.65rem 1.35rem;
+          transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
         }
-        .hero-badge::before {
-          content: ''; display: block; width: 6px; height: 6px;
-          border-radius: 50%; background: var(--cream-pale);
-          animation: blink 2s ease-in-out infinite;
+        .btn-ink {
+          background: var(--ink); color: var(--paper);
+          box-shadow: 0 2px 10px rgba(22,27,24,0.18);
         }
-        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
+        .btn-ink:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(22,27,24,0.22); }
+        .btn-ghost {
+          color: var(--ink); border: 1px solid var(--rule-strong); background: transparent;
+        }
+        .btn-ghost:hover { background: var(--green-wash); border-color: var(--green); }
 
-        .hero-headline {
-          font-size: clamp(2.6rem, 5vw, 4rem);
-          font-weight: 800; line-height: 1.08; letter-spacing: -0.03em;
-          color: #ffffff;
-          animation: fadeSlideDown 0.9s 0.15s ease both;
+        /* ── Hero ── */
+        .hero {
+          position: relative;
+          padding: 10.5rem 0 5.5rem;
+          overflow: hidden;
         }
-        .hero-headline em { font-style: normal; color: var(--cream-pale); }
-        .hero-sub {
-          margin-top: 1.25rem; font-size: 1.1rem; line-height: 1.65;
-          color: rgba(255,255,255,0.52); font-weight: 400;
-          animation: fadeSlideDown 1s 0.3s ease both;
+        .hero-rules {
+          position: absolute; inset: 0; pointer-events: none;
+          background-image: linear-gradient(var(--rule) 1px, transparent 1px);
+          background-size: 100% 56px;
+          mask-image: linear-gradient(to bottom, transparent, black 12%, black 68%, transparent);
+          opacity: 0.5;
         }
-        .hero-actions {
-          display: flex; gap: 1rem; align-items: center; margin-top: 2.5rem; flex-wrap: wrap;
-          animation: fadeSlideDown 1s 0.45s ease both;
+        .hero-grid {
+          position: relative;
+          display: grid; grid-template-columns: 1.02fr 0.98fr;
+          gap: 3.5rem; align-items: center;
         }
-        .btn-primary {
-          background: var(--cream-pale);
-          color: var(--charcoal); border: none; border-radius: 10px;
-          padding: 0.875rem 2rem; font-size: 1rem; font-weight: 700;
-          cursor: pointer; text-decoration: none;
-          box-shadow: 0 0 32px rgba(243,239,230,0.15);
-          transition: all 0.25s ease;
-          position: relative; overflow: hidden;
-        }
-        .btn-primary::after {
-          content: ''; position: absolute; inset: 0;
-          background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 60%);
-          opacity: 0; transition: opacity 0.25s;
-        }
-        .btn-primary:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 6px 32px rgba(255,255,255,0.18); }
-        .btn-primary:hover::after { opacity: 1; }
-        .btn-secondary {
-          color: rgba(255,255,255,0.6); text-decoration: none;
-          font-size: 0.95rem; font-weight: 600;
-          display: flex; align-items: center; gap: 0.4rem;
-          transition: color 0.2s;
-        }
-        .btn-secondary:hover { color: #fff; }
-        .btn-secondary svg { transition: transform 0.2s; }
-        .btn-secondary:hover svg { transform: translateX(4px); }
+        @media (max-width: 920px) { .hero-grid { grid-template-columns: 1fr; gap: 3rem; } }
 
-        @keyframes fadeSlideDown {
-          from { opacity: 0; transform: translateY(-20px); }
-          to { opacity: 1; transform: translateY(0); }
+        .eyebrow {
+          display: inline-flex; align-items: center; gap: 0.6rem;
+          font-size: 0.72rem; font-weight: 600; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--green);
+          margin-bottom: 1.4rem;
+        }
+        .eyebrow::before { content: ''; width: 26px; height: 2px; background: var(--green); border-radius: 1px; }
+
+        h1.display {
+          font-size: clamp(2.3rem, 5vw, 3.6rem);
+          line-height: 1.08; letter-spacing: -0.035em; font-weight: 700;
+        }
+        h1.display em {
+          font-style: normal; color: var(--green);
+          text-decoration: underline;
+          text-decoration-thickness: 3px;
+          text-decoration-color: rgba(29,114,84,0.35);
+          text-underline-offset: 7px;
+        }
+        .hero-copy {
+          margin-top: 1.4rem; max-width: 33rem;
+          color: var(--ink-70); font-size: 1.02rem; line-height: 1.75;
+        }
+        .hero-ctas { display: flex; flex-wrap: wrap; gap: 0.85rem; margin-top: 2.1rem; }
+        .hero-notes {
+          display: flex; flex-wrap: wrap; gap: 1.5rem;
+          margin-top: 2.4rem; padding-top: 1.4rem;
+          border-top: 1px solid var(--rule);
+          color: var(--ink-50); font-size: 0.8rem; font-weight: 500;
+        }
+        .hero-notes span { display: inline-flex; align-items: center; gap: 0.45rem; }
+        .hero-notes span::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+
+        /* ── Hero widgets ── */
+        .board { position: relative; display: grid; gap: 1rem; }
+        .widget {
+          background: var(--card);
+          border: 1px solid var(--rule);
+          border-radius: 16px;
+          padding: 1.15rem 1.25rem;
+          box-shadow: 0 1px 2px rgba(22,27,24,0.04), 0 12px 32px -18px rgba(22,27,24,0.18);
+        }
+        .widget-title {
+          font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em;
+          text-transform: uppercase; color: var(--ink-50);
+          margin-bottom: 0.9rem;
+        }
+        .board-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 460px) { .board-row { grid-template-columns: 1fr; } }
+
+        .bars { display: grid; gap: 0.55rem; }
+        .bar-row { display: grid; grid-template-columns: 2.4rem 1fr 2.6rem; align-items: center; gap: 0.7rem; }
+        .bar-label { font-size: 0.72rem; font-weight: 600; color: var(--ink-70); }
+        .bar-track { height: 10px; background: rgba(22,27,24,0.05); border-radius: 5px; overflow: hidden; }
+        .bar-fill {
+          height: 100%; background: var(--green); border-radius: 0 4px 4px 0;
+          width: 0; transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        [data-visible] .bar-fill { width: var(--w); }
+        @media (prefers-reduced-motion: reduce) { .bar-fill { width: var(--w); transition: none; } }
+        .bar-val { font-size: 0.72rem; font-weight: 600; color: var(--ink-50); text-align: right; font-variant-numeric: tabular-nums; }
+
+        .stat-num {
+          font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
+          font-variant-numeric: tabular-nums;
+        }
+        .stat-num small { font-size: 1.1rem; color: var(--green); font-weight: 700; }
+        .stat-sub { margin-top: 0.35rem; color: var(--ink-50); font-size: 0.75rem; }
+        .spark { width: 100%; height: auto; margin-top: 0.7rem; display: block; }
+
+        .pipe { display: grid; gap: 0.5rem; }
+        .pipe-row {
+          display: flex; align-items: center; justify-content: space-between;
+          font-size: 0.78rem; font-weight: 500; color: var(--ink-70);
+          padding: 0.42rem 0.6rem; border-radius: 8px; background: rgba(22,27,24,0.028);
+        }
+        .pipe-row b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+        .pipe-row[data-hot] { background: var(--green-wash); }
+        .pipe-row[data-hot] b { color: var(--green-deep); }
+
+        /* ── Section scaffolding ── */
+        section.block { padding: 5.5rem 0; }
+        section.block + section.block { border-top: 1px solid var(--rule); }
+        .block-head { max-width: 40rem; margin-bottom: 3.2rem; }
+        .block-kicker {
+          font-size: 0.72rem; font-weight: 600; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--green); margin-bottom: 0.9rem;
+        }
+        h2.block-title {
+          font-size: clamp(1.6rem, 3.2vw, 2.3rem);
+          letter-spacing: -0.03em; line-height: 1.15; font-weight: 700;
+        }
+        .block-sub { margin-top: 0.9rem; color: var(--ink-70); line-height: 1.7; font-size: 0.95rem; }
+
+        /* ── Workflow ledger ── */
+        .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-top: 1px solid var(--rule-strong); }
+        @media (max-width: 920px) { .steps { grid-template-columns: 1fr; border-top: none; } }
+        .step { padding: 1.6rem 1.4rem 0 0; position: relative; }
+        @media (max-width: 920px) {
+          .step { border-top: 1px solid var(--rule-strong); padding: 1.4rem 0; }
+        }
+        .step::before {
+          content: ''; position: absolute; top: -1px; left: 0;
+          width: 34px; height: 2px; background: var(--green);
+        }
+        .step-num { font-size: 0.72rem; font-weight: 700; color: var(--green); letter-spacing: 0.1em; }
+        .step-title { margin-top: 0.55rem; font-weight: 600; font-size: 1.02rem; letter-spacing: -0.01em; }
+        .step-desc { margin-top: 0.5rem; color: var(--ink-70); font-size: 0.83rem; line-height: 1.65; }
+
+        /* ── Feature index ── */
+        .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 18px; overflow: hidden; }
+        @media (max-width: 920px) { .features { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 620px) { .features { grid-template-columns: 1fr; } }
+        .feature {
+          background: var(--card); padding: 1.8rem 1.6rem;
+          transition: background 0.2s ease;
+        }
+        .feature:hover { background: #f7faf8; }
+        .feature-num { font-size: 0.72rem; font-weight: 700; color: var(--ink-35); letter-spacing: 0.1em; }
+        .feature:hover .feature-num { color: var(--green); }
+        .feature-title { margin-top: 0.7rem; font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; }
+        .feature-desc { margin-top: 0.55rem; color: var(--ink-70); font-size: 0.83rem; line-height: 1.7; }
+
+        /* ── Matrix section ── */
+        .matrix-grid {
+          display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 3.5rem; align-items: center;
+        }
+        @media (max-width: 920px) { .matrix-grid { grid-template-columns: 1fr; gap: 2.5rem; } }
+        .heat { border-collapse: separate; border-spacing: 2px; width: 100%; }
+        .heat th {
+          font-size: 0.62rem; font-weight: 600; color: var(--ink-50);
+          padding: 0.25rem; text-align: center; letter-spacing: 0.04em;
+        }
+        .heat td {
+          border-radius: 5px; height: 30px; min-width: 30px;
+          text-align: center; font-size: 0.62rem; font-weight: 600;
+        }
+        .heat td[data-v="0"] { color: transparent; }
+        .heat td[data-v="1"] { color: var(--green-deep); }
+        .heat td[data-v="2"] { color: #fff; }
+        .heat td[data-v="3"] { color: #fff; }
+        .heat-legend {
+          display: flex; align-items: center; gap: 0.9rem;
+          margin-top: 0.9rem; font-size: 0.7rem; color: var(--ink-50); font-weight: 500;
+        }
+        .heat-legend i {
+          display: inline-flex; align-items: center; gap: 0.35rem; font-style: normal;
+        }
+        .heat-legend i::before {
+          content: ''; width: 12px; height: 12px; border-radius: 3px; background: var(--c);
+          border: 1px solid var(--rule);
         }
 
-        /* ─── MATRIX ─── */
-        .matrix-wrapper {
-          animation: fadeSlideUp 1s 0.5s ease both;
+        /* ── Team ── */
+        .team { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.4rem; }
+        @media (max-width: 920px) { .team { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 540px) { .team { grid-template-columns: 1fr; } }
+        .member {
+          border-top: 1px solid var(--rule-strong);
+          padding-top: 1.3rem;
           position: relative;
         }
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
+        .member::before {
+          content: ''; position: absolute; top: -1px; left: 0;
+          width: 34px; height: 2px; background: var(--green);
+          transition: width 0.25s ease;
         }
-        .matrix-label {
-          font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em;
-          text-transform: uppercase; color: rgba(255,255,255,0.28);
-          margin-bottom: 0.625rem;
-        }
-        .matrix-container {
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 16px;
-          padding: 1.25rem;
-          backdrop-filter: blur(10px);
-          box-shadow: 0 0 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
-        }
-        .matrix-header {
-          display: grid;
-          grid-template-columns: 2.5rem repeat(12, 1fr);
-          gap: 3px;
-          margin-bottom: 3px;
-        }
-        .matrix-header-cell {
-          text-align: center; font-size: 0.55rem; font-weight: 700;
-          color: rgba(255,255,255,0.3); letter-spacing: 0.02em;
-          padding: 0.25rem 0;
-        }
-        .matrix-row {
-          display: grid;
-          grid-template-columns: 2.5rem repeat(12, 1fr);
-          gap: 3px; margin-bottom: 3px;
-        }
-        .matrix-row-label {
-          display: flex; align-items: center; justify-content: flex-end;
-          font-size: 0.6rem; font-weight: 700;
-          color: rgba(255,255,255,0.35); padding-right: 0.375rem;
-        }
-        .matrix-cell {
-          aspect-ratio: 1; border-radius: 4px;
+        .member:hover::before { width: 100%; }
+        .member-avatar {
+          width: 52px; height: 52px; border-radius: 14px;
           display: flex; align-items: center; justify-content: center;
-          font-size: 0.5rem; font-weight: 800; color: rgba(255,255,255,0.9);
-          border: 1px solid rgba(255,255,255,0.05);
-          animation: cellReveal 0.5s ease both;
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
+          background: var(--green-wash); color: var(--green-deep);
+          font-weight: 700; font-size: 1.05rem; letter-spacing: -0.02em;
+          border: 1px solid var(--rule);
+          margin-bottom: 0.9rem;
         }
-        .matrix-cell:hover { transform: scale(1.15); z-index: 2; }
-        @keyframes cellReveal {
-          from { opacity: 0; transform: scale(0.4); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .matrix-legend {
-          display: flex; gap: 1rem; margin-top: 0.875rem; justify-content: flex-end;
-        }
-        .legend-item {
-          display: flex; align-items: center; gap: 0.3rem;
-          font-size: 0.6rem; color: rgba(255,255,255,0.32); font-weight: 500;
-        }
-        .legend-dot {
-          width: 10px; height: 10px; border-radius: 2px;
-        }
+        .member-name { font-weight: 600; font-size: 0.98rem; letter-spacing: -0.01em; }
+        .member-role { margin-top: 0.15rem; color: var(--green-deep); font-size: 0.76rem; font-weight: 600; }
+        .member-note { margin-top: 0.5rem; color: var(--ink-70); font-size: 0.8rem; line-height: 1.65; }
 
-        /* ─── STATS ─── */
-        .stats-section {
-          background: var(--charcoal-mid);
-          padding: 3.5rem 2rem;
-          border-top: 1px solid rgba(255,255,255,0.05);
-          border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .stats-inner {
-          max-width: 1000px; margin: 0 auto;
-          display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; text-align: center;
-        }
-        .stat-item {}
-        .stat-num {
-          font-size: 2.75rem; font-weight: 800; color: #fff;
-          letter-spacing: -0.03em; line-height: 1;
-        }
-        .stat-suffix { color: rgba(250,247,242,0.6); }
-        .stat-label { font-size: 0.85rem; color: rgba(255,255,255,0.4); margin-top: 0.375rem; font-weight: 500; }
-
-        /* ─── SECTION COMMONS ─── */
-        .section-tag {
-          display: inline-block;
-          background: var(--cream-pale); color: var(--charcoal-mid);
-          border-radius: 100px; padding: 0.3rem 0.875rem;
-          font-size: 0.75rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
-          margin-bottom: 1rem;
-        }
-        .section-heading {
-          font-size: clamp(1.8rem, 3.5vw, 2.6rem);
-          font-weight: 800; letter-spacing: -0.025em; line-height: 1.15;
-          color: var(--text-dark);
-        }
-        .section-heading em { font-style: normal; color: var(--charcoal-mid); }
-        .section-sub {
-          font-size: 1rem; color: var(--text-muted); max-width: 520px; margin: 1rem auto 0; line-height: 1.65;
-        }
-
-        /* ─── FEATURES ─── */
-        .features-section {
-          padding: 6rem 2rem;
-          background: var(--cream);
-        }
-        .features-header { text-align: center; margin-bottom: 4rem; }
-        .features-grid {
-          max-width: 1120px; margin: 0 auto;
-          display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
-        }
-        .feature-card {
-          background: var(--cream-card);
-          border: 1px solid rgba(24,24,26,0.08);
-          border-radius: 16px; padding: 2rem;
-          cursor: default;
-          opacity: 0; transform: translateY(24px);
-          transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.3s ease, border-color 0.3s ease;
-        }
-        .feature-card[data-visible="true"] { opacity: 1; transform: translateY(0); }
-        .feature-card:hover {
-          box-shadow: 0 8px 40px rgba(24,24,26,0.1);
-          border-color: rgba(24,24,26,0.2);
-          transform: translateY(-4px);
-        }
-        .feature-card:hover .feature-icon { background: var(--charcoal); color: #fff; }
-        .feature-icon {
-          width: 48px; height: 48px; border-radius: 12px;
-          background: var(--cream-pale); color: var(--charcoal-mid);
-          display: flex; align-items: center; justify-content: center;
-          margin-bottom: 1.25rem;
-          transition: background 0.25s, color 0.25s;
-        }
-        .feature-title { font-size: 1rem; font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; }
-        .feature-desc { font-size: 0.875rem; color: var(--text-muted); line-height: 1.65; }
-
-        /* ─── HOW IT WORKS ─── */
-        .workflow-section {
-          padding: 6rem 2rem;
-          background: var(--charcoal);
+        /* ── CTA band ── */
+        .cta-band {
+          margin: 5.5rem 0;
+          background: var(--green-deep);
+          border-radius: 24px;
+          padding: 4rem 3rem;
+          text-align: center;
           position: relative; overflow: hidden;
         }
-        .workflow-bg {
-          position: absolute; inset: 0;
-          background-image:
-            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-          background-size: 64px 64px;
-        }
-        .workflow-header { text-align: center; margin-bottom: 4rem; position: relative; z-index: 1; }
-        .workflow-header .section-tag { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.65); }
-        .workflow-header .section-heading { color: #fff; }
-        .workflow-header .section-sub { color: rgba(255,255,255,0.42); }
-
-        .workflow-steps {
-          max-width: 1100px; margin: 0 auto;
-          display: grid; grid-template-columns: repeat(5, 1fr);
-          gap: 0; position: relative; z-index: 1;
-        }
-        .workflow-connector {
-          position: absolute; top: 2.25rem; left: 10%; right: 10%;
-          height: 1px; background: rgba(255,255,255,0.08);
-          z-index: 0;
-        }
-        .workflow-connector-fill {
-          height: 100%; width: 0%;
-          background: linear-gradient(90deg, #60A5FA, #A78BFA, #34D399, #FB923C, #F472B6);
-          transition: width 1.5s ease;
-        }
-        .workflow-steps-container { position: relative; }
-        .workflow-steps-container[data-visible="true"] .workflow-connector-fill { width: 100%; }
-        .step {
-          display: flex; flex-direction: column; align-items: center; text-align: center;
-          padding: 0 1rem;
-          opacity: 0; transform: translateY(20px);
-          transition: opacity 0.5s ease, transform 0.5s ease;
-        }
-        .step[data-visible="true"] { opacity: 1; transform: translateY(0); }
-        .step-num-wrap {
-          width: 4.5rem; height: 4.5rem; border-radius: 50%;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.15);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 1.1rem; font-weight: 800; color: rgba(255,255,255,0.7);
-          margin-bottom: 1.25rem; position: relative; z-index: 1;
-          transition: filter 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
-        }
-        .step:hover .step-num-wrap {
-          filter: brightness(1.2);
-          box-shadow: 0 0 28px var(--step-glow, rgba(255,255,255,0.1));
-          transform: scale(1.08);
-        }
-        .step-title { font-size: 0.95rem; font-weight: 700; color: rgba(255,255,255,0.9); margin-bottom: 0.5rem; }
-        .step-desc { font-size: 0.78rem; color: rgba(255,255,255,0.38); line-height: 1.55; }
-
-        /* ─── MODULES ─── */
-        .modules-section {
-          padding: 6rem 2rem;
-          background: var(--cream-pale);
-        }
-        .modules-header { text-align: center; margin-bottom: 3.5rem; }
-        .modules-grid {
-          max-width: 1120px; margin: 0 auto;
-          display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem;
-        }
-        .module-card {
-          background: var(--cream-card);
-          border: 1px solid rgba(24,24,26,0.08);
-          border-radius: 12px; padding: 1.25rem 1rem;
-          text-align: center;
-          cursor: default;
-          opacity: 0; transform: scale(0.92);
-          transition: opacity 0.4s ease, transform 0.4s ease, box-shadow 0.3s ease, border-color 0.3s ease;
-        }
-        .module-card[data-visible="true"] { opacity: 1; transform: scale(1); }
-        .module-card:hover {
-          border-color: rgba(24,24,26,0.25);
-          box-shadow: 0 4px 24px rgba(24,24,26,0.08);
-          transform: translateY(-3px) scale(1);
-        }
-        .module-emoji { font-size: 1.5rem; margin-bottom: 0.5rem; display: block; }
-        .module-name { font-size: 0.775rem; font-weight: 600; color: var(--text-dark); line-height: 1.4; }
-
-        /* ─── CTA ─── */
-        .cta-section {
-          padding: 7rem 2rem;
-          background: linear-gradient(135deg, #111110 0%, #1C1C1A 50%, #111110 100%);
-          text-align: center; position: relative; overflow: hidden;
-        }
-        .cta-glow {
-          position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-          width: 600px; height: 300px;
-          background: radial-gradient(ellipse, rgba(255,255,255,0.04) 0%, transparent 70%);
+        .cta-band::before {
+          content: ''; position: absolute; inset: 0;
+          background-image: linear-gradient(rgba(250,249,246,0.06) 1px, transparent 1px);
+          background-size: 100% 40px;
           pointer-events: none;
         }
-        .cta-heading {
-          font-size: clamp(2rem, 4vw, 3rem);
-          font-weight: 800; color: #fff; letter-spacing: -0.025em;
-          position: relative; z-index: 1; margin-bottom: 1rem;
+        .cta-band h2 {
+          position: relative;
+          color: #fdfdfb; font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+          letter-spacing: -0.03em; font-weight: 700; line-height: 1.15;
         }
-        .cta-heading em { font-style: normal; color: var(--cream-pale); }
-        .cta-sub { font-size: 1.05rem; color: rgba(255,255,255,0.42); position: relative; z-index: 1; margin-bottom: 2.5rem; }
-        .cta-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; position: relative; z-index: 1; }
-        .btn-outline {
-          border: 1px solid rgba(255,255,255,0.18); border-radius: 10px;
-          padding: 0.875rem 2rem; font-size: 1rem; font-weight: 600;
-          color: rgba(255,255,255,0.65); text-decoration: none;
-          transition: all 0.25s ease;
+        .cta-band p {
+          position: relative;
+          color: rgba(253,253,251,0.75); margin: 1rem auto 0; max-width: 34rem;
+          font-size: 0.95rem; line-height: 1.7;
         }
-        .btn-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; background: rgba(255,255,255,0.04); }
+        .cta-band .btn {
+          position: relative; margin-top: 2rem;
+          background: #fdfdfb; color: var(--green-deep);
+          box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+        }
+        .cta-band .btn:hover { transform: translateY(-1px); }
 
-        /* ─── FOOTER ─── */
-        .footer {
-          background: #0C0C0B;
-          padding: 3rem 2rem;
-          display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;
-          border-top: 1px solid rgba(255,255,255,0.06);
+        /* ── Footer ── */
+        footer {
+          border-top: 1px solid var(--rule);
+          padding: 2.2rem 0 2.6rem;
+          display: flex; align-items: center; justify-content: space-between;
+          flex-wrap: wrap; gap: 1rem;
+          color: var(--ink-50); font-size: 0.8rem;
         }
-        .footer-brand { font-size: 1.1rem; font-weight: 700; color: #fff; }
-        .footer-brand span { color: rgba(243,239,230,0.6); }
-        .footer-copy { font-size: 0.8rem; color: rgba(255,255,255,0.25); }
-        .footer-links { display: flex; gap: 1.5rem; }
-        .footer-links a { font-size: 0.8rem; color: rgba(255,255,255,0.35); text-decoration: none; transition: color 0.2s; }
-        .footer-links a:hover { color: rgba(255,255,255,0.65); }
-
-        /* ─── SCROLL REVEAL DELAYS ─── */
-        .feature-card:nth-child(1) { transition-delay: 0.05s; }
-        .feature-card:nth-child(2) { transition-delay: 0.12s; }
-        .feature-card:nth-child(3) { transition-delay: 0.19s; }
-        .feature-card:nth-child(4) { transition-delay: 0.26s; }
-        .feature-card:nth-child(5) { transition-delay: 0.33s; }
-        .feature-card:nth-child(6) { transition-delay: 0.40s; }
-
-        .module-card:nth-child(1)  { transition-delay: 0.02s; }
-        .module-card:nth-child(2)  { transition-delay: 0.05s; }
-        .module-card:nth-child(3)  { transition-delay: 0.08s; }
-        .module-card:nth-child(4)  { transition-delay: 0.11s; }
-        .module-card:nth-child(5)  { transition-delay: 0.14s; }
-        .module-card:nth-child(6)  { transition-delay: 0.17s; }
-        .module-card:nth-child(7)  { transition-delay: 0.20s; }
-        .module-card:nth-child(8)  { transition-delay: 0.23s; }
-        .module-card:nth-child(9)  { transition-delay: 0.26s; }
-        .module-card:nth-child(10) { transition-delay: 0.29s; }
-        .module-card:nth-child(11) { transition-delay: 0.32s; }
-        .module-card:nth-child(12) { transition-delay: 0.35s; }
-        .module-card:nth-child(13) { transition-delay: 0.38s; }
-
-        /* ─── RESPONSIVE ─── */
-        @media (max-width: 1024px) {
-          .hero-inner { grid-template-columns: 1fr; gap: 3rem; }
-          .matrix-wrapper { max-width: 480px; margin: 0 auto; }
-          .workflow-steps { grid-template-columns: 1fr 1fr; gap: 2rem; }
-          .workflow-connector { display: none; }
-          .features-grid { grid-template-columns: repeat(2, 1fr); }
-          .stats-inner { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 640px) {
-          .nav-links { display: none; }
-          .features-grid { grid-template-columns: 1fr; }
-          .workflow-steps { grid-template-columns: 1fr; }
-          .stats-inner { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          *, .matrix-cell, .feature-card, .step, .module-card { animation: none !important; transition: none !important; }
-          [data-animate], .feature-card, .module-card { opacity: 1 !important; transform: none !important; }
-        }
+        footer a { color: var(--ink-70); text-decoration: none; font-weight: 500; }
+        footer a:hover { color: var(--ink); }
       `}</style>
 
-      {/* ─── NAV ─── */}
-      <nav id="main-nav">
-        <div className="nav-logo">Obe<span>lytics</span></div>
-        <div className="nav-links">
-          <a href="#features">Features</a>
-          <a href="#workflow">How It Works</a>
-          <a href="#modules">Modules</a>
-          <Link href="/result">Check Result</Link>
-          <Link href="/login" className="nav-cta">Sign In</Link>
+      {/* ── Nav ── */}
+      <nav id="ledger-nav">
+        <div className="wrap nav-inner">
+          <Link href="/" className="logo">Obelytics<b>.</b></Link>
+          <div className="nav-links">
+            <a href="#workflow">Workflow</a>
+            <a href="#platform">Platform</a>
+            <a href="#matrix">CO–PO Matrix</a>
+            <a href="#team">Team</a>
+            <Link href="/result">Check result</Link>
+            <Link href="/login" className="btn btn-ink">Sign in</Link>
+          </div>
         </div>
       </nav>
 
-      {/* ─── HERO ─── */}
-      <section className="hero">
-        <div id="px-grid" className="hero-bg-grid" />
-        <div id="px-glow1" className="hero-glow" />
-        <div id="px-glow2" className="hero-glow-2" />
-        {/* Floating parallax orbs */}
-        <div id="px-orb1" className="px-orb" style={{ width: 260, height: 260, top: '15%', left: '38%', background: 'radial-gradient(circle, rgba(96,165,250,0.07) 0%, transparent 70%)' }} />
-        <div id="px-orb2" className="px-orb" style={{ width: 180, height: 180, top: '60%', left: '20%', background: 'radial-gradient(circle, rgba(167,139,250,0.08) 0%, transparent 70%)' }} />
-        <div id="px-orb3" className="px-orb" style={{ width: 220, height: 220, top: '25%', right: '8%', background: 'radial-gradient(circle, rgba(244,114,182,0.06) 0%, transparent 70%)' }} />
-        <div className="hero-inner">
-          {/* Left: Copy */}
-          <div id="px-copy">
-            <div className="hero-badge">OBE Accreditation Platform</div>
-            <h1 className="hero-headline">
-              Turn outcomes into<br />
-              <em>institutional excellence.</em>
+      {/* ── Hero ── */}
+      <header className="hero">
+        <div className="hero-rules" aria-hidden="true" />
+        <div className="wrap hero-grid">
+          <div data-reveal>
+            <p className="eyebrow">Outcome-based education, operationalized</p>
+            <h1 className="display">
+              Accreditation evidence, <em>computed</em> — not compiled.
             </h1>
-            <p className="hero-sub">
-              Obelytics automates the full OBE lifecycle — from CO–PO mapping and assessment
-              to attainment calculation and accreditation reporting — so your faculty focuses
-              on teaching, not spreadsheets.
+            <p className="hero-copy">
+              Obelytics runs your entire OBE workflow — outcomes, mappings, marks,
+              approvals, and attainment — in one system of record. When the
+              accreditation visit comes, the evidence is already there.
             </p>
-            <div className="hero-actions">
-              <Link href="/login" className="btn-primary">Get Started Free</Link>
-              <Link href="/result" className="btn-secondary">
-                Check your result
-                <svg viewBox="0 0 16 16" fill="none" width="14" height="14" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </Link>
+            <div className="hero-ctas">
+              <Link href="/login" className="btn btn-ink">Open the dashboard</Link>
+              <Link href="/result" className="btn btn-ghost">Check your result</Link>
+            </div>
+            <div className="hero-notes">
+              <span>Washington Accord aligned</span>
+              <span>BAETE-ready reports</span>
+              <span>Full audit trail</span>
             </div>
           </div>
 
-          {/* Right: CO-PO Matrix */}
-          <div id="px-matrix" className="matrix-wrapper">
-            <p className="matrix-label">Live CO–PO Mapping Matrix</p>
-            <div className="matrix-container">
-              <div className="matrix-header">
-                <div />
-                {POS.map((po) => (
-                  <div key={po} className="matrix-header-cell">{po}</div>
-                ))}
-              </div>
-              {MAPPING.map((row, ri) => (
-                <div key={ri} className="matrix-row">
-                  <div className="matrix-row-label">{COS[ri]}</div>
-                  {row.map((val, ci) => (
-                    <MatrixCell key={ci} value={val} delay={(ri * 12 + ci) * 40 + 600} />
-                  ))}
-                </div>
-              ))}
-              <div className="matrix-legend">
-                {[
-                  { label: 'No link', color: 'rgba(255,255,255,0.06)' },
-                  { label: 'Low', color: 'rgba(37,168,118,0.35)' },
-                  { label: 'Medium', color: 'rgba(37,168,118,0.65)' },
-                  { label: 'High', color: 'rgba(37,168,118,1)' },
-                ].map(({ label, color }) => (
-                  <div key={label} className="legend-item">
-                    <div className="legend-dot" style={{ background: color, border: '1px solid rgba(37,168,118,0.2)' }} />
-                    {label}
+          <div className="board" data-reveal aria-hidden="true">
+            <div className="widget">
+              <p className="widget-title">PO attainment — Spring 2026</p>
+              <div className="bars">
+                {PO_BARS.map((b) => (
+                  <div className="bar-row" key={b.label}>
+                    <span className="bar-label">{b.label}</span>
+                    <span className="bar-track">
+                      <span className="bar-fill" style={{ ['--w' as never]: `${b.pct}%` }} />
+                    </span>
+                    <span className="bar-val">{b.pct}%</span>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── STATS ─── */}
-      <section className="stats-section" id="stats-section">
-        <div className="stats-inner">
-          {[
-            { num: 13, suffix: '+', label: 'Integrated Modules' },
-            { num: 5, suffix: '', label: 'Role Levels' },
-            { num: 12, suffix: '', label: 'Program Outcomes Supported' },
-          ].map(({ num, suffix, label }) => (
-            <div key={label} className="stat-item">
-              <div className="stat-num">
-                <span data-counter={num}>0</span>
-                <span className="stat-suffix">{suffix}</span>
+            <div className="board-row">
+              <div className="widget">
+                <p className="widget-title">Avg CO attainment</p>
+                <p className="stat-num">92.4<small>%</small></p>
+                <p className="stat-sub">across 12 terms</p>
+                <Sparkline />
               </div>
-              <div className="stat-label">{label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── FEATURES ─── */}
-      <section className="features-section" id="features">
-        <div className="features-header">
-          <div className="section-tag">Features</div>
-          <h2 className="section-heading">Everything accreditation requires,<br /><em>nothing it doesn&apos;t.</em></h2>
-          <p className="section-sub">
-            Built specifically for outcome-based education. Every feature maps to a real
-            accreditation need — no generic EdTech bloat.
-          </p>
-        </div>
-        <div className="features-grid">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="feature-card" data-animate>
-              <div className="feature-icon">{f.icon}</div>
-              <div className="feature-title">{f.title}</div>
-              <div className="feature-desc">{f.desc}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── HOW IT WORKS ─── */}
-      <section className="workflow-section" id="workflow">
-        <div className="workflow-bg" />
-        <div className="workflow-header" data-animate>
-          <div className="section-tag">Process</div>
-          <h2 className="section-heading" style={{ color: '#fff' }}>Five steps from setup<br /><em style={{ color: 'var(--cream-pale)' }}>to accreditation.</em></h2>
-          <p className="section-sub" style={{ color: 'rgba(255,255,255,0.45)', margin: '1rem auto 0' }}>
-            A clear path from initial configuration to board-ready reports.
-          </p>
-        </div>
-        <div className="workflow-steps-container" data-animate>
-          <div className="workflow-connector">
-            <div className="workflow-connector-fill" />
-          </div>
-          <div className="workflow-steps">
-            {STEPS.map((s, i) => (
-              <div key={s.num} className="step" data-animate style={{ transitionDelay: `${i * 0.12}s`, ['--step-glow' as string]: s.glow }}>
-                <div className="step-num-wrap" style={{
-                  border: `1px solid ${s.color}44`,
-                  background: `${s.color}12`,
-                  color: s.color,
-                }}>
-                  {s.num}
+              <div className="widget">
+                <p className="widget-title">Result pipeline</p>
+                <div className="pipe">
+                  {PIPELINE.map((p) => (
+                    <div className="pipe-row" key={p.stage} data-hot={p.stage === 'Submitted' ? '' : undefined}>
+                      <span>{p.stage}</span>
+                      <b>{p.n}</b>
+                    </div>
+                  ))}
                 </div>
-                <div className="step-title" style={{ color: s.color }}>{s.title}</div>
-                <div className="step-desc">{s.desc}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Workflow ── */}
+      <section className="block" id="workflow">
+        <div className="wrap">
+          <div className="block-head" data-reveal>
+            <p className="block-kicker">The workflow</p>
+            <h2 className="block-title">Five steps, one unbroken chain of custody.</h2>
+            <p className="block-sub">
+              From the first outcome statement to the final published result, every
+              artifact stays connected to the one before it.
+            </p>
+          </div>
+          <div className="steps" data-reveal>
+            {WORKFLOW.map((s) => (
+              <div className="step" key={s.num}>
+                <p className="step-num">{s.num}</p>
+                <p className="step-title">{s.title}</p>
+                <p className="step-desc">{s.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ─── MODULES ─── */}
-      <section className="modules-section" id="modules">
-        <div className="modules-header">
-          <div className="section-tag">Platform</div>
-          <h2 className="section-heading">13 modules. <em>One platform.</em></h2>
-          <p className="section-sub">
-            Every component of the OBE lifecycle in a unified, role-aware workspace.
-          </p>
+      {/* ── Platform ── */}
+      <section className="block" id="platform">
+        <div className="wrap">
+          <div className="block-head" data-reveal>
+            <p className="block-kicker">The platform</p>
+            <h2 className="block-title">Everything the spreadsheet was pretending to do.</h2>
+          </div>
+          <div className="features" data-reveal>
+            {FEATURES.map((f) => (
+              <div className="feature" key={f.num}>
+                <p className="feature-num">{f.num}</p>
+                <p className="feature-title">{f.title}</p>
+                <p className="feature-desc">{f.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="modules-grid">
-          {MODULES.map((m) => (
-            <div key={m.name} className="module-card" data-animate>
-              <span className="module-emoji">{m.icon}</span>
-              <div className="module-name">{m.name}</div>
+      </section>
+
+      {/* ── Matrix ── */}
+      <section className="block" id="matrix">
+        <div className="wrap matrix-grid">
+          <div data-reveal>
+            <p className="block-kicker">The signature artifact</p>
+            <h2 className="block-title">The CO–PO matrix, as a living document.</h2>
+            <p className="block-sub">
+              Mapping intensity is recorded on a 0–3 scale, weighted into every
+              attainment calculation, and versioned with the curriculum. Change a
+              mapping and the analytics follow — the old version stays on file.
+            </p>
+          </div>
+          <div data-reveal>
+            <table className="heat" role="img" aria-label="Sample CO to PO mapping matrix with intensity from 0 to 3">
+              <thead>
+                <tr>
+                  <th aria-hidden="true" />
+                  {HEAT_POS.map((po) => <th key={po}>{po}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {HEAT.map((row, r) => (
+                  <tr key={HEAT_COS[r]}>
+                    <th scope="row">{HEAT_COS[r]}</th>
+                    {row.map((v, c) => (
+                      <td key={c} data-v={v} style={{ background: HEAT_FILL[v] }}>
+                        {v || ''}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="heat-legend">
+              <span>Mapping intensity</span>
+              <i style={{ ['--c' as never]: HEAT_FILL[0] }}>0</i>
+              <i style={{ ['--c' as never]: HEAT_FILL[1] }}>1</i>
+              <i style={{ ['--c' as never]: HEAT_FILL[2] }}>2</i>
+              <i style={{ ['--c' as never]: HEAT_FILL[3] }}>3</i>
             </div>
-          ))}
+          </div>
         </div>
       </section>
 
-      {/* ─── CTA ─── */}
-      <section className="cta-section">
-        <div className="cta-glow" />
-        <h2 className="cta-heading" data-animate>
-          Ready to modernize<br /><em>your OBE process?</em>
-        </h2>
-        <p className="cta-sub" data-animate>
-          Join universities that have moved from spreadsheet chaos to structured accreditation confidence.
-        </p>
-        <div className="cta-actions" data-animate>
-          <Link href="/login" className="btn-primary">Start for Free</Link>
-          <a href="mailto:asteriskshq@gmail.com" className="btn-outline">Request a Demo</a>
+      {/* ── Team ── */}
+      <section className="block" id="team">
+        <div className="wrap">
+          <div className="block-head" data-reveal>
+            <p className="block-kicker">The people</p>
+            <h2 className="block-title">Built close to the faculty room.</h2>
+            <p className="block-sub">
+              Obelytics is built by people who have sat through the accreditation
+              audits, the mapping workshops, and the result-submission deadlines.
+            </p>
+          </div>
+          <div className="team" data-reveal>
+            {TEAM.map((m, i) => (
+              <div className="member" key={i}>
+                <div className="member-avatar" aria-hidden="true">
+                  {m.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+                </div>
+                <p className="member-name">{m.name}</p>
+                <p className="member-role">{m.role}</p>
+                <p className="member-note">{m.note}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ─── FOOTER ─── */}
-      <footer className="footer">
-        <div className="footer-brand">Obe<span>lytics</span></div>
-        <div className="footer-copy">© {new Date().getFullYear()} Obelytics. OBE Accreditation Platform.</div>
-        <div className="footer-links">
-          <Link href="/login">Sign In</Link>
-          <a href="mailto:asteriskshq@gmail.com">Contact</a>
+      {/* ── CTA ── */}
+      <div className="wrap">
+        <div className="cta-band" data-reveal>
+          <h2>The next accreditation cycle starts now.</h2>
+          <p>
+            Put your program&apos;s outcomes, assessments, and approvals in one place —
+            and let the evidence write itself.
+          </p>
+          <Link href="/login" className="btn">Open the dashboard</Link>
         </div>
-      </footer>
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="wrap">
+        <footer>
+          <span>© {new Date().getFullYear()} Obelytics — Outcome-Based Education Analytics</span>
+          <span style={{ display: 'flex', gap: '1.5rem' }}>
+            <a href="#workflow">Workflow</a>
+            <a href="#platform">Platform</a>
+            <Link href="/result">Check result</Link>
+            <Link href="/login">Sign in</Link>
+          </span>
+        </footer>
+      </div>
     </>
   )
 }
