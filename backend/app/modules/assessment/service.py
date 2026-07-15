@@ -2558,6 +2558,17 @@ class CourseEndReportService:
             .join(AcademicTerm, SectionOffering.academic_term_id == AcademicTerm.id)
             .where(CourseEndReport.organization_id == org_id)
             .where(CourseEndReport.status == "SUBMITTED")
+            # End reports have no approved state of their own — they're reviewed
+            # as part of the section-result workflow. Once the section's result
+            # is PUBLISHED the review is complete, so drop it from the pending list.
+            .where(
+                ~select(ResultPublication.id)
+                .where(
+                    ResultPublication.section_offering_id == CourseEndReport.section_offering_id,
+                    ResultPublication.status == "PUBLISHED",
+                )
+                .exists()
+            )
             .order_by(CourseEndReport.submitted_at.desc())
         )
         rows = result.all()

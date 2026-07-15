@@ -23,23 +23,23 @@ _inbox_read = require_permission("approval.inbox.read")
 
 @router.get("/inbox", response_model=InboxResponse)
 async def get_inbox(
-    _: Annotated[PermissionManifestResponse, Depends(_inbox_read)],
+    manifest: Annotated[PermissionManifestResponse, Depends(_inbox_read)],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ApprovalInboxService(db)
-    data = await svc.get_inbox(current_user.organization_id)
+    data = await svc.get_inbox(current_user.organization_id, manifest)
     return InboxResponse(**data)
 
 
 @router.get("/inbox/counts", response_model=InboxCountsResponse)
 async def get_inbox_counts(
-    _: Annotated[PermissionManifestResponse, Depends(_inbox_read)],
+    manifest: Annotated[PermissionManifestResponse, Depends(_inbox_read)],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = ApprovalInboxService(db)
-    data = await svc.get_counts(current_user.organization_id)
+    data = await svc.get_counts(current_user.organization_id, manifest)
     return InboxCountsResponse(**data)
 
 

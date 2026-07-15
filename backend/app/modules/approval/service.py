@@ -9,6 +9,7 @@ from app.modules.approval.repository import ReviewCommentRepository
 from app.modules.approval.schemas import InboxItem, VALID_ENTITY_TYPES
 from app.modules.assessment.models import ResultPublication
 from app.modules.curriculum.models import AcademicTerm, Batch, Course, Section, SectionOffering
+from app.modules.iam.schemas import PermissionManifestResponse
 from app.modules.obe.models import COPOMappingSet, CourseOutcome
 
 
@@ -51,11 +52,31 @@ class ApprovalInboxService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_inbox(self, org_id: UUID) -> dict:
+    @staticmethod
+    def _actionable_rp_statuses(manifest: PermissionManifestResponse | None) -> list[str]:
+        """
+        Result-publication statuses the viewer can still act on:
+        SUBMITTED awaits a Module Leader, ML_APPROVED awaits a Program
+        Coordinator. Showing a section the viewer has already approved (or
+        can't approve yet) just clutters their inbox.
+        """
+        if manifest is None or manifest.is_super_admin:
+            return ["SUBMITTED", "ML_APPROVED"]
+        statuses = []
+        if "result.approve.ml" in manifest.permissions:
+            statuses.append("SUBMITTED")
+        if "result.approve.pc" in manifest.permissions or "result.publish" in manifest.permissions:
+            statuses.append("ML_APPROVED")
+        # View-only inbox access (no approve permission): show everything pending
+        return statuses or ["SUBMITTED", "ML_APPROVED"]
+
+    async def get_inbox(
+        self, org_id: UUID, manifest: PermissionManifestResponse | None = None
+    ) -> dict:
         """
         Queries across schemas to find pending items.
 
-        pending_result_publications: status IN ('SUBMITTED', 'ML_APPROVED')
+        pending_result_publications: statuses awaiting the viewer's own action
         pending_course_outcomes: status = 'SUBMITTED'
         pending_co_po_mapping_sets: status = 'DRAFT' (not yet published)
 
@@ -79,7 +100,7 @@ class ApprovalInboxService:
             .where(
                 and_(
                     ResultPublication.organization_id == org_id,
-                    ResultPublication.status.in_(["SUBMITTED", "ML_APPROVED"]),
+                    ResultPublication.status.in_(self._actionable_rp_statuses(manifest)),
                 )
             )
         )
@@ -147,9 +168,11 @@ class ApprovalInboxService:
             "total_count": len(rp_items) + len(co_items) + len(ms_items),
         }
 
-    async def get_counts(self, org_id: UUID) -> dict:
+    async def get_counts(
+        self, org_id: UUID, manifest: PermissionManifestResponse | None = None
+    ) -> dict:
         """Returns counts for each category."""
-        inbox = await self.get_inbox(org_id)
+        inbox = await self.get_inbox(org_id, manifest)
         return {
             "result_publications": len(inbox["pending_result_publications"]),
             "course_outcomes": len(inbox["pending_course_outcomes"]),
