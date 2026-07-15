@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.org.exceptions import (
     DepartmentArchivedError,
+    DepartmentHasDependentDataError,
     DepartmentNotFoundError,
     DepartmentShortNameConflictError,
     OrgNotFoundError,
@@ -44,6 +45,7 @@ class OrgService:
 
 class DepartmentService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = DepartmentRepository(session)
 
     async def list_active(self, organization_id: UUID) -> list[Department]:
@@ -92,6 +94,41 @@ class DepartmentService:
         dept.status = "ARCHIVED"
         dept.archived_at = datetime.now(timezone.utc)
         return await self._repo.update(dept, {})
+
+    async def delete(self, dept_id: UUID, organization_id: UUID) -> None:
+        from sqlalchemy import delete as sa_delete, func, select
+
+        from app.modules.iam.models import User
+        from app.modules.org.models import DepartmentHeadHistory
+
+        dept = await self._repo.get_by_id(dept_id, organization_id)
+        if dept is None:
+            raise DepartmentNotFoundError()
+
+        # Anything built on top of the department blocks deletion — the user
+        # has to remove or reassign it first (or archive instead).
+        blockers: list[str] = []
+        programs_count = await self._session.scalar(
+            select(func.count()).select_from(Program).where(Program.department_id == dept_id)
+        )
+        if programs_count:
+            blockers.append(f"{programs_count} programs")
+        users_count = await self._session.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(User.department_id == dept_id, User.status != "DELETED")
+        )
+        if users_count:
+            blockers.append(f"{users_count} users")
+        if blockers:
+            raise DepartmentHasDependentDataError(blockers)
+
+        # Head history only describes this department — remove it along with it.
+        await self._session.execute(
+            sa_delete(DepartmentHeadHistory).where(DepartmentHeadHistory.department_id == dept_id)
+        )
+        await self._session.delete(dept)
+        await self._session.commit()
 
     async def assign_head(self, dept_id: UUID, user_id: UUID, organization_id: UUID) -> Department:
         dept = await self._repo.get_by_id(dept_id, organization_id)

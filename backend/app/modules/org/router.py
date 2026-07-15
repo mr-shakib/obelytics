@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_any_permission, require_permission
+from app.core.dependencies import (
+    get_current_user,
+    require_any_permission,
+    require_permission,
+    require_super_admin,
+)
 from app.core.storage import delete_object, presigned_get_url, put_object
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
@@ -308,6 +313,19 @@ async def archive_department(
 ):
     svc = DepartmentService(db)
     return await svc.archive(dept_id, current_user.organization_id)
+
+
+@router.delete("/departments/{dept_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_department(
+    dept_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Permanently deletes a department. Super Admin only. Blocked if the
+    department still has programs or users — archive it instead in that case."""
+    svc = DepartmentService(db)
+    await svc.delete(dept_id, current_user.organization_id)
 
 
 # ── Programs ──────────────────────────────────────────────────────────────────

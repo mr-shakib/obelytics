@@ -1,24 +1,19 @@
 "use client"
 
 import { useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Loader2, Upload } from "lucide-react"
+import { Loader2, Trash2, Upload } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
@@ -41,7 +36,7 @@ type Department = {
   hod_history?: Array<{ user_id: string; full_name: string; effective_from: string; effective_to?: string | null }>
 }
 
-type User = { id: string; full_name: string }
+type User = { id: string; full_name: string; employee_id?: string | null }
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -59,7 +54,9 @@ interface Props {
 
 export function DepartmentDetailClient({ id }: Props) {
   const qc = useQueryClient()
-  const { accessToken } = useAuthStore()
+  const router = useRouter()
+  const { accessToken, manifest } = useAuthStore()
+  const isSuperAdmin = manifest?.scope.is_global ?? false
   const [hodId, setHodId] = useState("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
@@ -123,6 +120,22 @@ export function DepartmentDetailClient({ id }: Props) {
     onError: () => toast.error("Failed to assign Head of Department"),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error, response } = await apiClient.DELETE(`/departments/${id}` as never)
+      if (response && !response.ok) {
+        const detail = (error as { detail?: string } | undefined)?.detail
+        throw new Error(detail ?? "Failed to delete department")
+      }
+    },
+    onSuccess: () => {
+      toast.success("Department deleted")
+      qc.invalidateQueries({ queryKey: queryKeys.departments.all })
+      router.push("/departments")
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   const logoMutation = useMutation({
     mutationFn: async (file: File) => {
       const form = new FormData()
@@ -163,7 +176,25 @@ export function DepartmentDetailClient({ id }: Props) {
       <PageHeader
         title={data.name}
         description={`Short name: ${data.short_name}`}
-        actions={<StatusBadge status={data.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge status={data.status} />
+            {isSuperAdmin && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete "${data.name}"? This cannot be undone.`))
+                    deleteMutation.mutate()
+                }}
+              >
+                {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </Button>
+            )}
+          </div>
+        }
       />
 
       <PermissionGate permission="department.update">
@@ -294,22 +325,18 @@ export function DepartmentDetailClient({ id }: Props) {
             <div className="flex items-end gap-2">
               <div className="flex-1 space-y-2">
                 <Label>Assign new Head of Department</Label>
-                <Select value={hodId} onValueChange={(v) => setHodId((v as string) ?? "")}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a user">
-                      {(value: string) => value
-                        ? ((users ?? []).find((u) => u.id === value)?.full_name ?? value)
-                        : null}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(users ?? []).map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={(users ?? []).map((u) => ({
+                    value: u.id,
+                    label: u.employee_id ? `${u.employee_id} — ${u.full_name}` : u.full_name,
+                  }))}
+                  value={hodId}
+                  onValueChange={setHodId}
+                  placeholder="Select a user…"
+                  searchPlaceholder="Search by employee ID or name…"
+                  emptyText="No users found."
+                  triggerClassName="w-full"
+                />
               </div>
               <Button
                 disabled={!hodId || assignHeadMutation.isPending}

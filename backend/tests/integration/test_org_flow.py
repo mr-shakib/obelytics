@@ -123,6 +123,57 @@ async def test_archive_already_archived_department(client: AsyncClient, auth_hea
     assert resp.status_code == 409
 
 
+async def test_delete_department_as_super_admin(client: AsyncClient, auth_headers):
+    create_resp = await client.post(
+        "/api/v1/departments",
+        headers=auth_headers,
+        json={"name": "To Delete Dept", "short_name": "TDD"},
+    )
+    dept_id = create_resp.json()["id"]
+    resp = await client.delete(f"/api/v1/departments/{dept_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    # Gone afterwards
+    resp = await client.get(f"/api/v1/departments/{dept_id}", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_delete_department_denied_for_non_super_admin(client: AsyncClient, auth_headers, teacher_auth_headers):
+    create_resp = await client.post(
+        "/api/v1/departments",
+        headers=auth_headers,
+        json={"name": "Protected Dept", "short_name": "PDD"},
+    )
+    dept_id = create_resp.json()["id"]
+    resp = await client.delete(f"/api/v1/departments/{dept_id}", headers=teacher_auth_headers)
+    assert resp.status_code == 403
+
+
+async def test_delete_department_blocked_when_it_has_programs(client: AsyncClient, auth_headers):
+    create_resp = await client.post(
+        "/api/v1/departments",
+        headers=auth_headers,
+        json={"name": "Dept With Program", "short_name": "DWP"},
+    )
+    dept_id = create_resp.json()["id"]
+    prog_resp = await client.post(
+        "/api/v1/programs",
+        headers=auth_headers,
+        json={
+            "department_id": dept_id,
+            "title": "Blocking Program",
+            "acronym": "BLKP",
+            "program_type": "UNDERGRADUATE",
+            "minimum_duration_semesters": 8,
+            "total_credits": 140,
+            "study_mode": "FULL_TIME",
+        },
+    )
+    assert prog_resp.status_code == 201
+    resp = await client.delete(f"/api/v1/departments/{dept_id}", headers=auth_headers)
+    assert resp.status_code == 409
+    assert "programs" in resp.json()["detail"]
+
+
 # ── Programs ──────────────────────────────────────────────────────────────────
 
 async def _create_dept(client: AsyncClient, headers, name: str, short_name: str) -> str:

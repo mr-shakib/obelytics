@@ -27,6 +27,15 @@ class DepartmentArchivedError(HTTPException):
         )
 
 
+class DepartmentHasDependentDataError(HTTPException):
+    def __init__(self, blockers: list[str]):
+        detail = (
+            "Cannot delete this department — it still has: " + ", ".join(blockers)
+            + ". Remove or reassign those first, or archive the department instead."
+        )
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 class ProgramNotFoundError(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Program not found")
