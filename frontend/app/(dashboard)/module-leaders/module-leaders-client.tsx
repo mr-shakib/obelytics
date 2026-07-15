@@ -134,7 +134,12 @@ export function ModuleLeadersClient() {
   })
 
   const selectedBatch = batches.find((b) => b.id === batchId)
-  const terms = useMemo(() => selectedBatch?.term_calendar ?? [], [selectedBatch])
+  // Only semesters that have been started (ACTIVE or COMPLETED) are offered —
+  // module leaders are not assigned for semesters that haven't begun.
+  const terms = useMemo(
+    () => (selectedBatch?.term_calendar ?? []).filter((t) => t.status !== "UPCOMING"),
+    [selectedBatch]
+  )
 
   const batchItems = useMemo(
     () => Object.fromEntries(batches.map((b) => [b.id, b.name])),
@@ -276,7 +281,14 @@ export function ModuleLeadersClient() {
         </Select>
       </div>
 
-      {!batchId || !termId ? (
+      {batchId && terms.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            No semester of this batch has been started yet. Start a semester from
+            the batch page to assign module leaders for its courses.
+          </CardContent>
+        </Card>
+      ) : !batchId || !termId ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Select a batch and semester to view its courses.

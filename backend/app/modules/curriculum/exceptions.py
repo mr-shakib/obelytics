@@ -14,6 +14,31 @@ class CurriculumLockedError(HTTPException):
         )
 
 
+class TermNotStartedError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This semester has not been started yet — start it from the batch page first",
+        )
+
+
+class TermCompletedError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This semester is completed — new section offerings cannot be created in it",
+        )
+
+
+class CurriculumHasDependentDataError(HTTPException):
+    def __init__(self, blockers: list[str]):
+        detail = (
+            "Cannot delete this curriculum — it still has: " + ", ".join(blockers)
+            + ". Remove or reassign those first, or archive the curriculum instead."
+        )
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 class CurriculumCodeConflictError(HTTPException):
     def __init__(self):
         super().__init__(

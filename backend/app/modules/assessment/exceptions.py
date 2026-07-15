@@ -40,6 +40,15 @@ class AssessmentLockedError(HTTPException):
         )
 
 
+class TermNotActiveError(HTTPException):
+    def __init__(self, term_status: str):
+        if term_status == "UPCOMING":
+            detail = "This semester has not been started yet — start it from the batch page first"
+        else:
+            detail = "This semester is completed — marks can no longer be changed"
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 class WeightageNotHundredError(HTTPException):
     def __init__(self):
         super().__init__(

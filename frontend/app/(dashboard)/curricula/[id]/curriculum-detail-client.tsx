@@ -6,12 +6,12 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Loader2, Plus, Archive } from "lucide-react"
+import { Loader2, Plus, Archive, Trash2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { DataTable } from "@/components/shared/data-table"
-import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { Button } from "@/components/ui/button"
@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuthStore } from "@/lib/stores/auth-store"
 
 type Curriculum = {
   id: string
@@ -98,6 +99,25 @@ export function CurriculumDetailClient({ id }: Props) {
   const [addTermOpen, setAddTermOpen] = useState(false)
   const [addSlotOpen, setAddSlotOpen] = useState(false)
   const qc = useQueryClient()
+  const router = useRouter()
+  const { manifest } = useAuthStore()
+  const isSuperAdmin = manifest?.scope.is_global ?? false
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error, response } = await apiClient.DELETE(`/curricula/${id}` as never)
+      if (response && !response.ok) {
+        const detail = (error as { detail?: string } | undefined)?.detail
+        throw new Error(detail ?? "Failed to delete curriculum")
+      }
+    },
+    onSuccess: () => {
+      toast.success("Curriculum deleted")
+      qc.invalidateQueries({ queryKey: queryKeys.curricula.all })
+      router.push("/curricula")
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
 
   const { data: curriculum, isLoading } = useQuery({
     queryKey: queryKeys.curricula.detail(id),
@@ -283,7 +303,6 @@ export function CurriculumDetailClient({ id }: Props) {
         description={`${program ? programLabel(program) : "—"} — v${curriculum.version_number}`}
         actions={
           <div className="flex items-center gap-3">
-            <StatusBadge status={curriculum.status} />
             {curriculum.status !== "ARCHIVED" && (
               <PermissionGate permission="curriculum.update">
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => setArchiveOpen(true)}>
@@ -291,6 +310,20 @@ export function CurriculumDetailClient({ id }: Props) {
                   Archive
                 </Button>
               </PermissionGate>
+            )}
+            {isSuperAdmin && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete "${curriculum.name}"? This cannot be undone.`))
+                    deleteMutation.mutate()
+                }}
+              >
+                {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </Button>
             )}
           </div>
         }

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.curriculum.domain.prerequisite_graph import PrerequisiteGraphValidator
@@ -15,6 +16,7 @@ from app.modules.curriculum.exceptions import (
     CourseCodeConflictError,
     CourseNotFoundError,
     CurriculumCodeConflictError,
+    CurriculumHasDependentDataError,
     CurriculumLockedError,
     CurriculumNotFoundError,
     CycleDetectedError,
@@ -28,6 +30,8 @@ from app.modules.curriculum.exceptions import (
     SectionOfferingConflictError,
     SectionOfferingHasDependentsError,
     SectionOfferingNotFoundError,
+    TermCompletedError,
+    TermNotStartedError,
 )
 from app.modules.curriculum.models import (
     AcademicTerm,
@@ -185,6 +189,86 @@ class CurriculumService:
         result = await self._repo.update(curriculum, {})
         await self._session.commit()
         return result
+
+    async def delete(self, curriculum_id: UUID, org_id: UUID) -> None:
+        from sqlalchemy import delete as sa_delete, func, select
+
+        from app.modules.assessment.models import Student
+        from app.modules.curriculum.models import (
+            Batch,
+            BatchTermCalendar,
+            CourseAssessmentTool,
+            CourseBloomMarks,
+            CourseCOMarks,
+            CourseLessonPlanItem,
+            CurriculumCourseSlot,
+            CurriculumTermDefinition,
+            SectionOffering,
+        )
+        from app.modules.obe.models import COPOMappingSet, CourseOutcome
+
+        curriculum = await self._repo.get_by_id(curriculum_id, org_id)
+        if curriculum is None:
+            raise CurriculumNotFoundError()
+
+        # Real academic work built on top of this curriculum blocks deletion —
+        # the user has to remove it first (or archive instead). The batch that
+        # curriculum creation auto-creates is NOT a blocker; it is cleaned up
+        # below as long as no offerings or students hang off it.
+        blockers: list[str] = []
+
+        async def _count(model, column) -> int:
+            return await self._session.scalar(
+                select(func.count()).select_from(model).where(column == curriculum_id)
+            ) or 0
+
+        offerings_count = await _count(SectionOffering, SectionOffering.curriculum_id)
+        if offerings_count:
+            blockers.append(f"{offerings_count} section offerings")
+        batch_ids = (
+            await self._session.scalars(select(Batch.id).where(Batch.curriculum_id == curriculum_id))
+        ).all()
+        if batch_ids:
+            students_count = await self._session.scalar(
+                select(func.count()).select_from(Student).where(Student.batch_id.in_(batch_ids))
+            )
+            if students_count:
+                blockers.append(f"{students_count} students")
+        cos_count = await _count(CourseOutcome, CourseOutcome.curriculum_id)
+        if cos_count:
+            blockers.append(f"{cos_count} course outcomes")
+        mapping_sets_count = await _count(COPOMappingSet, COPOMappingSet.curriculum_id)
+        if mapping_sets_count:
+            blockers.append(f"{mapping_sets_count} CO-PO mapping sets")
+        versions_count = await self._session.scalar(
+            select(func.count())
+            .select_from(Curriculum)
+            .where(Curriculum.parent_curriculum_id == curriculum_id)
+        )
+        if versions_count:
+            blockers.append(f"{versions_count} derived curriculum versions")
+        if blockers:
+            raise CurriculumHasDependentDataError(blockers)
+
+        # Structure-only data that exists solely to describe this curriculum —
+        # removed along with it. Lesson plan CO/PO links cascade at the DB level.
+        if batch_ids:
+            await self._session.execute(
+                sa_delete(BatchTermCalendar).where(BatchTermCalendar.batch_id.in_(batch_ids))
+            )
+            await self._session.execute(sa_delete(Batch).where(Batch.curriculum_id == curriculum_id))
+        for model in (
+            CourseLessonPlanItem,
+            CourseAssessmentTool,
+            CourseCOMarks,
+            CourseBloomMarks,
+            CurriculumCourseSlot,
+            CurriculumTermDefinition,
+        ):
+            await self._session.execute(sa_delete(model).where(model.curriculum_id == curriculum_id))
+
+        await self._session.delete(curriculum)
+        await self._session.commit()
 
     async def update(
         self, curriculum_id: UUID, body: CurriculumUpdate, org_id: UUID
@@ -1150,6 +1234,23 @@ class AcademicTermService:
         if term is None:
             raise AcademicTermNotFoundError()
         data = body.model_dump(exclude_none=True)
+
+        # Starting a semester ends the previous one: any other ACTIVE term that
+        # began earlier flips to COMPLETED, so one semester runs at a time.
+        if data.get("status") == "ACTIVE" and term.status != "ACTIVE":
+            earlier_active = (
+                await self._session.scalars(
+                    select(AcademicTerm).where(
+                        AcademicTerm.organization_id == org_id,
+                        AcademicTerm.id != term_id,
+                        AcademicTerm.status == "ACTIVE",
+                        AcademicTerm.start_date <= term.start_date,
+                    )
+                )
+            ).all()
+            for previous in earlier_active:
+                previous.status = "COMPLETED"
+
         result = await self._repo.update(term, data)
         await self._session.commit()
         return result
@@ -1207,6 +1308,13 @@ class SectionOfferingService:
         )
         if existing:
             raise SectionOfferingConflictError()
+
+        # No new offerings in a semester that is already over.
+        term_status = await self._session.scalar(
+            select(AcademicTerm.status).where(AcademicTerm.id == body.academic_term_id)
+        )
+        if term_status == "COMPLETED":
+            raise TermCompletedError()
         offering = SectionOffering(
             organization_id=org_id,
             curriculum_id=body.curriculum_id,
@@ -1484,6 +1592,14 @@ class ModuleLeaderAssignmentService:
     async def assign(
         self, body: ModuleLeaderAssignmentCreate, org_id: UUID
     ) -> ModuleLeaderAssignment:
+        # Module leaders are assigned for semesters that have been started —
+        # an UPCOMING term is not open for assignments yet.
+        term_status = await self._session.scalar(
+            select(AcademicTerm.status).where(AcademicTerm.id == body.academic_term_id)
+        )
+        if term_status == "UPCOMING":
+            raise TermNotStartedError()
+
         existing = await self._repo.find_active(
             body.batch_id, body.academic_term_id, body.course_id
         )

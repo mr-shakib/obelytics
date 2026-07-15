@@ -33,6 +33,7 @@ from app.modules.assessment.exceptions import (
     NoMarksEnteredError,
     ResultPublicationNotFoundError,
     ResultStateError,
+    TermNotActiveError,
     StudentIdConflictError,
     StudentNotFoundError,
     WeightageNotHundredError,
@@ -464,6 +465,9 @@ class MarksService:
         if pub is not None and pub.status == "PUBLISHED":
             raise MarkImmutableError()
 
+        # Guard: semester must be running
+        await _assert_term_active(self._session, assessment.section_offering_id)
+
         # Guard: is_absent XOR marks_obtained
         if body.is_absent and body.marks_obtained is not None:
             raise InvalidMarkError("Cannot set marks_obtained when is_absent is True")
@@ -514,6 +518,9 @@ class MarksService:
         pub = await self._result_repo.get_by_offering(assessment.section_offering_id)
         if pub is not None and pub.status == "PUBLISHED":
             raise MarkImmutableError()
+
+        # Guard: semester must be running
+        await _assert_term_active(self._session, assessment.section_offering_id)
 
         # Determine new values (fall back to existing if not provided)
         new_is_absent = body.is_absent if body.is_absent is not None else mark.is_absent
@@ -579,6 +586,10 @@ class ResultPublicationService:
             await _assert_section_teacher(self._session, offering_id, acting_user_id)
         if pub.status != "DRAFT":
             raise ResultStateError(f"Cannot submit: result publication is in status '{pub.status}'")
+
+        # Guard: the semester must have been started (results are often
+        # finalized after it ends, so COMPLETED is fine too)
+        await _assert_term_active(self._session, offering_id, allow_completed=True)
 
         # Guard: at least one mark must exist for this offering
         mark_count = await self._mark_repo.count_by_offering(offering_id)
@@ -1064,6 +1075,26 @@ class ResultPublicationService:
         ]
 
 
+async def _assert_term_active(
+    session: AsyncSession, section_offering_id: UUID, allow_completed: bool = False
+) -> None:
+    """
+    The offering's semester must have been started (term status ACTIVE) for
+    marks work to happen. Result submission additionally allows COMPLETED,
+    since results are often finalized after the semester ends.
+    """
+    term_status = await session.scalar(
+        select(AcademicTerm.status)
+        .join(SectionOffering, SectionOffering.academic_term_id == AcademicTerm.id)
+        .where(SectionOffering.id == section_offering_id)
+    )
+    if term_status is None:
+        return  # offering not found — the caller's own not-found guard handles it
+    allowed = {"ACTIVE", "COMPLETED"} if allow_completed else {"ACTIVE"}
+    if term_status not in allowed:
+        raise TermNotActiveError(term_status)
+
+
 async def _assert_section_teacher(session: AsyncSession, section_offering_id: UUID, user_id: UUID) -> None:
     """Restrict an action to the user currently assigned as section teacher for this offering."""
     repo = FacultyAssignmentRepository(session)
@@ -1205,6 +1236,7 @@ class MarksheetService:
         if acting_user_id is not None:
             await _assert_section_teacher(self._session, question.section_offering_id, acting_user_id)
         await self._assert_not_locked(question.section_offering_id, org_id)
+        await _assert_term_active(self._session, question.section_offering_id)
 
         enrollment = await self._enrollment_repo.get_by_id(body.student_enrollment_id, org_id)
         if enrollment is None or enrollment.section_offering_id != question.section_offering_id:

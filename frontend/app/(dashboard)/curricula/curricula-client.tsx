@@ -12,7 +12,6 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { DataTable } from "@/components/shared/data-table"
-import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -58,15 +57,23 @@ const schema = z.object({
   effective_year: z.number().int().min(1900).max(2100),
   version_number: z.number().int().min(1, "Version must be at least 1").max(99),
   batch_name: z.string().min(1, "Batch is required").max(100),
-  semester_count: z.number().int().min(1, "At least 1 semester is required").max(20),
+  term_structure: z.enum(["TRIMESTER", "BI_SEMESTER"]),
   threshold_co_score_pct: z.number().min(0, "0–100").max(100, "0–100"),
 })
 type FormValues = z.infer<typeof schema>
+
+// The term structure fixes the semester count — trimester programs run 12
+// semesters, bi-semester programs run 8. Not user-editable.
+const TERM_STRUCTURES = {
+  TRIMESTER: { label: "Trimester", semesters: 12 },
+  BI_SEMESTER: { label: "Bi-Semester", semesters: 8 },
+} as const
 
 export function CurriculaClient() {
   const [open, setOpen] = useState(false)
   const [selProgramId, setSelProgramId] = useState("")
   const [selBatchName, setSelBatchName] = useState("")
+  const [selTermStructure, setSelTermStructure] = useState<keyof typeof TERM_STRUCTURES>("TRIMESTER")
   const qc = useQueryClient()
   const router = useRouter()
 
@@ -124,7 +131,7 @@ export function CurriculaClient() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { semester_count: 12, version_number: 1, threshold_co_score_pct: 50 },
+    defaultValues: { term_structure: "TRIMESTER", version_number: 1, threshold_co_score_pct: 50 },
   })
 
   const watchedYear = watch("effective_year")
@@ -156,11 +163,6 @@ export function CurriculaClient() {
       header: "Version",
       cell: ({ row }) => `v${row.original.version_number}`,
     },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
-    },
   ]
 
   const mutation = useMutation({
@@ -176,17 +178,19 @@ export function CurriculaClient() {
         },
       } as never)
       const created = (curriculum as unknown) as { id: string }
+      const semesterCount = TERM_STRUCTURES[values.term_structure].semesters
       await apiClient.POST("/batches" as never, {
         body: {
           curriculum_id: created.id,
           name: values.batch_name,
           start_date: `${values.effective_year}-01-01`,
-          term_system: "SEMESTER",
-          num_semesters: values.semester_count,
+          // Backend accepts TRIMESTER | SEMESTER; bi-semester maps to SEMESTER
+          term_system: values.term_structure === "TRIMESTER" ? "TRIMESTER" : "SEMESTER",
+          num_semesters: semesterCount,
         },
       } as never)
       await apiClient.POST(`/curricula/${created.id}/terms` as never, {
-        body: Array.from({ length: values.semester_count }, (_, i) => ({
+        body: Array.from({ length: semesterCount }, (_, i) => ({
           term_number: i + 1,
           name: `Semester ${i + 1}`,
           total_credit_hours: null,
@@ -200,7 +204,8 @@ export function CurriculaClient() {
       setOpen(false)
       setSelProgramId("")
       setSelBatchName("")
-      reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50 })
+      setSelTermStructure("TRIMESTER")
+      reset({ term_structure: "TRIMESTER", version_number: 1, threshold_co_score_pct: 50 })
     },
     onError: () => toast.error("Failed to create curriculum"),
   })
@@ -209,7 +214,8 @@ export function CurriculaClient() {
     setOpen(false)
     setSelProgramId("")
     setSelBatchName("")
-    reset({ semester_count: 12, version_number: 1, threshold_co_score_pct: 50 })
+    setSelTermStructure("TRIMESTER")
+    reset({ term_structure: "TRIMESTER", version_number: 1, threshold_co_score_pct: 50 })
   }
 
   return (
@@ -352,19 +358,32 @@ export function CurriculaClient() {
                       <p className="text-xs text-muted-foreground">First student cohort for this curriculum.</p>
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="semester_count">Semesters</Label>
-                      <Input
-                        id="semester_count"
-                        type="number"
-                        min={1}
-                        max={20}
-                        placeholder="12"
-                        {...register("semester_count", { valueAsNumber: true })}
-                      />
-                      {errors.semester_count && (
-                        <p className="text-xs text-destructive">{errors.semester_count.message}</p>
-                      )}
-                      <p className="text-xs text-muted-foreground">Auto-creates semester slots (1 – N).</p>
+                      <Label>Term Structure</Label>
+                      <Select
+                        value={selTermStructure}
+                        onValueChange={(v) => {
+                          if (v == null) return
+                          const structure = v as keyof typeof TERM_STRUCTURES
+                          setSelTermStructure(structure)
+                          setValue("term_structure", structure, { shouldValidate: true })
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue>
+                            {(value: string) => TERM_STRUCTURES[value as keyof typeof TERM_STRUCTURES]?.label ?? value}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(TERM_STRUCTURES).map(([value, s]) => (
+                            <SelectItem key={value} value={value}>
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Creates {TERM_STRUCTURES[selTermStructure].semesters} semesters automatically.
+                      </p>
                     </div>
                   </div>
                 </form>

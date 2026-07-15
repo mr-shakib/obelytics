@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuthStore } from "@/lib/stores/auth-store"
 import { formatDate } from "@/lib/utils"
 
 type Student = {
@@ -474,6 +475,8 @@ export function BatchDetailClient({ id }: Props) {
   const qc = useQueryClient()
   const router = useRouter()
   const canManage = usePermission("curriculum.update")
+  const { manifest } = useAuthStore()
+  const isSuperAdmin = manifest?.scope.is_global ?? false
   const [changingTermId, setChangingTermId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -571,7 +574,7 @@ export function BatchDetailClient({ id }: Props) {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge status={data.status} />
-            <PermissionGate permission="batch.delete">
+            {isSuperAdmin && (
               <Button
                 variant="destructive"
                 size="sm"
@@ -584,7 +587,7 @@ export function BatchDetailClient({ id }: Props) {
                 {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 Delete
               </Button>
-            </PermissionGate>
+            )}
           </div>
         }
       />

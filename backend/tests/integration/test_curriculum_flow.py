@@ -997,3 +997,123 @@ async def test_cannot_update_archived_curriculum(client: AsyncClient, auth_heade
         json={"name": "Should Fail"},
     )
     assert resp.status_code == 409
+
+
+# ── Curriculum deletion (Super Admin only) ────────────────────────────────────
+
+async def test_delete_curriculum_as_super_admin(client: AsyncClient, auth_headers):
+    program_id = await _create_program(client, auth_headers)
+    curr_resp = await client.post(
+        "/api/v1/curricula",
+        headers=auth_headers,
+        json={"program_id": program_id, "name": "Delete Test Curr", "code": "DEL-2026", "effective_year": 2026},
+    )
+    curr_id = curr_resp.json()["id"]
+    # Terms and a batch (as the create flow auto-creates) should not block deletion
+    await client.post(
+        f"/api/v1/curricula/{curr_id}/terms",
+        headers=auth_headers,
+        json=[{"curriculum_id": curr_id, "term_number": 1, "name": "Semester 1", "total_credit_hours": None}],
+    )
+    batch_resp = await client.post(
+        "/api/v1/batches",
+        headers=auth_headers,
+        json={
+            "curriculum_id": curr_id,
+            "name": "Delete Test Batch",
+            "start_date": "2026-01-01",
+            "term_system": "TRIMESTER",
+            "num_semesters": 12,
+        },
+    )
+    assert batch_resp.status_code == 201, batch_resp.text
+
+    resp = await client.delete(f"/api/v1/curricula/{curr_id}", headers=auth_headers)
+    assert resp.status_code == 204, resp.text
+    resp = await client.get(f"/api/v1/curricula/{curr_id}", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_delete_curriculum_denied_for_non_super_admin(client: AsyncClient, auth_headers, teacher_auth_headers):
+    program_id = await _create_program(client, auth_headers)
+    curr_resp = await client.post(
+        "/api/v1/curricula",
+        headers=auth_headers,
+        json={"program_id": program_id, "name": "Protected Curr", "code": "PROT-2026", "effective_year": 2026},
+    )
+    curr_id = curr_resp.json()["id"]
+    resp = await client.delete(f"/api/v1/curricula/{curr_id}", headers=teacher_auth_headers)
+    assert resp.status_code == 403
+
+
+# ── Academic term lifecycle gating ────────────────────────────────────────────
+
+async def test_no_new_offerings_in_completed_term(client: AsyncClient, auth_headers):
+    data = await _setup_offering_data(client, auth_headers)
+    resp = await client.patch(
+        f"/api/v1/academic-terms/{data['academic_term_id']}",
+        headers=auth_headers,
+        json={"status": "COMPLETED"},
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.post("/api/v1/section-offerings", headers=auth_headers, json=data)
+    assert resp.status_code == 409
+    assert "completed" in resp.json()["detail"].lower()
+
+
+async def test_starting_term_completes_earlier_active_term(client: AsyncClient, auth_headers):
+    import uuid
+    suffix = uuid.uuid4().hex[:6]
+    year = 2100 + (int(suffix, 16) % 800)
+    first = await client.post(
+        "/api/v1/academic-terms",
+        headers=auth_headers,
+        json={"name": f"Gate Spring {year}", "year": year, "season": "SPRING",
+              "start_date": f"{year}-01-15", "end_date": f"{year}-05-15"},
+    )
+    second = await client.post(
+        "/api/v1/academic-terms",
+        headers=auth_headers,
+        json={"name": f"Gate Summer {year}", "year": year, "season": "SUMMER",
+              "start_date": f"{year}-05-16", "end_date": f"{year}-09-15"},
+    )
+    first_id = first.json()["id"]
+    second_id = second.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/academic-terms/{first_id}", headers=auth_headers, json={"status": "ACTIVE"}
+    )
+    assert resp.status_code == 200 and resp.json()["status"] == "ACTIVE"
+
+    # Starting the later term auto-completes the earlier active one
+    resp = await client.patch(
+        f"/api/v1/academic-terms/{second_id}", headers=auth_headers, json={"status": "ACTIVE"}
+    )
+    assert resp.status_code == 200 and resp.json()["status"] == "ACTIVE"
+    first_after = await client.get(f"/api/v1/academic-terms/{first_id}", headers=auth_headers)
+    assert first_after.json()["status"] == "COMPLETED"
+
+
+async def test_module_leader_assignment_blocked_for_unstarted_term(client: AsyncClient, auth_headers):
+    data = await _setup_offering_data(client, auth_headers)
+    users_resp = await client.get("/api/v1/users", headers=auth_headers)
+    user_id = users_resp.json()[0]["id"]
+    payload = {
+        "batch_id": data["batch_id"],
+        "academic_term_id": data["academic_term_id"],
+        "course_id": data["course_id"],
+        "user_id": user_id,
+    }
+    # Term is UPCOMING (never started) — assignment must be refused
+    resp = await client.post("/api/v1/module-leader-assignments", headers=auth_headers, json=payload)
+    assert resp.status_code == 409
+    assert "not been started" in resp.json()["detail"]
+
+    # Start the semester, then assignment succeeds
+    await client.patch(
+        f"/api/v1/academic-terms/{data['academic_term_id']}",
+        headers=auth_headers,
+        json={"status": "ACTIVE"},
+    )
+    resp = await client.post("/api/v1/module-leader-assignments", headers=auth_headers, json=payload)
+    assert resp.status_code in (200, 201), resp.text

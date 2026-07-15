@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_any_permission, require_permission
+from app.core.dependencies import (
+    get_current_user,
+    require_any_permission,
+    require_permission,
+    require_super_admin,
+)
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
 from app.modules.curriculum.schemas import (
@@ -149,6 +154,21 @@ async def archive_curriculum(
 ):
     svc = CurriculumService(db)
     return await svc.archive(curriculum_id, current_user.organization_id)
+
+
+@router.delete("/curricula/{curriculum_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_curriculum(
+    curriculum_id: UUID,
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Permanently deletes a curriculum. Super Admin only. Blocked if it has
+    section offerings, students, course outcomes, mapping sets, or derived
+    versions — archive it instead in that case. The auto-created batch and
+    structural configuration are removed along with it."""
+    svc = CurriculumService(db)
+    await svc.delete(curriculum_id, current_user.organization_id)
 
 
 @router.post("/curricula/{curriculum_id}/version", response_model=CurriculumResponse, status_code=status.HTTP_201_CREATED)
@@ -728,13 +748,13 @@ async def update_batch(
 @router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_batch(
     batch_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("batch.delete"))],
+    _: Annotated[PermissionManifestResponse, Depends(require_super_admin())],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Permanently deletes a batch. Blocked if it has section offerings or
-    students — archive it instead in that case. batch.delete is Super Admin
-    only, even though Program Coordinators can create batches."""
+    """Permanently deletes a batch. Super Admin only, even though Program
+    Coordinators can create batches. Blocked if the batch has section
+    offerings or students — archive it instead in that case."""
     svc = BatchService(db)
     await svc.delete(batch_id, current_user.organization_id)
 
