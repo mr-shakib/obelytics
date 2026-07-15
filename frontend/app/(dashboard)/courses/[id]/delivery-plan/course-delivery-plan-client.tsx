@@ -108,17 +108,17 @@ function nextWeekNumber(items: LessonPlanItemValues[]) {
 }
 
 function buildPoIdsFromMappedCos(coIds: string[], mappingEntries: MappingEntry[]) {
-  return uniqueValues(
-    mappingEntries
-      .filter((entry) => coIds.includes(entry.course_outcome_id))
-      .map((entry) => entry.program_outcome_id)
-  )
+  const strongestMapping = mappingEntries
+    .filter((entry) => coIds.includes(entry.course_outcome_id))
+    .sort((a, b) => b.weight - a.weight)[0]
+
+  return strongestMapping ? [strongestMapping.program_outcome_id] : []
 }
 
-function singleSelectedCoIds(previousCoIds: string[], nextCoIds: string[]) {
-  const newlySelectedCoIds = nextCoIds.filter((coId) => !previousCoIds.includes(coId))
-  if (newlySelectedCoIds.length > 0) return [newlySelectedCoIds.at(-1) as string]
-  return nextCoIds.slice(0, 1)
+function singleSelectedOutcomeIds(previousIds: string[], nextIds: string[]) {
+  const newlySelectedIds = nextIds.filter((id) => !previousIds.includes(id))
+  if (newlySelectedIds.length > 0) return [newlySelectedIds.at(-1) as string]
+  return nextIds.slice(0, 1)
 }
 
 async function fetchProgramOutcomes(programId: string, poVersionId?: string | null) {
@@ -139,7 +139,7 @@ const lessonPlanItemSchema = z.object({
   tla: z.string().optional(),
   assessment_strategy: z.string().optional(),
   co_ids: z.array(z.string()),
-  po_ids: z.array(z.string()),
+  po_ids: z.array(z.string()).max(1, "Only one PO can be selected"),
 })
 const lessonPlanSchema = z.object({
   items: z.array(lessonPlanItemSchema),
@@ -247,7 +247,7 @@ export function CourseDeliveryPlanClient({ id }: Props) {
     tla: item.tla ?? "",
     assessment_strategy: item.assessment_strategy ?? "",
     co_ids: item.co_ids.slice(0, 1),
-    po_ids: item.po_ids,
+    po_ids: item.po_ids.slice(0, 1),
   })
 
   const lessonPlanForm = useForm<LessonPlanFormValues>({
@@ -269,7 +269,7 @@ export function CourseDeliveryPlanClient({ id }: Props) {
               tla: item.tla?.trim() || undefined,
               assessment_strategy: item.assessment_strategy?.trim() || undefined,
               co_ids: item.co_ids.slice(0, 1),
-              po_ids: item.po_ids,
+              po_ids: item.po_ids.slice(0, 1),
             })),
           },
         } as never
@@ -375,7 +375,7 @@ export function CourseDeliveryPlanClient({ id }: Props) {
                               options={courseOutcomes}
                               value={coField.value}
                               onChange={(nextCoIds) => {
-                                const nextSingleCoIds = singleSelectedCoIds(
+                                const nextSingleCoIds = singleSelectedOutcomeIds(
                                   coField.value,
                                   nextCoIds
                                 )
@@ -399,8 +399,12 @@ export function CourseDeliveryPlanClient({ id }: Props) {
                             <OutcomeCheckboxPopover
                               options={programOutcomes}
                               value={poField.value}
-                              onChange={poField.onChange}
-                              placeholder="Select POs"
+                              onChange={(nextPoIds) =>
+                                poField.onChange(
+                                  singleSelectedOutcomeIds(poField.value, nextPoIds)
+                                )
+                              }
+                              placeholder="Select PO"
                             />
                           )}
                         />
@@ -443,26 +447,6 @@ export function CourseDeliveryPlanClient({ id }: Props) {
                 onClick={() => {
                   const currentItems = lessonPlanForm.getValues("items")
                   lessonPlanFieldArray.append({
-                    week_number: currentWeekNumber(currentItems),
-                    lesson_label: nextLessonNumber(currentItems),
-                    topic: "",
-                    tla: "",
-                    assessment_strategy: "",
-                    co_ids: [],
-                    po_ids: [],
-                  })
-                }}
-              >
-                <Plus />
-                Add lesson
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const currentItems = lessonPlanForm.getValues("items")
-                  lessonPlanFieldArray.append({
                     week_number: nextWeekNumber(currentItems),
                     lesson_label: nextLessonNumber(currentItems),
                     topic: "",
@@ -475,6 +459,26 @@ export function CourseDeliveryPlanClient({ id }: Props) {
               >
                 <Plus />
                 Add week
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const currentItems = lessonPlanForm.getValues("items")
+                  lessonPlanFieldArray.append({
+                    week_number: currentWeekNumber(currentItems),
+                    lesson_label: nextLessonNumber(currentItems),
+                    topic: "",
+                    tla: "",
+                    assessment_strategy: "",
+                    co_ids: [],
+                    po_ids: [],
+                  })
+                }}
+              >
+                <Plus />
+                Add lesson
               </Button>
               <Button
                 type="submit"

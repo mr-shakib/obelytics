@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { CoPoMappingCard } from "@/components/courses/co-po-mapping-card"
 import { ComplexMappingCard } from "@/components/courses/complex-mapping-card"
 import { CoMappingsSummaryCard } from "@/components/courses/co-mappings-summary-card"
+import { AddCourseOutcomeDialog } from "@/components/courses/add-course-outcome-dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { useResolveCourseLocation } from "@/hooks/use-course-location"
@@ -55,6 +56,14 @@ export function CourseMappingsClient({ id }: Props) {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <AddCourseOutcomeDialog
+          curriculumId={curriculumId}
+          courseId={id}
+          nextOutcomeNumber={courseOutcomes.length + 1}
+        />
+      </div>
+
       <CoMappingsSummaryCard
         cos={courseOutcomes}
         pos={programOutcomes}
