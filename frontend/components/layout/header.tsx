@@ -30,45 +30,33 @@ import { usePermissions } from "@/hooks/use-permission"
 import { logoutApi } from "@/lib/api/auth"
 import { queryKeys } from "@/lib/query-keys"
 import { fetchWithTimeout } from "@/lib/api/client"
-import { cn } from "@/lib/utils"
 import {
-  NAV_GROUPS,
   NAV_GROUP_META,
   getActiveNavGroup,
   getVisibleNavItems,
+  isNavItemActive,
 } from "@/lib/navigation"
 
-function GroupSwitcher() {
+// The full navigation lives in the sidebar; the header shows a breadcrumb of
+// the current location for orientation.
+function LocationBreadcrumb() {
   const pathname = usePathname()
   const permissions = usePermissions()
   const visibleItems = getVisibleNavItems(permissions)
   const activeGroup = getActiveNavGroup(pathname, visibleItems)
+  const activeItem = visibleItems.find((item) => isNavItemActive(item, pathname))
+
+  if (!activeItem) return null
+  const meta = NAV_GROUP_META[activeGroup]
+  const Icon = meta.icon
 
   return (
-    <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
-      {NAV_GROUPS.map((group) => {
-        const meta = NAV_GROUP_META[group]
-        const groupItems = visibleItems.filter((item) => item.group === group)
-        if (groupItems.length === 0) return null
-        const isActive = group === activeGroup
-        const Icon = meta.icon
-        return (
-          <Link
-            key={group}
-            href={groupItems[0].href}
-            className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors",
-              isActive
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <Icon className="size-[14px]" />
-            {meta.label}
-          </Link>
-        )
-      })}
-    </nav>
+    <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
+      <Icon className="size-[14px] shrink-0 text-muted-foreground" />
+      <span className="shrink-0 text-muted-foreground">{meta.label}</span>
+      <span className="shrink-0 text-muted-foreground/50">/</span>
+      <span className="truncate font-medium text-foreground">{activeItem.label}</span>
+    </div>
   )
 }
 
@@ -116,7 +104,7 @@ export function Header() {
 
   return (
     <header className="flex h-14 items-center border-b bg-background px-4 gap-3">
-      <GroupSwitcher />
+      <LocationBreadcrumb />
 
       {!isGlobal && programs.length > 0 && (
         <Select
