@@ -56,6 +56,8 @@ const STATUS_OPTIONS: Record<string, string> = {
 // out first.
 const STATUS_PRIORITY = ["SUBMITTED", "ML_APPROVED", "PC_APPROVED", "DRAFT", "PUBLISHED"]
 
+const SEASON_ORDER: Record<string, number> = { SPRING: 0, SUMMER: 1, FALL: 2 }
+
 function courseAccentStatus(items: ResultSubmission[]): string {
   for (const status of STATUS_PRIORITY) {
     if (items.some((i) => i.status === status)) return status
@@ -115,15 +117,39 @@ export function ResultSubmissionsClient() {
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
   }, [submissions])
 
-  const courseGroups = useMemo(() => {
+  // Cards are grouped semester-first: each academic term gets its own colored
+  // section, with the term's courses inside it. A course offered in two
+  // semesters appears in both sections, each card showing only that
+  // semester's sections.
+  const termGroups = useMemo(() => {
     const filtered = batchFilter === "ALL" ? submissions : submissions.filter((i) => i.batch_id === batchFilter)
-    const map = new Map<string, { course_id: string; course_code: string; course_title: string; items: ResultSubmission[] }>()
+
+    type CourseGroup = { course_id: string; course_code: string; course_title: string; items: ResultSubmission[] }
+    const terms = new Map<string, {
+      academic_term_id: string
+      term_name: string
+      term_year: number
+      term_season: string
+      courses: Map<string, CourseGroup>
+    }>()
+
     for (const item of filtered) {
-      const group = map.get(item.course_id)
-      if (group) {
-        group.items.push(item)
+      let term = terms.get(item.academic_term_id)
+      if (!term) {
+        term = {
+          academic_term_id: item.academic_term_id,
+          term_name: item.term_name,
+          term_year: item.term_year,
+          term_season: item.term_season,
+          courses: new Map(),
+        }
+        terms.set(item.academic_term_id, term)
+      }
+      const course = term.courses.get(item.course_id)
+      if (course) {
+        course.items.push(item)
       } else {
-        map.set(item.course_id, {
+        term.courses.set(item.course_id, {
           course_id: item.course_id,
           course_code: item.course_code,
           course_title: item.course_title,
@@ -131,11 +157,24 @@ export function ResultSubmissionsClient() {
         })
       }
     }
-    let groups = Array.from(map.values())
-    if (isPcOnlyView) {
-      groups = groups.filter((g) => g.items.some((i) => PC_VISIBLE_STATUSES.has(i.status)))
-    }
-    return groups.map((g) => ({ ...g, batchTermGroups: groupByBatchTerm(g.items) }))
+
+    return Array.from(terms.values())
+      .map((term) => {
+        let courses = Array.from(term.courses.values())
+        if (isPcOnlyView) {
+          courses = courses.filter((g) => g.items.some((i) => PC_VISIBLE_STATUSES.has(i.status)))
+        }
+        return {
+          ...term,
+          courses: courses.map((g) => ({ ...g, batchTermGroups: groupByBatchTerm(g.items) })),
+        }
+      })
+      .filter((term) => term.courses.length > 0)
+      .sort(
+        (a, b) =>
+          b.term_year - a.term_year ||
+          (SEASON_ORDER[b.term_season] ?? 0) - (SEASON_ORDER[a.term_season] ?? 0)
+      )
   }, [submissions, isPcOnlyView, batchFilter])
 
   const pendingReviewCount = submissions.filter((s) =>
@@ -146,7 +185,7 @@ export function ResultSubmissionsClient() {
     <div className="space-y-6">
       <PageHeader
         title="Result Submissions"
-        description="Section result reports submitted by section teachers, grouped by course, batch, and semester."
+        description="Section result reports submitted by section teachers, grouped by semester."
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -186,7 +225,7 @@ export function ResultSubmissionsClient() {
         </div>
       )}
 
-      {!isLoading && courseGroups.length === 0 && (
+      {!isLoading && termGroups.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             No section result submissions found.
@@ -194,8 +233,30 @@ export function ResultSubmissionsClient() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {courseGroups.map((course) => {
+      {termGroups.map((term) => {
+        const termColor = colorForId(term.academic_term_id)
+        const termTotal = term.courses.reduce((n, c) => n + c.items.length, 0)
+        return (
+          <section
+            key={term.academic_term_id}
+            className="rounded-xl border-2 p-4"
+            style={{ borderColor: termColor, backgroundColor: `${termColor}08` }}
+          >
+            <div className="mb-4 flex flex-wrap items-center gap-2.5">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: termColor }} />
+              <h2 className="text-sm font-semibold">
+                {term.term_name}
+              </h2>
+              <span className="text-xs text-muted-foreground">
+                {term.term_season} {term.term_year}
+              </span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {term.courses.length} course{term.courses.length === 1 ? "" : "s"} · {termTotal} section{termTotal === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+        {term.courses.map((course) => {
           const accent = courseAccentStatus(course.items)
           const total = course.items.length
           const submittedCount = course.items.filter((i) => i.status !== "DRAFT").length
@@ -206,7 +267,7 @@ export function ResultSubmissionsClient() {
           return (
             <Card
               key={course.course_id}
-              className="h-full border-l-4"
+              className="h-full border-l-4 bg-card"
               style={{ borderLeftColor: colorForId(firstItem.batch_id) }}
             >
               <Link href={`/result-submissions/${course.course_id}?code=${encodeURIComponent(course.course_code)}&title=${encodeURIComponent(course.course_title)}`}>
@@ -298,7 +359,10 @@ export function ResultSubmissionsClient() {
             </Card>
           )
         })}
-      </div>
+            </div>
+          </section>
+        )
+      })}
     </div>
   )
 }
