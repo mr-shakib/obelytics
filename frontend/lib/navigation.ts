@@ -117,7 +117,7 @@ export function isSectionTeacherView(permissions: string[]) {
   return (
     permissions.includes("marks.enter") &&
     !permissions.includes("curriculum.create") &&
-    !permissions.includes("co.approve")
+    !permissions.includes("result.approve.ml")
   )
 }
 
