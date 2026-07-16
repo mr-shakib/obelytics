@@ -664,24 +664,24 @@
       </tbody>
     </table>
 
-    {% if cie_tools %}
-    <div class="assessment-band">CIE – Breakup (Theory) [{{ cie_total }} marks]</div>
+    {% if bloom_dist_tools %}
+    <div class="assessment-band">Bloom's Criteria wise Marks Distribution [{{ bloom_dist_total }} marks]</div>
     <table class="assessment-pattern-table">
       <thead>
         <tr>
           <th rowspan="2" style="width:17%">Bloom’s<br>Criteria</th>
-          {% for tool in cie_tools %}
+          {% for tool in bloom_dist_tools %}
           <th>{{ tool.name }}</th>
           {% endfor %}
         </tr>
         <tr>
-          {% for tool in cie_tools %}
+          {% for tool in bloom_dist_tools %}
           <th>{{ tool.display_total }}</th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
-        {% for row in cie_bloom_rows %}
+        {% for row in bloom_dist_rows %}
         <tr>
           <td class="centered-cell">{{ row.name }}</td>
           {% for mark in row.marks %}

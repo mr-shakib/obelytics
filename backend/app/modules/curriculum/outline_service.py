@@ -506,37 +506,54 @@ class CourseOutlineService:
                 (mark.component, mark.assessment_type_id, mark.bloom_level_id)
             ] = mark.marks
 
-        cie_tools = [
-            {
-                "id": tool.assessment_type_id,
-                "name": assessment_types[tool.assessment_type_id].name,
-                "total": _fmt_marks(
-                    next(
-                        (
-                            Decimal(str(row["total_marks"]))
-                            for row in assessment_rows
-                            if row["name"] == assessment_types[tool.assessment_type_id].name
-                        ),
-                        Decimal("0"),
-                    )
-                )
-            }
-            for tool in assessment_tools
-            if tool.assessment_type_id in assessment_types
-            and assessment_types[tool.assessment_type_id].is_sessional
-        ]
-        for tool in cie_tools:
-            tool["display_total"] = _fmt_tool_marks(Decimal(str(tool["total"])))
-        cie_total = _fmt_marks(sum(Decimal(str(tool["total"])) for tool in cie_tools))
-        cie_bloom_rows = []
-        for level in cognitive_bloom_levels:
-            marks = [
-                _fmt_marks(bloom_marks_by_component_tool_level.get(("CIE", tool["id"], level.id), 0))
-                if bloom_marks_by_component_tool_level.get(("CIE", tool["id"], level.id), 0)
-                else ""
-                for tool in cie_tools
+        def _find_assessment_tool(predicate):
+            for tool in assessment_tools:
+                assessment_type = assessment_types.get(tool.assessment_type_id)
+                if assessment_type and predicate(assessment_type.name.lower()):
+                    return tool, assessment_type
+            return None, None
+
+        if (course.course_type or "").upper() == "LAB":
+            bloom_dist_columns = [
+                ("Lab Final", lambda name: "lab" in name and "final" in name),
             ]
-            cie_bloom_rows.append({"name": level.name, "marks": marks})
+        else:
+            bloom_dist_columns = [
+                ("Mid Term", lambda name: "mid" in name),
+                ("Final", lambda name: "final" in name and "lab" not in name),
+            ]
+
+        bloom_dist_tools = []
+        for label, predicate in bloom_dist_columns:
+            tool, assessment_type = _find_assessment_tool(predicate)
+            if tool is None:
+                continue
+            total = next(
+                (
+                    Decimal(str(row["total_marks"]))
+                    for row in assessment_rows
+                    if row["name"] == assessment_type.name
+                ),
+                Decimal("0"),
+            )
+            bloom_dist_tools.append({
+                "id": tool.assessment_type_id,
+                "name": label,
+                "total": _fmt_marks(total),
+                "display_total": _fmt_tool_marks(total),
+            })
+        bloom_dist_total = _fmt_marks(sum(Decimal(str(tool["total"])) for tool in bloom_dist_tools))
+        bloom_dist_rows = []
+        for level in cognitive_bloom_levels:
+            marks = []
+            for tool in bloom_dist_tools:
+                value = (
+                    bloom_marks_by_component_tool_level.get(("CIE", tool["id"], level.id))
+                    or bloom_marks_by_component_tool_level.get(("SEE", tool["id"], level.id))
+                    or Decimal("0")
+                )
+                marks.append(_fmt_marks(value) if value else "")
+            bloom_dist_rows.append({"name": level.name, "marks": marks})
 
         see_marks_by_level: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
         for mark in bloom_marks:
@@ -724,9 +741,9 @@ class CourseOutlineService:
             "assessment_co_codes": assessment_co_codes,
             "assessment_co_totals": assessment_co_totals,
             "assessment_matrix_rows": assessment_matrix_rows,
-            "cie_tools": cie_tools,
-            "cie_total": cie_total,
-            "cie_bloom_rows": cie_bloom_rows,
+            "bloom_dist_tools": bloom_dist_tools,
+            "bloom_dist_total": bloom_dist_total,
+            "bloom_dist_rows": bloom_dist_rows,
             "see_total": see_total,
             "see_bloom_rows": see_bloom_rows,
             "grand_total": _fmt_marks(grand_total),
