@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
@@ -80,17 +81,17 @@ export function MyProfileClient() {
             {pwError && <p className="text-sm text-destructive">{pwError}</p>}
             <div className="space-y-2">
               <Label htmlFor="current_password">Current Password</Label>
-              <Input id="current_password" type="password" {...register("current_password")} />
+              <PasswordInput id="current_password" autoComplete="current-password" {...register("current_password")} />
               {errors.current_password && <p className="text-xs text-destructive">{errors.current_password.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="new_password">New Password</Label>
-              <Input id="new_password" type="password" {...register("new_password")} />
+              <PasswordInput id="new_password" autoComplete="new-password" {...register("new_password")} />
               {errors.new_password && <p className="text-xs text-destructive">{errors.new_password.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm_password">Confirm New Password</Label>
-              <Input id="confirm_password" type="password" {...register("confirm_password")} />
+              <PasswordInput id="confirm_password" autoComplete="new-password" {...register("confirm_password")} />
               {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
             </div>
             <Button type="submit" disabled={isSubmitting}>
