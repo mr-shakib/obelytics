@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -83,6 +83,10 @@ export function CoursesClient() {
   const [selCategoryId, setSelCategoryId] = useState("")
   const [selCourseType, setSelCourseType] = useState("")
   const [selPrereqIds, setSelPrereqIds] = useState<string[]>([])
+  const [search, setSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("__all__")
+  const [typeFilter, setTypeFilter] = useState("__all__")
+  const [statusFilter, setStatusFilter] = useState("__all__")
   const qc = useQueryClient()
   const router = useRouter()
 
@@ -120,6 +124,25 @@ export function CoursesClient() {
     !canManageCourses && myModuleLeaderCourseIds.size > 0
       ? allCourses.filter((c) => myModuleLeaderCourseIds.has(c.id))
       : allCourses
+
+  // ── Search + filters ──────────────────────────────────────────────────────
+  const query = search.trim().toLowerCase()
+  const filteredCourses = courses.filter((c) => {
+    if (query && !`${c.code} ${c.title} ${c.description ?? ""}`.toLowerCase().includes(query)) return false
+    if (categoryFilter !== "__all__" && c.course_category_id !== categoryFilter) return false
+    if (typeFilter !== "__all__" && c.course_type !== typeFilter) return false
+    if (statusFilter !== "__all__" && c.status !== statusFilter) return false
+    return true
+  })
+  const statusOptions = [...new Set(courses.map((c) => c.status))].sort()
+  const hasActiveFilters =
+    query !== "" || categoryFilter !== "__all__" || typeFilter !== "__all__" || statusFilter !== "__all__"
+  const clearFilters = () => {
+    setSearch("")
+    setCategoryFilter("__all__")
+    setTypeFilter("__all__")
+    setStatusFilter("__all__")
+  }
 
   const courseCategoryById = Object.fromEntries(courseCategories.map((t) => [t.id, t]))
 
@@ -464,15 +487,79 @@ export function CoursesClient() {
           </PermissionGate>
         }
       />
+      {/* Search + filters */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative w-72">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-8"
+            placeholder="Search by code or title…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={categoryFilter} onValueChange={(v) => { if (v != null) setCategoryFilter(v as string) }}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All Categories">
+              {categoryFilter === "__all__" ? "All Categories" : (courseCategoryById[categoryFilter]?.name ?? "All Categories")}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Categories</SelectItem>
+            {courseCategories.map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={(v) => { if (v != null) setTypeFilter(v as string) }}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All Types">
+              {typeFilter === "__all__" ? "All Types" : (COURSE_TYPE_LABELS[typeFilter] ?? typeFilter)}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Types</SelectItem>
+            {Object.entries(COURSE_TYPE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => { if (v != null) setStatusFilter(v as string) }}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All Statuses">
+              {statusFilter === "__all__" ? "All Statuses" : statusFilter}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Statuses</SelectItem>
+            {statusOptions.map((s) => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear
+          </Button>
+        )}
+        {hasActiveFilters && (
+          <span className="text-sm text-muted-foreground">
+            {filteredCourses.length} of {courses.length} course{courses.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
       <DataTable
         columns={columns}
-        data={courses}
+        data={filteredCourses}
         loading={isLoading}
         onRowClick={(row) => router.push(`/courses/${row.id}`)}
         emptyMessage={
-          !canManageCourses && myAssignments.length === 0
-            ? "You haven't been assigned as Module Leader for any course yet."
-            : "No courses found."
+          hasActiveFilters
+            ? "No courses match your search or filters."
+            : !canManageCourses && myAssignments.length === 0
+              ? "You haven't been assigned as Module Leader for any course yet."
+              : "No courses found."
         }
       />
     </div>
