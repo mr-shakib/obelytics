@@ -510,6 +510,12 @@ export function CourseAssessmentClient({ id }: Props) {
           finalTotalMarks={assessmentTools
             .filter((t) => t.assessment_type_name.toLowerCase().includes("final") && !t.assessment_type_name.toLowerCase().includes("lab"))
             .reduce((sum, t) => sum + (coMarkByKey[coMarkCellKey(t.assessment_type_id, TOTAL_COL)] ?? 0), 0)}
+          labFinalTotalMarks={assessmentTools
+            .filter((t) => {
+              const name = t.assessment_type_name.toLowerCase()
+              return name.includes("lab") && name.includes("final")
+            })
+            .reduce((sum, t) => sum + (coMarkByKey[coMarkCellKey(t.assessment_type_id, TOTAL_COL)] ?? 0), 0)}
         />
       )}
 

@@ -64,6 +64,8 @@ type CellState = {
 interface Props {
   sectionOfferingId: string
   examType: "MID" | "FINAL"
+  examLabel?: string
+  coWise?: boolean
   courseOutcomes: CourseOutcome[]
   locked?: boolean
 }
@@ -86,9 +88,10 @@ function questionImportHeaders(question: MarksheetQuestion) {
   return [label, `${label} (${marksLabel} marks)`, `${label} [${marksLabel} marks]`]
 }
 
-export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }: Props) {
+export function ExamGrid({ sectionOfferingId, examType, examLabel, coWise, courseOutcomes, locked }: Props) {
   const qc = useQueryClient()
   const canEnterMarks = useHasAnyPermission(["marks.enter"]) && !locked
+  const label = examLabel ?? EXAM_LABEL[examType] ?? examType
 
   const [cells, setCells] = useState<Map<string, CellState>>(new Map())
   const [absent, setAbsent] = useState<Map<string, boolean>>(new Map())
@@ -349,8 +352,10 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {questions.length > 0
-            ? `${questions.length} question${questions.length === 1 ? "" : "s"} · ${totalMaxMarks} total marks · ${mappedCoCount} CO${mappedCoCount === 1 ? "" : "s"} mapped`
-            : "No questions configured for this exam yet."}
+            ? coWise
+              ? `${questions.length} CO${questions.length === 1 ? "" : "s"} · ${totalMaxMarks} total marks — enter marks per CO`
+              : `${questions.length} question${questions.length === 1 ? "" : "s"} · ${totalMaxMarks} total marks · ${mappedCoCount} CO${mappedCoCount === 1 ? "" : "s"} mapped`
+            : `No ${coWise ? "CO-wise marks" : "questions"} configured for this ${coWise ? "assessment" : "exam"} yet.`}
         </p>
         {canEnterMarks ? (
           <div className="flex items-center gap-3">
@@ -396,8 +401,8 @@ export function ExamGrid({ sectionOfferingId, examType, courseOutcomes, locked }
       {questions.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            {EXAM_LABEL[examType] ?? examType} questions have not been configured yet.
-            Use the Question Configuration section to set them up.
+            {label} marks have not been configured yet.
+            Use the configuration section above to set them up.
           </CardContent>
         </Card>
       ) : !grid || grid.students.length === 0 ? (

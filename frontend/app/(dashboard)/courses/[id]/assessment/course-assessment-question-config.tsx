@@ -52,6 +52,8 @@ function ConfigureQuestionsDialog({
   questions,
   courseOutcomes,
   examType,
+  examLabel,
+  coWiseOnly = false,
   totalMarks,
   onSave,
   saving,
@@ -60,6 +62,8 @@ function ConfigureQuestionsDialog({
   questions: MarksheetQuestion[]
   courseOutcomes: CourseOutcome[]
   examType: string
+  examLabel?: string
+  coWiseOnly?: boolean
   totalMarks: number
   onSave: (questions: DraftQuestion[]) => void
   saving: boolean
@@ -125,6 +129,29 @@ function ConfigureQuestionsDialog({
 
   const cosWithMarks = courseOutcomes.filter((co) => (Number(coTargets[co.id]) || 0) > 0)
 
+  const label = examLabel ?? EXAM_LABEL[examType] ?? examType
+
+  // CO-wise only mode (lab courses): each CO allocation becomes one grid
+  // column directly — there is no question-mapping step.
+  const handleCoWiseSave = () => {
+    const rows: DraftQuestion[] = courseOutcomes
+      .filter((co) => (Number(coTargets[co.id]) || 0) > 0)
+      .map((co) => ({
+        label: co.code,
+        max_marks: String(Number(coTargets[co.id])),
+        course_outcome_id: co.id,
+      }))
+    if (rows.length === 0) {
+      toast.error("Allocate marks to at least one CO")
+      return
+    }
+    if (totalMarks > 0 && coTargetTotal > totalMarks) {
+      toast.error(`Total marks (${coTargetTotal}) exceed the assigned ${totalMarks} marks for ${label}`)
+      return
+    }
+    onSave(rows)
+  }
+
   const handleSave = () => {
     const rows = draft.filter((row) => row.label.trim().length > 0)
     for (const row of rows) {
@@ -152,17 +179,64 @@ function ConfigureQuestionsDialog({
     onSave(rows)
   }
 
+  const coMarksBody = (
+    <>
+      <p className="text-sm text-muted-foreground">
+        {coWiseOnly ? (
+          <>
+            Decide how many marks each course outcome is worth in the{" "}
+            {label.toLowerCase()}. Section teachers will enter marks per CO directly.
+          </>
+        ) : (
+          <>
+            Decide how many marks each course outcome is worth in this{" "}
+            {label.toLowerCase()}. You&apos;ll map individual questions to these COs next.
+          </>
+        )}
+      </p>
+      {courseOutcomes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No course outcomes defined for this course yet.</p>
+      ) : (
+        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+          {courseOutcomes.map((co) => (
+            <div key={co.id} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{co.code}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2">{co.statement}</p>
+              </div>
+              <Input
+                type="number"
+                min={0}
+                step="0.5"
+                placeholder="0"
+                value={coTargets[co.id] ?? ""}
+                onChange={(e) => setCoTargets((prev) => ({ ...prev, [co.id]: e.target.value }))}
+                className="w-20"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      <p className={`text-sm font-medium ${totalMarks > 0 && coTargetTotal > totalMarks ? "text-destructive" : ""}`}>
+        Total allocated: {coTargetTotal}{totalMarks > 0 ? ` / ${totalMarks}` : ""}
+      </p>
+    </>
+  )
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button variant="outline" size="sm" />}>
         <Settings className="h-3.5 w-3.5" />
-        {EXAM_LABEL[examType] ?? examType}
+        {label}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{EXAM_LABEL[examType] ?? examType} — Questions</DialogTitle>
+          <DialogTitle>{label} — {coWiseOnly ? "CO-wise Marks" : "Questions"}</DialogTitle>
         </DialogHeader>
 
+        {coWiseOnly ? (
+          <div className="space-y-3 pt-1">{coMarksBody}</div>
+        ) : (
         <Tabs value={step} onValueChange={(v) => setStep(v as "co-marks" | "questions")} className="min-w-0">
           <TabsList className="w-full">
             <TabsTrigger value="co-marks" className="flex-1">1. CO Marks</TabsTrigger>
@@ -170,35 +244,7 @@ function ConfigureQuestionsDialog({
           </TabsList>
 
           <TabsContent value="co-marks" className="space-y-3 pt-3">
-            <p className="text-sm text-muted-foreground">
-              Decide how many marks each course outcome is worth in this{" "}
-              {EXAM_LABEL[examType]?.toLowerCase() ?? "exam"}. You&apos;ll map individual
-              questions to these COs next.
-            </p>
-            {courseOutcomes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No course outcomes defined for this course yet.</p>
-            ) : (
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {courseOutcomes.map((co) => (
-                  <div key={co.id} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{co.code}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{co.statement}</p>
-                    </div>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.5"
-                      placeholder="0"
-                      value={coTargets[co.id] ?? ""}
-                      onChange={(e) => setCoTargets((prev) => ({ ...prev, [co.id]: e.target.value }))}
-                      className="w-20"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-sm font-medium">Total allocated: {coTargetTotal}</p>
+            {coMarksBody}
           </TabsContent>
 
           <TabsContent value="questions" className="space-y-3 pt-3">
@@ -289,9 +335,18 @@ function ConfigureQuestionsDialog({
             )}
           </TabsContent>
         </Tabs>
+        )}
 
         <DialogFooter>
-          {step === "co-marks" ? (
+          {coWiseOnly ? (
+            <>
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button disabled={saving} onClick={handleCoWiseSave}>
+                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Save
+              </Button>
+            </>
+          ) : step === "co-marks" ? (
             <>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button onClick={() => setStep("questions")}>Next: Map Questions</Button>
@@ -318,16 +373,21 @@ function ConfigureQuestionsDialog({
 function CourseExamConfig({
   offeringIds,
   examType,
+  examLabel,
+  coWiseOnly,
   courseOutcomes,
   totalMarks,
 }: {
   offeringIds: string[]
   examType: "MID" | "FINAL"
+  examLabel?: string
+  coWiseOnly?: boolean
   courseOutcomes: CourseOutcome[]
   totalMarks: number
 }) {
   const qc = useQueryClient()
   const canonicalId = offeringIds[0] ?? ""
+  const label = examLabel ?? EXAM_LABEL[examType] ?? examType
 
   const { data: questions = [] } = useQuery({
     queryKey: queryKeys.marksheets.questions(canonicalId, examType),
@@ -362,7 +422,7 @@ function CourseExamConfig({
       )
     },
     onSuccess: () => {
-      toast.success(`${EXAM_LABEL[examType]} questions applied to all sections`)
+      toast.success(`${label} ${coWiseOnly ? "CO-wise marks" : "questions"} applied to all sections`)
       for (const oid of offeringIds) {
         qc.invalidateQueries({ queryKey: queryKeys.marksheets.questions(oid, examType) })
         qc.invalidateQueries({ queryKey: queryKeys.marksheets.grid(oid, examType) })
@@ -375,7 +435,7 @@ function CourseExamConfig({
     return (
       <Button variant="outline" size="sm" disabled>
         <Settings className="h-3.5 w-3.5" />
-        {EXAM_LABEL[examType] ?? examType}
+        {label}
       </Button>
     )
   }
@@ -385,6 +445,8 @@ function CourseExamConfig({
       questions={questions}
       courseOutcomes={courseOutcomes}
       examType={examType}
+      examLabel={examLabel}
+      coWiseOnly={coWiseOnly}
       totalMarks={totalMarks}
       onSave={(draft) => saveQuestionsMutation.mutate(draft)}
       saving={saveQuestionsMutation.isPending}
@@ -400,9 +462,25 @@ interface Props {
   curriculumId: string
   midTotalMarks?: number
   finalTotalMarks?: number
+  labFinalTotalMarks?: number
 }
 
-export function QuestionConfigCard({ courseId, curriculumId, midTotalMarks = 0, finalTotalMarks = 0 }: Props) {
+export function QuestionConfigCard({
+  courseId,
+  curriculumId,
+  midTotalMarks = 0,
+  finalTotalMarks = 0,
+  labFinalTotalMarks = 0,
+}: Props) {
+  const { data: course } = useQuery({
+    queryKey: queryKeys.courses.detail(courseId),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/courses/${courseId}` as never)
+      return (data as unknown) as { id: string; course_type: string }
+    },
+  })
+  const isLab = course?.course_type === "LAB"
+
   const { data: offerings = [], isLoading } = useQuery({
     queryKey: queryKeys.sectionOfferings.byCourse(courseId),
     queryFn: async () => {
@@ -429,12 +507,13 @@ export function QuestionConfigCard({ courseId, curriculumId, midTotalMarks = 0, 
     <PermissionGate permission="assessment.configure">
       <Card>
         <CardHeader>
-          <CardTitle>Question Configuration</CardTitle>
+          <CardTitle>{isLab ? "Lab Final Configuration" : "Question Configuration"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Configure exam questions once at the course level — the same questions are applied
-            to all sections automatically.
+            {isLab
+              ? "Set the CO-wise marks for the Lab Final once at the course level — the same configuration is applied to all sections automatically. Section teachers enter marks per CO."
+              : "Configure exam questions once at the course level — the same questions are applied to all sections automatically."}
           </p>
           {isLoading ? (
             <div className="flex gap-3">
@@ -448,18 +527,31 @@ export function QuestionConfigCard({ courseId, curriculumId, midTotalMarks = 0, 
           ) : (
             <>
               <div className="flex flex-wrap gap-3">
-                <CourseExamConfig
-                  offeringIds={offeringIds}
-                  examType="MID"
-                  courseOutcomes={courseOutcomes}
-                  totalMarks={midTotalMarks}
-                />
-                <CourseExamConfig
-                  offeringIds={offeringIds}
-                  examType="FINAL"
-                  courseOutcomes={courseOutcomes}
-                  totalMarks={finalTotalMarks}
-                />
+                {isLab ? (
+                  <CourseExamConfig
+                    offeringIds={offeringIds}
+                    examType="FINAL"
+                    examLabel="Lab Final"
+                    coWiseOnly
+                    courseOutcomes={courseOutcomes}
+                    totalMarks={labFinalTotalMarks}
+                  />
+                ) : (
+                  <>
+                    <CourseExamConfig
+                      offeringIds={offeringIds}
+                      examType="MID"
+                      courseOutcomes={courseOutcomes}
+                      totalMarks={midTotalMarks}
+                    />
+                    <CourseExamConfig
+                      offeringIds={offeringIds}
+                      examType="FINAL"
+                      courseOutcomes={courseOutcomes}
+                      totalMarks={finalTotalMarks}
+                    />
+                  </>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 Applies to {offeringIds.length} section{offeringIds.length !== 1 ? "s" : ""}.

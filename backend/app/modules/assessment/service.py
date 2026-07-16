@@ -1879,6 +1879,7 @@ class MarksheetService:
             select(
                 Course.code.label("course_code"),
                 Course.title.label("course_title"),
+                Course.course_type.label("course_type"),
                 Batch.name.label("batch_name"),
                 AcademicTerm.name.label("term_name"),
                 AcademicTerm.year.label("term_year"),
@@ -1945,6 +1946,7 @@ class MarksheetService:
                 "section_name": info.section_name,
             },
             "roster": roster,
+            "is_lab": info.course_type == "LAB",
             "mid_grid": mid_grid,
             "final_grid": final_grid,
             "attainment": attainment,
@@ -1965,6 +1967,7 @@ class MarksheetService:
                 SectionOffering.id.label("section_offering_id"),
                 Course.code.label("course_code"),
                 Course.title.label("course_title"),
+                Course.course_type.label("course_type"),
                 Batch.name.label("batch_name"),
                 AcademicTerm.name.label("term_name"),
                 AcademicTerm.year.label("term_year"),
@@ -2020,6 +2023,7 @@ class MarksheetService:
                 "term_season": first.term_season,
             },
             "sections": sections,
+            "is_lab": first.course_type == "LAB",
             "org": {
                 "name": org.name if org else "",
                 "short_name": org.short_name if org else "",

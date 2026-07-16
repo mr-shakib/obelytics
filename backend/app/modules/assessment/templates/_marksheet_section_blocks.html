@@ -1,7 +1,7 @@
-  {% for grid in [mid_grid, final_grid] %}
+  {% for grid in ([final_grid] if is_lab else [mid_grid, final_grid]) %}
   <!-- Marks Grid -->
   <div class="section">
-    <div class="section-header">{{ grid.exam_type }} Marks</div>
+    <div class="section-header">{{ "LAB FINAL" if is_lab else grid.exam_type }} Marks</div>
     {% if grid.questions %}
     <table class="bordered matrix small">
       <thead>
@@ -29,7 +29,7 @@
       </tbody>
     </table>
     {% else %}
-    <p class="muted">No {{ grid.exam_type }} questions configured</p>
+    <p class="muted">No {{ "LAB FINAL" if is_lab else grid.exam_type }} {{ "marks" if is_lab else "questions" }} configured</p>
     {% endif %}
   </div>
   {% endfor %}

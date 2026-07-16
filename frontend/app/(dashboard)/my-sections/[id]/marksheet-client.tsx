@@ -94,6 +94,17 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
     enabled: !canManageCurriculum,
   })
 
+  const { data: course } = useQuery({
+    queryKey: queryKeys.courses.detail(offering?.course_id ?? ""),
+    queryFn: async () => {
+      const { data } = await apiClient.GET(`/courses/${offering!.course_id}` as never)
+      return (data as unknown) as { id: string; course_type: string }
+    },
+    enabled: !!offering,
+  })
+  const isLab = course?.course_type === "LAB"
+  const finalLabel = isLab ? "Lab Final" : "Final Exam"
+
   const isMyModule = canManageCurriculum || myModuleAssignments.some((a) => a.course_id === offering?.course_id)
 
   const { data: courseOutcomes = [] } = useQuery({
@@ -145,8 +156,10 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
 
   const hasMidMarks = midQuestions.length > 0
   const hasFinalMarks = finalQuestions.length > 0
+  // Lab courses only have the Lab Final (stored as FINAL) — no mid term exam.
+  const hasRequiredMarks = isLab ? hasFinalMarks : hasMidMarks && hasFinalMarks
   const endReportSubmitted = endReport?.status === "SUBMITTED"
-  const canSubmitToML = canSubmit && result?.status === "DRAFT" && hasMidMarks && hasFinalMarks && !endReportSubmitted
+  const canSubmitToML = canSubmit && result?.status === "DRAFT" && hasRequiredMarks && !endReportSubmitted
   const endReportExists = endReport && endReport.id !== "00000000-0000-0000-0000-000000000000"
 
   async function handleDownloadEndReportPdf() {
@@ -234,9 +247,11 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
                 <Send className="h-4 w-4" /> Submit Report
               </Button>
             )}
-            {canSubmit && result?.status === "DRAFT" && !endReportSubmitted && (!hasMidMarks || !hasFinalMarks) && (
+            {canSubmit && result?.status === "DRAFT" && !endReportSubmitted && !hasRequiredMarks && (
               <div className="text-xs text-muted-foreground max-w-48">
-                Enter both MID and FINAL marks before submitting
+                {isLab
+                  ? "Enter Lab Final marks before submitting"
+                  : "Enter both MID and FINAL marks before submitting"}
               </div>
             )}
             <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/my-sections" />}>
@@ -271,8 +286,8 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
       <Tabs defaultValue="roster">
         <TabsList>
           <TabsTrigger value="roster">Students</TabsTrigger>
-          <TabsTrigger value="MID">Mid Term</TabsTrigger>
-          <TabsTrigger value="FINAL">Final Exam</TabsTrigger>
+          {!isLab && <TabsTrigger value="MID">Mid Term</TabsTrigger>}
+          <TabsTrigger value="FINAL">{finalLabel}</TabsTrigger>
           <TabsTrigger value="marks-co-po">Marks vs CO/PO</TabsTrigger>
           <TabsTrigger value="attainment">CO/PO Attainment</TabsTrigger>
         </TabsList>
@@ -281,12 +296,14 @@ export function MarksheetClient({ sectionOfferingId }: Props) {
           <RosterPanel sectionOfferingId={sectionOfferingId} locked={isLocked} />
         </TabsContent>
 
-        <TabsContent value="MID" className="mt-4">
-          <ExamGrid sectionOfferingId={sectionOfferingId} examType="MID" courseOutcomes={courseOutcomes} locked={isLocked} />
-        </TabsContent>
+        {!isLab && (
+          <TabsContent value="MID" className="mt-4">
+            <ExamGrid sectionOfferingId={sectionOfferingId} examType="MID" courseOutcomes={courseOutcomes} locked={isLocked} />
+          </TabsContent>
+        )}
 
         <TabsContent value="FINAL" className="mt-4">
-          <ExamGrid sectionOfferingId={sectionOfferingId} examType="FINAL" courseOutcomes={courseOutcomes} locked={isLocked} />
+          <ExamGrid sectionOfferingId={sectionOfferingId} examType="FINAL" examLabel={finalLabel} coWise={isLab} courseOutcomes={courseOutcomes} locked={isLocked} />
         </TabsContent>
 
         <TabsContent value="marks-co-po" className="mt-4">
