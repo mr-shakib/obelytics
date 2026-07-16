@@ -15,6 +15,7 @@ from app.modules.approval.router import router as approval_router
 from app.modules.assessment.router import router as assessment_router
 from app.modules.attainment.router import router as attainment_router
 from app.modules.audit.router import router as audit_router
+from app.modules.copilot.router import router as copilot_router
 from app.modules.curriculum.router import router as curriculum_router
 from app.modules.iam.router.admin_router import router as admin_router
 from app.modules.iam.router.auth_router import router as auth_router
@@ -112,6 +113,9 @@ def create_app() -> FastAPI:
     # Phase 9 — Reporting + Accreditation
     app.include_router(reporting_router, prefix=settings.API_V1_PREFIX)
     app.include_router(accreditation_router, prefix=settings.API_V1_PREFIX)
+
+    # Phase 10 — Role-aware copilot
+    app.include_router(copilot_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

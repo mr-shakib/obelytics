@@ -108,5 +108,11 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "Obelytics <noreply@yourdomain.com>"
 
+    # Copilot (DeepSeek, OpenAI-compatible Chat Completions API)
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+    COPILOT_MAX_OUTPUT_TOKENS: int = 2048
+
 
 settings = Settings()

@@ -26,6 +26,7 @@ import {
   IdCard,
   FileCheck2,
   Wrench,
+  Bot,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -41,6 +42,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Core
   { label: "Dashboard", href: "/overview", icon: LayoutDashboard, permission: null, group: "Core" },
   { label: "Approvals", href: "/approvals", icon: CheckSquare, permission: null, group: "Core" },
+
+  // OBE Copilot
+  { label: "Chat", href: "/copilot", icon: Bot, permission: null, group: "Copilot" },
 
   // Organization & IAM
   { label: "Organization", href: "/organization", icon: Building2, permission: "system.organization.configure", group: "Configuration" },
@@ -83,12 +87,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Audit Log", href: "/audit", icon: ScrollText, permission: "system.audit.read", group: "System" },
 ]
 
-export const NAV_GROUPS = ["Core", "Configuration", "Curriculum", "OBE", "Assessment", "Reports", "System"] as const
+export const NAV_GROUPS = ["Core", "Copilot", "Configuration", "Curriculum", "OBE", "Assessment", "Reports", "System"] as const
 
 export type NavGroup = typeof NAV_GROUPS[number]
 
 export const NAV_GROUP_META: Record<NavGroup, { icon: LucideIcon; label: string; short: string }> = {
   Core:          { icon: LayoutDashboard,   label: "Core",          short: "Core"    },
+  Copilot:       { icon: Bot,               label: "OBE Copilot",   short: "Copilot" },
   Configuration: { icon: SlidersHorizontal, label: "Configuration", short: "Config"  },
   Curriculum:    { icon: GraduationCap,     label: "Curriculum",    short: "Curric"  },
   OBE:           { icon: Target,            label: "OBE",           short: "OBE"     },

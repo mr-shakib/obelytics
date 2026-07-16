@@ -12,35 +12,82 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings
 from app.core.database import Base
+from app.modules.accreditation.models import (  # noqa: F401
+    AccreditationCriterion,
+    AccreditationCycle,
+    CriterionPOMapping,
+)
+from app.modules.approval.models import ReviewComment  # noqa: F401
+from app.modules.assessment.models import (  # noqa: F401
+    Assessment,
+    AssessmentCOWeight,
+    ResultPublication,
+    Student,
+    StudentEnrollment,
+    StudentMark,
+)
+from app.modules.attainment.models import (  # noqa: F401
+    AttainmentConfig,
+    COAttainmentResult,
+    POAttainmentResult,
+)
+from app.modules.audit.models import AuditLog  # noqa: F401
+from app.modules.copilot.models import CopilotConversation, CopilotMessage  # noqa: F401
+from app.modules.curriculum.models import (  # noqa: F401
+    AcademicTerm,
+    Batch,
+    Course,
+    CourseBloomDomain,
+    CoursePrerequisite,
+    Curriculum,
+    CurriculumCourseSlot,
+    CurriculumTermDefinition,
+    FacultyAssignment,
+    Section,
+    SectionOffering,
+)
+from app.modules.iam.models import (  # noqa: F401
+    PasswordCredential,
+    Permission,
+    RefreshToken,
+    Role,
+    RolePermission,
+    User,
+    UserRoleAssignment,
+)
+from app.modules.notification.models import Notification  # noqa: F401
+from app.modules.obe.models import (  # noqa: F401
+    COCAMapping,
+    COCPMapping,
+    CODeliveryMethod,
+    COKPMapping,
+    COPOMappingEntry,
+    COPOMappingSet,
+    CourseOutcome,
+    POKnowledgeProfile,
+    ProgramOutcome,
+)
+from app.modules.org.models import (  # noqa: F401
+    Department,
+    DepartmentHeadHistory,
+    Organization,
+    Program,
+)
+from app.modules.ref_data.models import (  # noqa: F401
+    AssessmentType,
+    BloomDomain,
+    BloomLevel,
+    ComplexActivity,
+    ComplexProblem,
+    CourseCategory,
+    DeliveryMethod,
+    KnowledgeProfile,
+    MappingWeightLabel,
+)
 
 # ── Import all models here so Alembic autogenerate can detect them ──
 from app.shared.events.outbox import OutboxEvent  # noqa: F401
-from app.modules.iam.models import (  # noqa: F401
-    User, PasswordCredential, RefreshToken, Role, Permission, RolePermission, UserRoleAssignment
-)
-from app.modules.org.models import Organization, Department, DepartmentHeadHistory, Program  # noqa: F401
-from app.modules.ref_data.models import (  # noqa: F401
-    BloomDomain, BloomLevel, DeliveryMethod, CourseCategory, AssessmentType,
-    ComplexProblem, ComplexActivity, KnowledgeProfile, MappingWeightLabel,
-)
-from app.modules.curriculum.models import (  # noqa: F401
-    Curriculum, CurriculumTermDefinition, Course, CourseBloomDomain, CurriculumCourseSlot,
-    CoursePrerequisite, Batch, AcademicTerm, Section, SectionOffering, FacultyAssignment,
-)
-from app.modules.obe.models import (  # noqa: F401
-    ProgramOutcome, POKnowledgeProfile, CourseOutcome, CODeliveryMethod,
-    COPOMappingSet, COPOMappingEntry, COCPMapping, COCAMapping, COKPMapping,
-)
-from app.modules.assessment.models import (  # noqa: F401
-    Student, StudentEnrollment, Assessment, AssessmentCOWeight, StudentMark, ResultPublication,
-)
-from app.modules.attainment.models import AttainmentConfig, COAttainmentResult, POAttainmentResult  # noqa: F401
-from app.modules.approval.models import ReviewComment  # noqa: F401
-from app.modules.audit.models import AuditLog  # noqa: F401
-from app.modules.notification.models import Notification  # noqa: F401
-from app.modules.accreditation.models import (  # noqa: F401
-    AccreditationCycle, AccreditationCriterion, CriterionPOMapping,
-)
+
 # Reporting has no models (pure query module)
 
 alembic_config = context.config

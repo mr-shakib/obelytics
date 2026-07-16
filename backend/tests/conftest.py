@@ -54,6 +54,7 @@ from app.modules.attainment.models import AttainmentConfig, COAttainmentResult, 
 from app.modules.approval.models import ReviewComment  # noqa: F401
 from app.modules.audit.models import AuditLog  # noqa: F401
 from app.modules.notification.models import Notification  # noqa: F401
+from app.modules.copilot.models import CopilotConversation, CopilotMessage  # noqa: F401
 from app.modules.accreditation.models import (  # noqa: F401
     AccreditationCycle, AccreditationCriterion, CriterionPOMapping,
 )
@@ -77,7 +78,7 @@ TEST_PC_PASSWORD      = "TestPC@123"
 _SCHEMAS = [
     "events", "iam", "org", "config", "curriculum", "obe",
     "assessment", "attainment", "approval", "notification",
-    "audit", "accreditation", "reporting",
+    "audit", "accreditation", "reporting", "copilot",
 ]
 
 

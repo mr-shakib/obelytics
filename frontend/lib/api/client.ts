@@ -40,7 +40,7 @@ async function refreshToken(): Promise<string> {
   return data.access_token as string
 }
 
-async function interceptedFetch(
+export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
@@ -113,5 +113,5 @@ async function interceptedFetch(
 
 export const apiClient = createClient<paths>({
   baseUrl: `${PUBLIC_API_URL}/api/v1`,
-  fetch: interceptedFetch,
+  fetch: apiFetch,
 })
