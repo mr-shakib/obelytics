@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 from httpx import AsyncClient
 
@@ -68,3 +70,40 @@ async def test_conversation_is_private_to_its_owner(
         headers=teacher_auth_headers,
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_user_message_precedes_assistant_when_timestamps_match(
+    client: AsyncClient, auth_headers: dict[str, str], db_session
+):
+    from app.modules.copilot.models import CopilotMessage
+
+    created = await client.post(
+        "/api/v1/copilot/conversations",
+        headers=auth_headers,
+        json={"title": "Ordering test"},
+    )
+    conversation_id = created.json()["id"]
+
+    user_message = await client.post(
+        f"/api/v1/copilot/conversations/{conversation_id}/messages",
+        headers=auth_headers,
+        json={"content": "My question"},
+    )
+    user_data = user_message.json()
+
+    assistant = CopilotMessage(
+        conversation_id=conversation_id,
+        role="assistant",
+        content="The answer",
+        status="COMPLETE",
+        created_at=datetime.fromisoformat(user_data["created_at"]),
+    )
+    db_session.add(assistant)
+    await db_session.flush()
+
+    messages = await client.get(
+        f"/api/v1/copilot/conversations/{conversation_id}/messages",
+        headers=auth_headers,
+    )
+    assert [message["role"] for message in messages.json()] == ["user", "assistant"]

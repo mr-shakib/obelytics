@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { CircleDot, ChevronLeft, ChevronRight, ChevronDown, Settings } from "lucide-react"
+import { Bot, CircleDot, ChevronLeft, ChevronRight, ChevronDown, Settings } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import type { QueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
@@ -276,18 +276,48 @@ export function Sidebar() {
       <ScrollArea className="min-h-0 flex-1">
         <div className={cn("space-y-0.5 py-3", collapsed ? "px-2" : "px-2.5")}>
           {groups.map(({ group, items }) => (
-            <GroupSection
-              key={group}
-              group={group}
-              items={items}
-              collapsed={collapsed}
-              expanded={expandedGroup === group}
-              onToggle={() =>
-                setExpandedGroup((current) => (current === group ? null : group))
-              }
-              pathname={pathname}
-              qc={qc}
-            />
+            group === "Copilot" ? (
+              collapsed ? (
+                <Tooltip key={group}>
+                  <TooltipTrigger render={<span className="flex justify-center" />}>
+                    <Link
+                      href={items[0].href}
+                      aria-current={isNavItemActive(items[0], pathname) ? "page" : undefined}
+                      className={cn(
+                        "flex size-10 items-center justify-center rounded-lg transition-colors",
+                        isNavItemActive(items[0], pathname)
+                          ? "bg-sidebar-accent text-sidebar-primary"
+                          : "text-sidebar-foreground/38 hover:bg-sidebar-accent/65 hover:text-sidebar-primary/70"
+                      )}
+                    >
+                      <Bot className="size-[15px]" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>OBE Copilot</TooltipContent>
+                </Tooltip>
+              ) : (
+                <NavItemLink
+                  key={group}
+                  item={items[0]}
+                  active={isNavItemActive(items[0], pathname)}
+                  qc={qc}
+                  className="h-9 text-[13px]"
+                />
+              )
+            ) : (
+              <GroupSection
+                key={group}
+                group={group}
+                items={items}
+                collapsed={collapsed}
+                expanded={expandedGroup === group}
+                onToggle={() =>
+                  setExpandedGroup((current) => (current === group ? null : group))
+                }
+                pathname={pathname}
+                qc={qc}
+              />
+            )
           ))}
         </div>
       </ScrollArea>

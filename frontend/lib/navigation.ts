@@ -44,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Approvals", href: "/approvals", icon: CheckSquare, permission: null, group: "Core" },
 
   // OBE Copilot
-  { label: "Chat", href: "/copilot", icon: Bot, permission: null, group: "Copilot" },
+  { label: "OBE Copilot", href: "/copilot", icon: Bot, permission: null, group: "Copilot" },
 
   // Organization & IAM
   { label: "Organization", href: "/organization", icon: Building2, permission: "system.organization.configure", group: "Configuration" },
@@ -87,7 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Audit Log", href: "/audit", icon: ScrollText, permission: "system.audit.read", group: "System" },
 ]
 
-export const NAV_GROUPS = ["Core", "Copilot", "Configuration", "Curriculum", "OBE", "Assessment", "Reports", "System"] as const
+export const NAV_GROUPS = ["Core", "Configuration", "Curriculum", "OBE", "Assessment", "Reports", "Copilot", "System"] as const
 
 export type NavGroup = typeof NAV_GROUPS[number]
 

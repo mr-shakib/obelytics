@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.copilot.models import CopilotConversation, CopilotMessage
@@ -78,7 +78,11 @@ class CopilotConversationService:
         query = (
             select(CopilotMessage)
             .where(CopilotMessage.conversation_id == conversation_id)
-            .order_by(CopilotMessage.created_at.asc(), CopilotMessage.id.asc())
+            .order_by(
+                CopilotMessage.created_at.asc(),
+                case((CopilotMessage.role == "user", 0), else_=1),
+                CopilotMessage.id.asc(),
+            )
         )
         return list((await self.db.scalars(query)).all())
 
@@ -98,6 +102,7 @@ class CopilotConversationService:
             content=content,
             status=message_status,
             model=model,
+            created_at=datetime.now(timezone.utc),
         )
         now = datetime.now(timezone.utc)
         conversation.last_message_at = now
