@@ -21,6 +21,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { PageHeader } from "@/components/shared/page-header"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useCourseCompletion } from "../use-course-completion"
 import type { ModuleLeaderAssignment } from "../course-types"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -268,11 +269,15 @@ function AddSectionInline({
   batchName,
   existingCount,
   pending,
+  disabled,
+  disabledReason,
   onAdd,
 }: {
   batchName: string
   existingCount: number
   pending: boolean
+  disabled?: boolean
+  disabledReason?: string
   onAdd: (name: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -292,7 +297,14 @@ function AddSectionInline({
 
   if (!open) {
     return (
-      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setOpen(true)}>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs gap-1"
+        disabled={disabled}
+        title={disabled ? disabledReason : undefined}
+        onClick={() => setOpen(true)}
+      >
         <Plus className="h-3 w-3" />
         Add Section
       </Button>
@@ -479,6 +491,8 @@ function TermSectionGroup({
   term,
   facultyUsers,
   userMap,
+  addDisabled,
+  addDisabledReason,
 }: {
   courseId: string
   batchId: string
@@ -486,6 +500,8 @@ function TermSectionGroup({
   term: TermCalendarEntry
   facultyUsers: FacultyRosterEntry[]
   userMap: Record<string, string>
+  addDisabled?: boolean
+  addDisabledReason?: string
 }) {
   const qc = useQueryClient()
 
@@ -528,6 +544,8 @@ function TermSectionGroup({
             batchName={batchName}
             existingCount={offerings.length}
             pending={addMutation.isPending}
+            disabled={addDisabled}
+            disabledReason={addDisabledReason}
             onAdd={(name) => addMutation.mutate(name)}
           />
         </div>
@@ -565,6 +583,10 @@ interface Props {
 }
 
 export function CourseSectionsClient({ courseId }: Props) {
+  const { isComplete, completionPct, checks } = useCourseCompletion(courseId)
+  const missingItems = checks.filter((c) => !c.done).map((c) => c.label)
+  const addDisabledReason = `Course is ${completionPct}% complete — finish the course design before creating sections`
+
   const {
     data: myAssignments = [],
     isLoading: loadingAssignments,
@@ -621,6 +643,25 @@ export function CourseSectionsClient({ courseId }: Props) {
         description="Create section offerings for this course and assign a section teacher to each."
       />
 
+      {!isComplete && (
+        <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/10">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="space-y-1 text-sm">
+              <p className="font-medium">
+                Course design is {completionPct}% complete — sections can only be created once it
+                reaches 100%.
+              </p>
+              {missingItems.length > 0 && (
+                <p className="text-muted-foreground">
+                  Still missing: {missingItems.join(", ")}.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -662,6 +703,8 @@ export function CourseSectionsClient({ courseId }: Props) {
               term={term}
               facultyUsers={facultyUsers}
               userMap={userMap}
+              addDisabled={!isComplete}
+              addDisabledReason={addDisabledReason}
             />
           ))}
         </div>

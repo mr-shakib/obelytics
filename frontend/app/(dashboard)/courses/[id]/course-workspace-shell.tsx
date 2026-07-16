@@ -27,8 +27,8 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { PageHeader } from "@/components/shared/page-header"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
-import { useResolveCourseLocation } from "@/hooks/use-course-location"
-import { COURSE_TYPE_LABELS, type Course, type CourseCategory, type CourseAssessmentTool, type ModuleLeaderAssignment } from "./course-types"
+import { useCourseCompletion } from "./use-course-completion"
+import { COURSE_TYPE_LABELS, type CourseCategory, type ModuleLeaderAssignment } from "./course-types"
 
 const SECTIONS: { slug: string; label: string; icon: LucideIcon }[] = [
   { slug: "overview", label: "Overview", icon: LayoutDashboard },
@@ -38,8 +38,6 @@ const SECTIONS: { slug: string; label: string; icon: LucideIcon }[] = [
   { slug: "materials", label: "Learning Materials", icon: BookOpen },
   { slug: "sections", label: "Sections", icon: Users },
 ]
-const REQUIRED_DELIVERY_PLAN_WEEKS = 12
-
 interface Props {
   id: string
   children: React.ReactNode
@@ -47,18 +45,20 @@ interface Props {
 
 export function CourseWorkspaceShell({ id, children }: Props) {
   const pathname = usePathname()
-  const courseLocation = useResolveCourseLocation(id)
   const [showOutlineDialog, setShowOutlineDialog] = useState(false)
   const [excludedToolIds, setExcludedToolIds] = useState<Set<string>>(new Set())
   const [isDownloading, setIsDownloading] = useState(false)
 
-  const { data, isLoading } = useQuery({
-    queryKey: queryKeys.courses.detail(id),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(`/courses/${id}` as never)
-      return (data as unknown) as Course
-    },
-  })
+  const {
+    course: data,
+    isCourseLoading: isLoading,
+    curriculumId,
+    assessmentTools,
+    checks,
+    completedCount,
+    completionPct,
+    isComplete,
+  } = useCourseCompletion(id)
 
   const { data: courseCategories = [] } = useQuery({
     queryKey: queryKeys.courseCategories.all,
@@ -75,86 +75,6 @@ export function CourseWorkspaceShell({ id, children }: Props) {
       return ((data as unknown) as ModuleLeaderAssignment[]) ?? []
     },
   })
-
-  const curriculumId = courseLocation?.curriculumId
-
-  const { data: courseOutcomes = [] } = useQuery({
-    queryKey: queryKeys.courseOutcomes.list(curriculumId, id),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(
-        `/course-outcomes?curriculum_id=${curriculumId}&course_id=${id}` as never
-      )
-      return ((data as unknown) as { id: string }[]) ?? []
-    },
-    enabled: !!curriculumId,
-  })
-
-  const { data: objectives = [] } = useQuery({
-    queryKey: queryKeys.courseObjectives.byCourse(id),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(`/courses/${id}/objectives` as never)
-      return ((data as unknown) as { statement: string }[]) ?? []
-    },
-  })
-
-  const { data: lessonPlan = [] } = useQuery({
-    queryKey: queryKeys.courseLessonPlan.byCourse(id, curriculumId ?? ""),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(
-        `/courses/${id}/lesson-plan?curriculum_id=${curriculumId}` as never
-      )
-      return ((data as unknown) as { id: string; week_number: number }[]) ?? []
-    },
-    enabled: !!curriculumId,
-  })
-
-  const { data: mappingSet } = useQuery({
-    queryKey: queryKeys.coPoMappings.byCourse(curriculumId ?? "", id),
-    queryFn: async () => {
-      try {
-        const { data } = await apiClient.GET(
-          `/mappings/co-po?curriculum_id=${curriculumId}&course_id=${id}` as never
-        ) as { data: unknown }
-        return ((data as unknown) as { id: string } | null) ?? null
-      } catch {
-        return null
-      }
-    },
-    enabled: !!curriculumId,
-    retry: false,
-  })
-
-  const { data: assessmentTools = [] } = useQuery({
-    queryKey: queryKeys.courseAssessmentTools.byCourse(id, curriculumId ?? ""),
-    queryFn: async () => {
-      const { data } = await apiClient.GET(
-        `/courses/${id}/assessment-tools?curriculum_id=${curriculumId}` as never
-      )
-      return ((data as unknown) as CourseAssessmentTool[]) ?? []
-    },
-    enabled: !!curriculumId,
-  })
-
-  // ── Completion tracking ─────────────────────────────────────────────────
-  const assessmentToolsForCheck = assessmentTools.length > 0 ? assessmentTools : []
-  const checks: { label: string; done: boolean }[] = []
-  checks.push({ label: "Course description", done: !!data?.description })
-  checks.push({ label: "Course objectives", done: objectives.length > 0 })
-  checks.push({ label: "Course outcomes (COs)", done: courseOutcomes.length > 0 })
-  checks.push({ label: "Assessment tools", done: assessmentToolsForCheck.length > 0 })
-  checks.push({ label: "CO-PO mapping", done: !!mappingSet })
-  // Complete once every week from 1 through the required minimum is covered —
-  // a longer plan (13+ weeks) still counts, it just can't have gaps in 1..12.
-  const plannedWeekSet = new Set(lessonPlan.map((item) => item.week_number))
-  const hasCompleteDeliveryPlan = Array.from(
-    { length: REQUIRED_DELIVERY_PLAN_WEEKS },
-    (_, i) => i + 1
-  ).every((week) => plannedWeekSet.has(week))
-  checks.push({ label: "Delivery plan", done: hasCompleteDeliveryPlan })
-
-  const completedCount = checks.filter((c) => c.done).length
-  const completionPct = Math.round((completedCount / checks.length) * 100)
-  const isComplete = completionPct === 100
 
   if (isLoading) return <div className="animate-pulse h-40 bg-muted rounded-md" />
   if (!data) return <p className="text-muted-foreground">Course not found.</p>
