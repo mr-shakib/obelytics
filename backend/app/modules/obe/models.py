@@ -353,6 +353,7 @@ class COCAMapping(Base):
         ForeignKey("config.complex_activities.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    justification = Column(Text, nullable=False, server_default="Justification pending.")
     status = Column(String(20), nullable=False, server_default="DRAFT")
     # Plain UUIDs — no FK constraints
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)

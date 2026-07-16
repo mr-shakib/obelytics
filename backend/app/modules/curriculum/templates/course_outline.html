@@ -366,9 +366,10 @@
           <th style="width:6%">COs</th>
           <th>CO Statements</th>
           <th style="width:7%">POs</th>
-          <th style="width:13%">Learning Domains</th>
-          <th style="width:11%">Knowledge Profile</th>
-          <th style="width:13%">Complex Engineering Problem</th>
+          <th style="width:12%">Learning Domains</th>
+          <th style="width:10%">Knowledge Profile</th>
+          <th style="width:12%">Complex Engineering Problem</th>
+          <th style="width:12%">Complex Engineering Activities</th>
         </tr>
       </thead>
       <tbody>
@@ -380,6 +381,7 @@
           <td class="centered-cell">{{ co.bloom_codes | join(", ") }}</td>
           <td class="centered-cell">{{ co.kp_codes | join(", ") }}</td>
           <td class="centered-cell">{{ co.ep_codes | join(", ") }}</td>
+          <td class="centered-cell">{{ co.ea_codes | join(", ") }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -390,7 +392,7 @@
   </div>
 
   <!-- Legend -->
-  {% if bloom_legend or kp_legend or cp_legend %}
+  {% if bloom_legend or kp_legend or cp_legend or ca_legend %}
   <div class="section">
     <table class="legend-table">
       <tr>
@@ -409,6 +411,12 @@
           <span class="legend-title">CEP Attributes</span>
           {% for cp in cp_legend %}<span class="legend-entry">{{ cp.code }}: {{ cp.description }}</span><br>{% endfor %}
         </td>
+        {% if ca_legend %}
+        <td>
+          <span class="legend-title">CEA Attributes</span>
+          {% for ca in ca_legend %}<span class="legend-entry">{{ ca.code }}: {{ ca.description }}</span><br>{% endfor %}
+        </td>
+        {% endif %}
       </tr>
     </table>
   </div>
@@ -492,6 +500,33 @@
     </table>
     {% else %}
     <p class="muted">No CO-CEP mappings defined</p>
+    {% endif %}
+  </div>
+
+  <!-- Justification of Complex Engineering Activities (CEA) Attributes Mapping -->
+  <div class="section">
+    <div class="section-label">Justification of Complex Engineering Activities (CEA) Attributes Mapping:</div>
+    {% if co_ea_justifications %}
+    <table class="bordered">
+      <thead>
+        <tr><th style="width:8%">COs</th><th style="width:10%">CEA Attributes</th><th>Justification of Mapping</th></tr>
+      </thead>
+      <tbody>
+        {% for row in co_ea_justifications %}
+        <tr>
+          <td class="centered-cell">{{ row.co_code }}</td>
+          <td class="centered-cell">{{ row.codes | join("<br>") | safe }}</td>
+          <td>
+            {% for item in row.justifications %}
+              <strong>{{ item.code }}:</strong> {{ item.justification }}{% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No CO-CEA mappings defined</p>
     {% endif %}
   </div>
 

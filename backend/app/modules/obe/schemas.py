@@ -213,6 +213,7 @@ class COCPMappingResponse(BaseModel):
 class COCAMappingCreate(BaseModel):
     course_outcome_id: UUID
     complex_activity_id: UUID
+    justification: str = Field(min_length=1)
 
 
 class COCAMappingResponse(BaseModel):
@@ -220,6 +221,7 @@ class COCAMappingResponse(BaseModel):
     organization_id: UUID
     course_outcome_id: UUID
     complex_activity_id: UUID
+    justification: str
     status: str
     created_by_user_id: UUID | None
     approved_by_user_id: UUID | None

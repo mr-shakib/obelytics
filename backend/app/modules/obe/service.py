@@ -747,6 +747,7 @@ class COCAMappingService:
             organization_id=org_id,
             course_outcome_id=body.course_outcome_id,
             complex_activity_id=body.complex_activity_id,
+            justification=body.justification.strip(),
             status="DRAFT",
             created_by_user_id=user_id,
         )

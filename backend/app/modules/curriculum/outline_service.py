@@ -218,15 +218,20 @@ class CourseOutlineService:
         co_ca_ids: dict[UUID, set[UUID]] = {}
         co_kp_ids: dict[UUID, set[UUID]] = {}
         co_cp_justification_by_pair: dict[tuple[UUID, UUID], str] = {}
+        co_ca_justification_by_pair: dict[tuple[UUID, UUID], str] = {}
         co_kp_justification_by_pair: dict[tuple[UUID, UUID], str] = {}
         for co in cos:
             co_cp_mappings = await self._co_cp_repo.list_by_co(co.id)
+            co_ca_mappings = await self._co_ca_repo.list_by_co(co.id)
             co_kp_mappings = await self._co_kp_repo.list_by_co(co.id)
             co_cp_ids[co.id] = {m.complex_problem_id for m in co_cp_mappings}
-            co_ca_ids[co.id] = {m.complex_activity_id for m in await self._co_ca_repo.list_by_co(co.id)}
+            co_ca_ids[co.id] = {m.complex_activity_id for m in co_ca_mappings}
             co_kp_ids[co.id] = {m.knowledge_profile_id for m in co_kp_mappings}
             co_cp_justification_by_pair.update(
                 {(co.id, m.complex_problem_id): m.justification for m in co_cp_mappings}
+            )
+            co_ca_justification_by_pair.update(
+                {(co.id, m.complex_activity_id): m.justification for m in co_ca_mappings}
             )
             co_kp_justification_by_pair.update(
                 {(co.id, m.knowledge_profile_id): m.justification for m in co_kp_mappings}
@@ -238,8 +243,7 @@ class CourseOutlineService:
         bloom_level_by_id = {b.id: b for b in bloom_levels}
 
         cps = {c.id: c for c in await self._cp_repo.list_active(org_id)}
-        # Complex Engineering Activities (EA) are hidden in the course outline PDF for now.
-        # cas = {c.id: c for c in await self._ca_repo.list_active(org_id)}
+        cas = {c.id: c for c in await self._ca_repo.list_active(org_id)}
         kps = {c.id: c for c in await self._kp_repo.list_active(org_id)}
 
         pos = await self._po_repo.list_active(org_id)
@@ -248,14 +252,20 @@ class CourseOutlineService:
         # ── Referenced codes (for filtering legends) ─────────────────────
         referenced_bloom_level_ids: set[UUID] = set()
         referenced_cp_ids: set[UUID] = set()
+        referenced_ca_ids: set[UUID] = set()
         referenced_kp_ids: set[UUID] = set()
         for co in cos:
             referenced_bloom_level_ids.update(bloom_level_ids_by_co.get(co.id, []))
             referenced_cp_ids.update(co_cp_ids[co.id])
+            referenced_ca_ids.update(co_ca_ids[co.id])
             referenced_kp_ids.update(co_kp_ids[co.id])
 
         cp_columns = sorted(
             (cps[cid] for cid in referenced_cp_ids if cid in cps),
+            key=lambda c: _natural_key(c.code),
+        )
+        ca_columns = sorted(
+            (cas[cid] for cid in referenced_ca_ids if cid in cas),
             key=lambda c: _natural_key(c.code),
         )
         kp_columns = sorted(
@@ -288,18 +298,17 @@ class CourseOutlineService:
                     (_format_ep_code(cps[cid].code) for cid in co_cp_ids[co.id] if cid in cps),
                     key=_natural_key,
                 ),
-                # Complex Engineering Activities (EA) are intentionally hidden in the
-                # course outline PDF for now.
-                # "ea_codes": sorted(
-                #     (cas[cid].code for cid in co_ca_ids[co.id] if cid in cas),
-                #     key=_natural_key,
-                # ),
+                "ea_codes": sorted(
+                    (cas[cid].code for cid in co_ca_ids[co.id] if cid in cas),
+                    key=_natural_key,
+                ),
             })
 
         # ── Mapping justification tables (filtered to COs with mappings) ──
         co_po_justifications = []
         co_kp_justifications = []
         co_ep_justifications = []
+        co_ea_justifications = []
         for co in cos:
             po_rows = []
             for (co_id, po_id), justification in co_po_justification_by_pair.items():
@@ -342,7 +351,21 @@ class CourseOutlineService:
                     "codes": [row["code"] for row in ep_rows],
                     "justifications": sorted(ep_rows, key=lambda row: _natural_key(row["code"])),
                 })
-        # ── Legend (Bloom / Knowledge Profile / CEP, filtered to referenced) ─
+
+            ea_rows = []
+            for ca_id in co_ca_ids[co.id]:
+                if ca_id in cas:
+                    ea_rows.append({
+                        "code": cas[ca_id].code,
+                        "justification": co_ca_justification_by_pair.get((co.id, ca_id), ""),
+                    })
+            if ea_rows:
+                co_ea_justifications.append({
+                    "co_code": co.code,
+                    "codes": [row["code"] for row in ea_rows],
+                    "justifications": sorted(ea_rows, key=lambda row: _natural_key(row["code"])),
+                })
+        # ── Legend (Bloom / Knowledge Profile / CEP / CEA, filtered to referenced) ─
         bloom_legend = []
         for domain in bloom_domains.values():
             levels = sorted(
@@ -365,6 +388,10 @@ class CourseOutlineService:
                 "description": _format_ep_description(c.code, c.description),
             }
             for c in cp_columns
+        ]
+        ca_legend = [
+            {"code": c.code, "description": c.name or c.description}
+            for c in ca_columns
         ]
 
         # ── Assessment tools + CO-wise marks ─────────────────────────────
@@ -684,8 +711,10 @@ class CourseOutlineService:
             "co_po_justifications": co_po_justifications,
             "co_kp_justifications": co_kp_justifications,
             "co_ep_justifications": co_ep_justifications,
+            "co_ea_justifications": co_ea_justifications,
             "bloom_legend": bloom_legend,
             "cp_legend": cp_legend,
+            "ca_legend": ca_legend,
             "kp_legend": kp_legend,
             "tool_co_mapping": tool_co_mapping,
             "po_validation": po_validation,

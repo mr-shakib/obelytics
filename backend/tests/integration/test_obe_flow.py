@@ -704,7 +704,7 @@ async def test_create_and_approve_co_cp_mapping(client: AsyncClient, auth_header
     create_resp = await client.post(
         "/api/v1/mappings/co-cp",
         headers=auth_headers,
-        json={"course_outcome_id": co_id, "complex_problem_id": cp_id},
+        json={"course_outcome_id": co_id, "complex_problem_id": cp_id, "justification": "Test justification"},
     )
     assert create_resp.status_code == 201, create_resp.text
     mapping_id = create_resp.json()["id"]
@@ -743,7 +743,7 @@ async def test_cannot_create_co_cp_mapping_for_published_co(client: AsyncClient,
     resp = await client.post(
         "/api/v1/mappings/co-cp",
         headers=auth_headers,
-        json={"course_outcome_id": co_id, "complex_problem_id": cp_id},
+        json={"course_outcome_id": co_id, "complex_problem_id": cp_id, "justification": "Test justification"},
     )
     assert resp.status_code == 409
 
@@ -766,7 +766,7 @@ async def test_delete_co_cp_mapping(client: AsyncClient, auth_headers):
     create_resp = await client.post(
         "/api/v1/mappings/co-cp",
         headers=auth_headers,
-        json={"course_outcome_id": co_id, "complex_problem_id": cp_id},
+        json={"course_outcome_id": co_id, "complex_problem_id": cp_id, "justification": "Test justification"},
     )
     mapping_id = create_resp.json()["id"]
 
@@ -808,7 +808,7 @@ async def test_create_and_approve_co_ca_mapping(client: AsyncClient, auth_header
     create_resp = await client.post(
         "/api/v1/mappings/co-ca",
         headers=auth_headers,
-        json={"course_outcome_id": co_id, "complex_activity_id": ca_id},
+        json={"course_outcome_id": co_id, "complex_activity_id": ca_id, "justification": "Test justification"},
     )
     assert create_resp.status_code == 201, create_resp.text
     mapping_id = create_resp.json()["id"]
@@ -841,7 +841,7 @@ async def test_create_and_approve_co_kp_mapping(client: AsyncClient, auth_header
     create_resp = await client.post(
         "/api/v1/mappings/co-kp",
         headers=auth_headers,
-        json={"course_outcome_id": co_id, "knowledge_profile_id": kp_id},
+        json={"course_outcome_id": co_id, "knowledge_profile_id": kp_id, "justification": "Test justification"},
     )
     assert create_resp.status_code == 201, create_resp.text
     mapping_id = create_resp.json()["id"]
