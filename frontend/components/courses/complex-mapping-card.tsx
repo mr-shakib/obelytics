@@ -29,7 +29,6 @@ type ComplexOption = { id: string; code: string; name: string | null; descriptio
 type ComplexMapping = {
   id: string
   course_outcome_id: string
-  status: string
   complex_problem_id?: string
   complex_activity_id?: string
   knowledge_profile_id?: string
@@ -179,7 +178,6 @@ export function ComplexMappingCard({
       const optimisticMapping: ComplexMapping = {
         id: optimisticId,
         course_outcome_id: coId,
-        status: "active",
         justification,
         [config.optionField]: optionId,
       } as ComplexMapping

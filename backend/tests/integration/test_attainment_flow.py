@@ -183,13 +183,6 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
     assert co_resp.status_code == 201, co_resp.text
     co_id = co_resp.json()["id"]
 
-    submit_co = await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=headers)
-    assert submit_co.status_code == 200, submit_co.text
-    approve_co = await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=headers)
-    assert approve_co.status_code == 200, approve_co.text
-    publish_co = await client.post(f"/api/v1/course-outcomes/{co_id}/publish", headers=headers)
-    assert publish_co.status_code == 200, publish_co.text
-
     # CO-PO mapping
     ms_resp = await client.post(
         "/api/v1/mappings/co-po",

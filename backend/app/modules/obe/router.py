@@ -296,50 +296,6 @@ async def update_course_outcome(
     return await svc.update(co_id, body, current_user.organization_id)
 
 
-@router.post("/course-outcomes/{co_id}/submit", response_model=CourseOutcomeResponse)
-async def submit_course_outcome(
-    co_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.submit"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = COService(db)
-    return await svc.submit(co_id, current_user.organization_id, current_user.id)
-
-
-@router.post("/course-outcomes/{co_id}/approve", response_model=CourseOutcomeResponse)
-async def approve_course_outcome(
-    co_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.approve"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = COService(db)
-    return await svc.approve(co_id, current_user.organization_id, current_user.id)
-
-
-@router.post("/course-outcomes/{co_id}/reject", response_model=CourseOutcomeResponse)
-async def reject_course_outcome(
-    co_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.approve"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = COService(db)
-    return await svc.reject(co_id, current_user.organization_id, current_user.id)
-
-
-@router.post("/course-outcomes/{co_id}/publish", response_model=CourseOutcomeResponse)
-async def publish_course_outcome(
-    co_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("co.publish"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = COService(db)
-    return await svc.publish(co_id, current_user.organization_id, current_user.id)
-
-
 @router.post(
     "/course-outcomes/{co_id}/delivery-methods",
     response_model=CODeliveryMethodResponse,
@@ -468,20 +424,6 @@ async def validate_co_po_mapping_set(
     return await svc.validate(set_id, current_user.organization_id)
 
 
-@router.post("/mappings/co-po/{set_id}/publish", response_model=COPOMappingSetResponse)
-async def publish_co_po_mapping_set(
-    set_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_po.publish"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = MappingSetService(db)
-    return await svc.publish(set_id, current_user.organization_id, current_user.id)
-
-
-# ── CO-CP Mappings ────────────────────────────────────────────────────────────
-
-
 @router.get("/mappings/co-cp", response_model=list[COCPMappingResponse])
 async def list_co_cp_mappings(
     course_outcome_id: UUID,
@@ -504,17 +446,6 @@ async def create_co_cp_mapping(
 ):
     svc = COCPMappingService(db)
     return await svc.create(body, current_user.organization_id, current_user.id)
-
-
-@router.post("/mappings/co-cp/{mapping_id}/approve", response_model=COCPMappingResponse)
-async def approve_co_cp_mapping(
-    mapping_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_cp.approve"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = COCPMappingService(db)
-    return await svc.approve(mapping_id, current_user.organization_id, current_user.id)
 
 
 @router.delete("/mappings/co-cp/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -555,17 +486,6 @@ async def create_co_ca_mapping(
     return await svc.create(body, current_user.organization_id, current_user.id)
 
 
-@router.post("/mappings/co-ca/{mapping_id}/approve", response_model=COCAMappingResponse)
-async def approve_co_ca_mapping(
-    mapping_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_ca.approve"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = COCAMappingService(db)
-    return await svc.approve(mapping_id, current_user.organization_id, current_user.id)
-
-
 @router.delete("/mappings/co-ca/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_co_ca_mapping(
     mapping_id: UUID,
@@ -602,17 +522,6 @@ async def create_co_kp_mapping(
 ):
     svc = COKPMappingService(db)
     return await svc.create(body, current_user.organization_id, current_user.id)
-
-
-@router.post("/mappings/co-kp/{mapping_id}/approve", response_model=COKPMappingResponse)
-async def approve_co_kp_mapping(
-    mapping_id: UUID,
-    _: Annotated[PermissionManifestResponse, Depends(require_permission("mapping.co_kp.approve"))],
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    svc = COKPMappingService(db)
-    return await svc.approve(mapping_id, current_user.organization_id, current_user.id)
 
 
 @router.delete("/mappings/co-kp/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -10,7 +10,6 @@ from app.modules.approval.schemas import InboxItem, VALID_ENTITY_TYPES
 from app.modules.assessment.models import ResultPublication
 from app.modules.curriculum.models import AcademicTerm, Batch, Course, Section, SectionOffering
 from app.modules.iam.schemas import PermissionManifestResponse
-from app.modules.obe.models import COPOMappingSet, CourseOutcome
 
 
 class ReviewCommentService:
@@ -77,8 +76,6 @@ class ApprovalInboxService:
         Queries across schemas to find pending items.
 
         pending_result_publications: statuses awaiting the viewer's own action
-        pending_course_outcomes: status = 'SUBMITTED'
-        pending_co_po_mapping_sets: status = 'DRAFT' (not yet published)
 
         Returns dict with keys matching InboxResponse fields.
         """
@@ -119,53 +116,9 @@ class ApprovalInboxService:
             for rp, course_code, course_title, batch_name, term_name, section_name in rp_result.all()
         ]
 
-        # COs pending review (SUBMITTED = awaiting approval)
-        co_result = await self._session.execute(
-            select(CourseOutcome).where(
-                and_(
-                    CourseOutcome.organization_id == org_id,
-                    CourseOutcome.status == "SUBMITTED",
-                )
-            )
-        )
-        cos = co_result.scalars().all()
-        co_items = [
-            InboxItem(
-                entity_type="course_outcome",
-                entity_id=co.id,
-                description=f"CO {co.code}: {co.statement[:60]}",
-                status=co.status,
-                submitted_at=co.created_at,  # COs don't have a dedicated submitted_at
-            )
-            for co in cos
-        ]
-
-        # CO-PO mapping sets not yet published (DRAFT)
-        ms_result = await self._session.execute(
-            select(COPOMappingSet).where(
-                and_(
-                    COPOMappingSet.organization_id == org_id,
-                    COPOMappingSet.status == "DRAFT",
-                )
-            )
-        )
-        mapping_sets = ms_result.scalars().all()
-        ms_items = [
-            InboxItem(
-                entity_type="co_po_mapping_set",
-                entity_id=ms.id,
-                description=f"CO-PO Mapping (curriculum {ms.curriculum_id}, course {ms.course_id})",
-                status=ms.status,
-                submitted_at=ms.created_at,
-            )
-            for ms in mapping_sets
-        ]
-
         return {
             "pending_result_publications": rp_items,
-            "pending_course_outcomes": co_items,
-            "pending_co_po_mapping_sets": ms_items,
-            "total_count": len(rp_items) + len(co_items) + len(ms_items),
+            "total_count": len(rp_items),
         }
 
     async def get_counts(
@@ -175,7 +128,5 @@ class ApprovalInboxService:
         inbox = await self.get_inbox(org_id, manifest)
         return {
             "result_publications": len(inbox["pending_result_publications"]),
-            "course_outcomes": len(inbox["pending_course_outcomes"]),
-            "co_po_mapping_sets": len(inbox["pending_co_po_mapping_sets"]),
             "total": inbox["total_count"],
         }

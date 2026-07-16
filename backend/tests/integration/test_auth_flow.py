@@ -146,7 +146,7 @@ async def test_teacher_manifest_not_super_admin(
     body = resp.json()
     assert body["is_super_admin"] is False
     assert "co.create" in body["permissions"]
-    assert "co.publish" not in body["permissions"]
+    assert "user.create" not in body["permissions"]
 
 
 # ── Permission-denied scenarios ───────────────────────────────────────────────
@@ -214,7 +214,7 @@ async def test_admin_can_list_all_permissions(
     assert isinstance(data, list)
     assert len(data) > 0
     codes = [p["code"] for p in data]
-    assert "co.publish" in codes
+    assert "co.create" in codes
     assert "attainment.initiate" in codes
 
 

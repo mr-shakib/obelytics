@@ -124,7 +124,7 @@ class CourseOutcome(Base):
         UniqueConstraint(
             "curriculum_id", "course_id", "code", name="uq_obe_co_curriculum_course_code"
         ),
-        Index("ix_obe_co_curriculum_course_status", "curriculum_id", "course_id", "status"),
+        Index("ix_obe_co_curriculum_course", "curriculum_id", "course_id"),
         {"schema": "obe"},
     )
 
@@ -149,10 +149,8 @@ class CourseOutcome(Base):
     )
     code = Column(String(20), nullable=False)
     statement = Column(Text, nullable=False)
-    status = Column(String(20), nullable=False, server_default="DRAFT")
     # Plain UUID — no FK constraint (cross-schema IAM)
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    locked_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),
@@ -234,10 +232,8 @@ class COPOMappingSet(Base):
         nullable=False,
         index=True,
     )
-    status = Column(String(20), nullable=False, server_default="DRAFT")
     # Plain UUID — no FK constraint
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    published_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),
@@ -315,11 +311,8 @@ class COCPMapping(Base):
         nullable=False,
     )
     justification = Column(Text, nullable=False, server_default="Justification pending.")
-    status = Column(String(20), nullable=False, server_default="DRAFT")
-    # Plain UUIDs — no FK constraints
+    # Plain UUID — no FK constraint
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    approved_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    approved_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),
@@ -354,11 +347,8 @@ class COCAMapping(Base):
         nullable=False,
     )
     justification = Column(Text, nullable=False, server_default="Justification pending.")
-    status = Column(String(20), nullable=False, server_default="DRAFT")
-    # Plain UUIDs — no FK constraints
+    # Plain UUID — no FK constraint
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    approved_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    approved_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),
@@ -393,11 +383,8 @@ class COKPMapping(Base):
         nullable=False,
     )
     justification = Column(Text, nullable=False, server_default="Justification pending.")
-    status = Column(String(20), nullable=False, server_default="DRAFT")
-    # Plain UUIDs — no FK constraints
+    # Plain UUID — no FK constraint
     created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    approved_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
-    approved_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),

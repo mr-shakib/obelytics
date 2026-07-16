@@ -13,7 +13,6 @@ import { useResolveCourseLocation } from "@/hooks/use-course-location"
 import { usePermission } from "@/hooks/use-permission"
 import { PageHeader } from "@/components/shared/page-header"
 import { DataTable } from "@/components/shared/data-table"
-import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
 import { BloomLevelCheckboxGroup, sortBloomLevelIds } from "@/components/shared/bloom-level-checkbox-group"
 import { Button } from "@/components/ui/button"
@@ -51,7 +50,6 @@ type CourseOutcome = {
   code: string
   statement: string
   bloom_level_ids: string[]
-  status: string
 }
 type ModuleLeaderAssignment = { course_id: string }
 
@@ -300,11 +298,6 @@ export function CourseOutcomesClient() {
           </div>
         )
       },
-    },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
   ]
 

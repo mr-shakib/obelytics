@@ -112,9 +112,7 @@ class CourseOutcomeResponse(BaseModel):
     bloom_level_ids: list[UUID] = Field(default_factory=list)
     code: str
     statement: str
-    status: str
     created_by_user_id: UUID | None
-    locked_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -150,9 +148,7 @@ class COPOMappingSetResponse(BaseModel):
     organization_id: UUID
     curriculum_id: UUID
     course_id: UUID
-    status: str
     created_by_user_id: UUID | None
-    published_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -197,10 +193,7 @@ class COCPMappingResponse(BaseModel):
     course_outcome_id: UUID
     complex_problem_id: UUID
     justification: str
-    status: str
     created_by_user_id: UUID | None
-    approved_by_user_id: UUID | None
-    approved_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -222,10 +215,7 @@ class COCAMappingResponse(BaseModel):
     course_outcome_id: UUID
     complex_activity_id: UUID
     justification: str
-    status: str
     created_by_user_id: UUID | None
-    approved_by_user_id: UUID | None
-    approved_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -247,10 +237,7 @@ class COKPMappingResponse(BaseModel):
     course_outcome_id: UUID
     knowledge_profile_id: UUID
     justification: str
-    status: str
     created_by_user_id: UUID | None
-    approved_by_user_id: UUID | None
-    approved_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

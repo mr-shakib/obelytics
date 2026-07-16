@@ -114,9 +114,9 @@ async def build_read_only_obe_context(
             f"Active course context: {course.code} — {course.title} ({course.course_type}, {course.credits} credits).",
             f"Curriculum: {curriculum.name}; status: {curriculum.status}.",
             f"Delivery plan: {lesson_count or 0} lessons across {planned_weeks or 0} weeks.",
-            f"CO-PO mapping set: {mapping_set.status if mapping_set else 'not created'}; {mapping_count} mapping entries.",
+            f"CO-PO mapping set: {'created' if mapping_set else 'not created'}; {mapping_count} mapping entries.",
             "Course Outcomes: "
-            + ("; ".join(f"{co.code} [{co.status}]: {co.statement}" for co in outcomes) or "none"),
+            + ("; ".join(f"{co.code}: {co.statement}" for co in outcomes) or "none"),
         ]
     )
     return "\n".join(facts)

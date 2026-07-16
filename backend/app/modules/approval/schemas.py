@@ -36,13 +36,9 @@ class InboxItem(BaseModel):
 
 class InboxResponse(BaseModel):
     pending_result_publications: list[InboxItem]
-    pending_course_outcomes: list[InboxItem]
-    pending_co_po_mapping_sets: list[InboxItem]
     total_count: int
 
 
 class InboxCountsResponse(BaseModel):
     result_publications: int
-    course_outcomes: int
-    co_po_mapping_sets: int
     total: int

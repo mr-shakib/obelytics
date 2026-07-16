@@ -5,15 +5,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.audit.writer import write_audit_log
-from app.modules.notification.writer import write_notification
 from app.modules.obe.exceptions import (
-    CONotEditableError,
     CONotFoundError,
-    COStateError,
     MappingSetNotFoundError,
-    MappingSetPublishedError,
-    MappingSetValidationError,
     MissionArchivedError,
     MissionCodeConflictError,
     MissionNotFoundError,
@@ -25,7 +19,6 @@ from app.modules.obe.exceptions import (
     POHasActiveMappingsError,
     PONotFoundError,
     SubMappingConflictError,
-    SubMappingNotApprovableError,
     SubMappingNotFoundError,
 )
 from app.modules.obe.models import (
@@ -80,10 +73,6 @@ from app.modules.obe.schemas import (
     ProgramOutcomeCreate,
     ProgramOutcomeUpdate,
 )
-
-_CO_PUBLISHED_LOCKED = {"PUBLISHED", "LOCKED"}
-_CO_TERMINAL = {"PUBLISHED", "LOCKED"}
-
 
 class POVersionService:
     def __init__(self, session: AsyncSession) -> None:
@@ -282,7 +271,6 @@ class COService:
             course_id=body.course_id,
             code=body.code,
             statement=body.statement,
-            status="DRAFT",
             created_by_user_id=created_by_user_id,
         )
         result = await self._repo.create(co)
@@ -296,8 +284,6 @@ class COService:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status != "DRAFT":
-            raise CONotEditableError()
         data = body.model_dump(exclude_none=True)
         bloom_level_ids = data.pop("bloom_level_ids", None)
         result = await self._repo.update(co, data)
@@ -308,152 +294,12 @@ class COService:
         await self._session.commit()
         return self._to_response(result, bloom_level_ids)
 
-    async def submit(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
-        co = await self._repo.get_by_id(co_id, org_id)
-        if co is None:
-            raise CONotFoundError()
-        if co.status != "DRAFT":
-            raise COStateError(f"Cannot submit: CO is in status '{co.status}'")
-        co.status = "SUBMITTED"
-        result = await self._repo.update(co, {})
-        write_audit_log(
-            self._session,
-            entity_type="course_outcome",
-            entity_id=co_id,
-            action="CO_SUBMITTED",
-            org_id=org_id,
-            actor_user_id=actor_user_id,
-            before_status="DRAFT",
-            after_status="SUBMITTED",
-        )
-        await self._session.commit()
-        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
-        return self._to_response(result, bloom_level_ids)
-
-    async def approve(
-        self, co_id: UUID, org_id: UUID, actor_user_id: UUID
-    ) -> CourseOutcomeResponse:
-        co = await self._repo.get_by_id(co_id, org_id)
-        if co is None:
-            raise CONotFoundError()
-        if co.status not in ("SUBMITTED", "UNDER_REVIEW"):
-            raise COStateError(f"Cannot approve: CO is in status '{co.status}'")
-        before = co.status
-        co.status = "APPROVED"
-        result = await self._repo.update(co, {})
-        write_audit_log(
-            self._session,
-            entity_type="course_outcome",
-            entity_id=co_id,
-            action="CO_APPROVED",
-            org_id=org_id,
-            actor_user_id=actor_user_id,
-            before_status=before,
-            after_status="APPROVED",
-        )
-        if co.created_by_user_id:
-            write_notification(
-                self._session,
-                org_id=org_id,
-                recipient_user_id=co.created_by_user_id,
-                notification_type="CO_APPROVED",
-                title=f"CO {co.code} has been approved",
-                body="Your course outcome has been approved and is ready for publishing.",
-                entity_type="course_outcome",
-                entity_id=co_id,
-            )
-        await self._session.commit()
-        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
-        return self._to_response(result, bloom_level_ids)
-
-    async def reject(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcomeResponse:
-        co = await self._repo.get_by_id(co_id, org_id)
-        if co is None:
-            raise CONotFoundError()
-        if co.status not in ("SUBMITTED", "UNDER_REVIEW"):
-            raise COStateError(f"Cannot reject: CO is in status '{co.status}'")
-        before = co.status
-        co.status = "DRAFT"
-        result = await self._repo.update(co, {})
-        write_audit_log(
-            self._session,
-            entity_type="course_outcome",
-            entity_id=co_id,
-            action="CO_REJECTED",
-            org_id=org_id,
-            actor_user_id=actor_user_id,
-            before_status=before,
-            after_status="DRAFT",
-        )
-        if co.created_by_user_id:
-            write_notification(
-                self._session,
-                org_id=org_id,
-                recipient_user_id=co.created_by_user_id,
-                notification_type="CO_REJECTED",
-                title=f"CO {co.code} has been rejected",
-                body="Your course outcome was rejected and returned to DRAFT.",
-                entity_type="course_outcome",
-                entity_id=co_id,
-            )
-        await self._session.commit()
-        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
-        return self._to_response(result, bloom_level_ids)
-
     async def delete(self, co_id: UUID, org_id: UUID) -> None:
         co = await self._repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED or co.status in ("APPROVED", "SUBMITTED"):
-            raise CONotEditableError()
         await self._repo.delete(co)
         await self._session.commit()
-
-    async def publish(
-        self, co_id: UUID, org_id: UUID, actor_user_id: UUID
-    ) -> CourseOutcomeResponse:
-        co = await self._repo.get_by_id(co_id, org_id)
-        if co is None:
-            raise CONotFoundError()
-        if co.status != "APPROVED":
-            raise COStateError(f"Cannot publish: CO is in status '{co.status}'")
-        co.status = "PUBLISHED"
-        result = await self._repo.update(co, {})
-        write_audit_log(
-            self._session,
-            entity_type="course_outcome",
-            entity_id=co_id,
-            action="CO_PUBLISHED",
-            org_id=org_id,
-            actor_user_id=actor_user_id,
-            before_status="APPROVED",
-            after_status="PUBLISHED",
-        )
-        await self._session.commit()
-        bloom_level_ids = await self._repo.get_bloom_level_ids(co_id)
-        return self._to_response(result, bloom_level_ids)
-
-    async def lock(self, co_id: UUID, org_id: UUID, actor_user_id: UUID) -> CourseOutcome:
-        co = await self._repo.get_by_id(co_id, org_id)
-        if co is None:
-            raise CONotFoundError()
-        if co.status != "PUBLISHED":
-            raise COStateError(f"Cannot lock: CO is in status '{co.status}'")
-        co.status = "LOCKED"
-        co.locked_at = datetime.now(timezone.utc)
-        result = await self._repo.update(co, {})
-        write_audit_log(
-            self._session,
-            entity_type="course_outcome",
-            entity_id=co_id,
-            action="CO_LOCKED",
-            org_id=org_id,
-            actor_user_id=actor_user_id,
-            before_status="PUBLISHED",
-            after_status="LOCKED",
-        )
-        await self._session.commit()
-        return result
 
 
 class CODeliveryMethodService:
@@ -472,8 +318,6 @@ class CODeliveryMethodService:
         co = await self._co_repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         existing = await self._repo.find_by_co_dm(co_id, dm_id)
         if existing:
             raise SubMappingConflictError()
@@ -489,8 +333,6 @@ class CODeliveryMethodService:
         co = await self._co_repo.get_by_id(co_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         obj = await self._repo.find_by_co_dm(co_id, dm_id)
         if obj is None:
             raise SubMappingNotFoundError()
@@ -519,7 +361,6 @@ class MappingSetService:
             organization_id=org_id,
             curriculum_id=curriculum_id,
             course_id=course_id,
-            status="DRAFT",
             created_by_user_id=user_id,
         )
         result = await self._repo.create(obj)
@@ -547,8 +388,6 @@ class MappingSetService:
         ms = await self._repo.get_by_id(set_id, org_id)
         if ms is None:
             raise MappingSetNotFoundError()
-        if ms.status == "PUBLISHED":
-            raise MappingSetPublishedError()
         await self._entry_repo.delete_by_set(set_id)
         results = []
         for e in entries:
@@ -644,23 +483,6 @@ class MappingSetService:
 
         return COPOMappingValidationResponse(is_valid=not issues, issues=issues)
 
-    async def publish(self, set_id: UUID, org_id: UUID, user_id: UUID) -> COPOMappingSet:
-        ms = await self._repo.get_by_id(set_id, org_id)
-        if ms is None:
-            raise MappingSetNotFoundError()
-        if ms.status == "PUBLISHED":
-            raise MappingSetPublishedError()
-        validation = await self.validate(set_id, org_id)
-        if not validation.is_valid:
-            raise MappingSetValidationError(
-                [issue.model_dump(mode="json") for issue in validation.issues]
-            )
-        ms.status = "PUBLISHED"
-        ms.published_at = datetime.now(timezone.utc)
-        result = await self._repo.update(ms, {})
-        await self._session.commit()
-        return result
-
 
 class COCPMappingService:
     def __init__(self, session: AsyncSession) -> None:
@@ -678,8 +500,6 @@ class COCPMappingService:
         co = await self._co_repo.get_by_id(body.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         existing = await self._repo.find_by_co_cp(body.course_outcome_id, body.complex_problem_id)
         if existing:
             raise SubMappingConflictError()
@@ -688,24 +508,9 @@ class COCPMappingService:
             course_outcome_id=body.course_outcome_id,
             complex_problem_id=body.complex_problem_id,
             justification=body.justification.strip(),
-            status="DRAFT",
             created_by_user_id=user_id,
         )
         result = await self._repo.create(obj)
-        await self._session.commit()
-        return result
-
-    async def approve(self, mapping_id: UUID, org_id: UUID, user_id: UUID) -> COCPMapping:
-        obj = await self._repo.get_by_id(mapping_id)
-        if obj is None or obj.organization_id != org_id:
-            raise SubMappingNotFoundError()
-        co = await self._co_repo.get_by_id(obj.course_outcome_id, org_id)
-        if co is None or co.status in _CO_PUBLISHED_LOCKED:
-            raise SubMappingNotApprovableError()
-        obj.status = "APPROVED"
-        obj.approved_by_user_id = user_id
-        obj.approved_at = datetime.now(timezone.utc)
-        result = await self._repo.update(obj, {})
         await self._session.commit()
         return result
 
@@ -716,8 +521,6 @@ class COCPMappingService:
         co = await self._co_repo.get_by_id(obj.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         await self._session.delete(obj)
         await self._session.commit()
 
@@ -738,8 +541,6 @@ class COCAMappingService:
         co = await self._co_repo.get_by_id(body.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         existing = await self._repo.find_by_co_ca(body.course_outcome_id, body.complex_activity_id)
         if existing:
             raise SubMappingConflictError()
@@ -748,24 +549,9 @@ class COCAMappingService:
             course_outcome_id=body.course_outcome_id,
             complex_activity_id=body.complex_activity_id,
             justification=body.justification.strip(),
-            status="DRAFT",
             created_by_user_id=user_id,
         )
         result = await self._repo.create(obj)
-        await self._session.commit()
-        return result
-
-    async def approve(self, mapping_id: UUID, org_id: UUID, user_id: UUID) -> COCAMapping:
-        obj = await self._repo.get_by_id(mapping_id)
-        if obj is None or obj.organization_id != org_id:
-            raise SubMappingNotFoundError()
-        co = await self._co_repo.get_by_id(obj.course_outcome_id, org_id)
-        if co is None or co.status in _CO_PUBLISHED_LOCKED:
-            raise SubMappingNotApprovableError()
-        obj.status = "APPROVED"
-        obj.approved_by_user_id = user_id
-        obj.approved_at = datetime.now(timezone.utc)
-        result = await self._repo.update(obj, {})
         await self._session.commit()
         return result
 
@@ -776,8 +562,6 @@ class COCAMappingService:
         co = await self._co_repo.get_by_id(obj.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         await self._session.delete(obj)
         await self._session.commit()
 
@@ -798,8 +582,6 @@ class COKPMappingService:
         co = await self._co_repo.get_by_id(body.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         existing = await self._repo.find_by_co_kp(body.course_outcome_id, body.knowledge_profile_id)
         if existing:
             raise SubMappingConflictError()
@@ -808,24 +590,9 @@ class COKPMappingService:
             course_outcome_id=body.course_outcome_id,
             knowledge_profile_id=body.knowledge_profile_id,
             justification=body.justification.strip(),
-            status="DRAFT",
             created_by_user_id=user_id,
         )
         result = await self._repo.create(obj)
-        await self._session.commit()
-        return result
-
-    async def approve(self, mapping_id: UUID, org_id: UUID, user_id: UUID) -> COKPMapping:
-        obj = await self._repo.get_by_id(mapping_id)
-        if obj is None or obj.organization_id != org_id:
-            raise SubMappingNotFoundError()
-        co = await self._co_repo.get_by_id(obj.course_outcome_id, org_id)
-        if co is None or co.status in _CO_PUBLISHED_LOCKED:
-            raise SubMappingNotApprovableError()
-        obj.status = "APPROVED"
-        obj.approved_by_user_id = user_id
-        obj.approved_at = datetime.now(timezone.utc)
-        result = await self._repo.update(obj, {})
         await self._session.commit()
         return result
 
@@ -836,8 +603,6 @@ class COKPMappingService:
         co = await self._co_repo.get_by_id(obj.course_outcome_id, org_id)
         if co is None:
             raise CONotFoundError()
-        if co.status in _CO_PUBLISHED_LOCKED:
-            raise CONotEditableError()
         await self._session.delete(obj)
         await self._session.commit()
 

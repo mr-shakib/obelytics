@@ -172,11 +172,6 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
     assert co_resp.status_code == 201, co_resp.text
     co_id = co_resp.json()["id"]
 
-    # CO lifecycle: draft → submitted → approved → published
-    await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=headers)
-    await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=headers)
-    await client.post(f"/api/v1/course-outcomes/{co_id}/publish", headers=headers)
-
     # CO-PO mapping
     ms_resp = await client.post(
         "/api/v1/mappings/co-po",

@@ -199,15 +199,6 @@ async def _setup_published_co(client: AsyncClient, headers: dict, curriculum_id:
     assert co_resp.status_code == 201, co_resp.text
     co_id = co_resp.json()["id"]
 
-    submit_resp = await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=headers)
-    assert submit_resp.status_code == 200, submit_resp.text
-
-    approve_resp = await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=headers)
-    assert approve_resp.status_code == 200, approve_resp.text
-
-    publish_resp = await client.post(f"/api/v1/course-outcomes/{co_id}/publish", headers=headers)
-    assert publish_resp.status_code == 200, publish_resp.text
-
     return co_id
 
 

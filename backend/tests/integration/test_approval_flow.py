@@ -215,12 +215,8 @@ async def test_get_inbox_empty(client: AsyncClient, auth_headers):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert "pending_result_publications" in data
-    assert "pending_course_outcomes" in data
-    assert "pending_co_po_mapping_sets" in data
     assert "total_count" in data
     assert isinstance(data["pending_result_publications"], list)
-    assert isinstance(data["pending_course_outcomes"], list)
-    assert isinstance(data["pending_co_po_mapping_sets"], list)
 
 
 async def test_get_inbox_counts_structure(client: AsyncClient, auth_headers):
@@ -229,12 +225,8 @@ async def test_get_inbox_counts_structure(client: AsyncClient, auth_headers):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert "result_publications" in data
-    assert "course_outcomes" in data
-    assert "co_po_mapping_sets" in data
     assert "total" in data
     assert isinstance(data["result_publications"], int)
-    assert isinstance(data["course_outcomes"], int)
-    assert isinstance(data["co_po_mapping_sets"], int)
     assert isinstance(data["total"], int)
 
 

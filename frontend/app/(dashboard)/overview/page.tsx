@@ -39,8 +39,6 @@ type Course = { id: string; course_type: string; status: string }
 type ResultSubmission = { section_offering_id: string; course_id: string; status: string }
 type ApprovalCounts = {
   result_publications: number
-  course_outcomes: number
-  co_po_mapping_sets: number
   total: number
 }
 
@@ -198,8 +196,6 @@ export default function OverviewPage() {
 
   const approvalData = [
     { name: "Results", count: approvals?.result_publications ?? 0 },
-    { name: "Course outcomes", count: approvals?.course_outcomes ?? 0 },
-    { name: "CO–PO mappings", count: approvals?.co_po_mapping_sets ?? 0 },
   ]
 
   return (

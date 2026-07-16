@@ -245,7 +245,7 @@ async def test_teacher_cannot_create_po(client: AsyncClient, auth_headers, teach
 async def _create_knowledge_profile(client: AsyncClient, headers: dict) -> str:
     suffix = uuid.uuid4().hex[:6]
     resp = await client.post(
-        "/api/v1/config/knowledge-profiles",
+        "/api/v1/ref-data/knowledge-profiles",
         headers=headers,
         json={"code": f"KP{suffix[:4]}", "description": f"Test KP {suffix}"},
     )
@@ -303,7 +303,7 @@ async def test_add_remove_knowledge_profiles_to_po(client: AsyncClient, auth_hea
 
 # ── Course Outcomes ───────────────────────────────────────────────────────────
 
-async def test_create_co_draft(client: AsyncClient, auth_headers):
+async def test_create_co(client: AsyncClient, auth_headers):
     ids = await _setup_curriculum(client, auth_headers)
     resp = await client.post(
         "/api/v1/course-outcomes",
@@ -318,130 +318,6 @@ async def test_create_co_draft(client: AsyncClient, auth_headers):
     assert resp.status_code == 201, resp.text
     data = resp.json()
     assert data["code"] == "CO1"
-    assert data["status"] == "DRAFT"
-
-
-async def test_co_state_machine_submit_approve_publish(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO for state machine test",
-        },
-    )
-    co_id = co_resp.json()["id"]
-    assert co_resp.json()["status"] == "DRAFT"
-
-    # Submit
-    sub_resp = await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=auth_headers)
-    assert sub_resp.status_code == 200, sub_resp.text
-    assert sub_resp.json()["status"] == "SUBMITTED"
-
-    # Approve
-    app_resp = await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=auth_headers)
-    assert app_resp.status_code == 200, app_resp.text
-    assert app_resp.json()["status"] == "APPROVED"
-
-    # Publish
-    pub_resp = await client.post(f"/api/v1/course-outcomes/{co_id}/publish", headers=auth_headers)
-    assert pub_resp.status_code == 200, pub_resp.text
-    assert pub_resp.json()["status"] == "PUBLISHED"
-
-
-async def test_co_state_machine_submit_reject_back_to_draft(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO for reject test",
-        },
-    )
-    co_id = co_resp.json()["id"]
-
-    # Submit
-    await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=auth_headers)
-
-    # Reject → back to DRAFT
-    rej_resp = await client.post(f"/api/v1/course-outcomes/{co_id}/reject", headers=auth_headers)
-    assert rej_resp.status_code == 200, rej_resp.text
-    assert rej_resp.json()["status"] == "DRAFT"
-
-
-async def test_co_update_blocked_when_not_draft(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO for edit block test",
-        },
-    )
-    co_id = co_resp.json()["id"]
-
-    # Submit so it's no longer DRAFT
-    await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=auth_headers)
-
-    # Try to update — should be blocked
-    resp = await client.patch(
-        f"/api/v1/course-outcomes/{co_id}",
-        headers=auth_headers,
-        json={"statement": "Blocked update"},
-    )
-    assert resp.status_code == 409
-
-
-async def test_co_invalid_state_transition(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO for invalid transition",
-        },
-    )
-    co_id = co_resp.json()["id"]
-
-    # Try to approve from DRAFT (not allowed; must submit first)
-    resp = await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=auth_headers)
-    assert resp.status_code == 409
-
-
-async def test_ml_cannot_publish_co(client: AsyncClient, auth_headers, ml_auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO for ML publish test",
-        },
-    )
-    co_id = co_resp.json()["id"]
-    await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=auth_headers)
-    await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=auth_headers)
-
-    # ML tries to publish — should be forbidden
-    resp = await client.post(
-        f"/api/v1/course-outcomes/{co_id}/publish",
-        headers=ml_auth_headers,
-    )
-    assert resp.status_code == 403
 
 
 # ── Delivery Methods ──────────────────────────────────────────────────────────
@@ -488,33 +364,6 @@ async def test_add_delivery_methods_to_co(client: AsyncClient, auth_headers):
     assert any(d["delivery_method_id"] == dm_id for d in list_resp.json())
 
 
-async def test_add_delivery_method_blocked_when_co_published(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO for DM block test",
-        },
-    )
-    co_id = co_resp.json()["id"]
-    # Progress to PUBLISHED
-    await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=auth_headers)
-    await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=auth_headers)
-    await client.post(f"/api/v1/course-outcomes/{co_id}/publish", headers=auth_headers)
-
-    dm_id = await _create_delivery_method(client, auth_headers)
-    resp = await client.post(
-        f"/api/v1/course-outcomes/{co_id}/delivery-methods",
-        headers=auth_headers,
-        json={"delivery_method_id": dm_id},
-    )
-    assert resp.status_code == 409
-
-
 # ── CO-PO Mapping Sets ────────────────────────────────────────────────────────
 
 async def test_create_co_po_mapping_set(client: AsyncClient, auth_headers):
@@ -529,7 +378,6 @@ async def test_create_co_po_mapping_set(client: AsyncClient, auth_headers):
     )
     assert resp.status_code == 201, resp.text
     data = resp.json()
-    assert data["status"] == "DRAFT"
     assert data["curriculum_id"] == ids["curriculum_id"]
 
 
@@ -578,106 +426,12 @@ async def test_upsert_co_po_entries(client: AsyncClient, auth_headers):
     assert entries[0]["weight"] == 2
 
 
-async def test_publish_co_po_mapping_set(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-
-    po_resp = await client.post(
-        "/api/v1/program-outcomes",
-        headers=auth_headers,
-        json={
-            "program_id": ids["program_id"],
-            "code": "PO1",
-            "statement": "PO for publish test",
-            "order_index": 1,
-        },
-    )
-    po_id = po_resp.json()["id"]
-
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO for publish",
-        },
-    )
-    co_id = co_resp.json()["id"]
-
-    ms_resp = await client.post(
-        "/api/v1/mappings/co-po",
-        headers=auth_headers,
-        json={"curriculum_id": ids["curriculum_id"], "course_id": ids["course_id"]},
-    )
-    set_id = ms_resp.json()["id"]
-
-    await client.put(
-        f"/api/v1/mappings/co-po/{set_id}/entries",
-        headers=auth_headers,
-        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 3}],
-    )
-
-    pub_resp = await client.post(
-        f"/api/v1/mappings/co-po/{set_id}/publish",
-        headers=auth_headers,
-    )
-    assert pub_resp.status_code == 200, pub_resp.text
-    assert pub_resp.json()["status"] == "PUBLISHED"
-    assert pub_resp.json()["published_at"] is not None
-
-
-async def test_cannot_upsert_entries_after_publish(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-
-    po_resp = await client.post(
-        "/api/v1/program-outcomes",
-        headers=auth_headers,
-        json={
-            "program_id": ids["program_id"],
-            "code": "PO1",
-            "statement": "PO",
-            "order_index": 1,
-        },
-    )
-    po_id = po_resp.json()["id"]
-
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO",
-        },
-    )
-    co_id = co_resp.json()["id"]
-
-    ms_resp = await client.post(
-        "/api/v1/mappings/co-po",
-        headers=auth_headers,
-        json={"curriculum_id": ids["curriculum_id"], "course_id": ids["course_id"]},
-    )
-    set_id = ms_resp.json()["id"]
-
-    await client.post(f"/api/v1/mappings/co-po/{set_id}/publish", headers=auth_headers)
-
-    # Try to upsert entries after publish
-    resp = await client.put(
-        f"/api/v1/mappings/co-po/{set_id}/entries",
-        headers=auth_headers,
-        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 1}],
-    )
-    assert resp.status_code == 409
-
-
 # ── CO-CP Mappings ────────────────────────────────────────────────────────────
 
 async def _create_complex_problem(client: AsyncClient, headers: dict) -> str:
     suffix = uuid.uuid4().hex[:6]
     resp = await client.post(
-        "/api/v1/config/complex-problems",
+        "/api/v1/ref-data/complex-problems",
         headers=headers,
         json={"code": f"CP{suffix[:4]}", "description": f"Complex problem {suffix}"},
     )
@@ -685,7 +439,7 @@ async def _create_complex_problem(client: AsyncClient, headers: dict) -> str:
     return resp.json()["id"]
 
 
-async def test_create_and_approve_co_cp_mapping(client: AsyncClient, auth_headers):
+async def test_create_co_cp_mapping(client: AsyncClient, auth_headers):
     ids = await _setup_curriculum(client, auth_headers)
     co_resp = await client.post(
         "/api/v1/course-outcomes",
@@ -707,45 +461,7 @@ async def test_create_and_approve_co_cp_mapping(client: AsyncClient, auth_header
         json={"course_outcome_id": co_id, "complex_problem_id": cp_id, "justification": "Test justification"},
     )
     assert create_resp.status_code == 201, create_resp.text
-    mapping_id = create_resp.json()["id"]
-    assert create_resp.json()["status"] == "DRAFT"
-
-    # Approve mapping
-    approve_resp = await client.post(
-        f"/api/v1/mappings/co-cp/{mapping_id}/approve",
-        headers=auth_headers,
-    )
-    assert approve_resp.status_code == 200, approve_resp.text
-    assert approve_resp.json()["status"] == "APPROVED"
-    assert approve_resp.json()["approved_by_user_id"] is not None
-
-
-async def test_cannot_create_co_cp_mapping_for_published_co(client: AsyncClient, auth_headers):
-    ids = await _setup_curriculum(client, auth_headers)
-    co_resp = await client.post(
-        "/api/v1/course-outcomes",
-        headers=auth_headers,
-        json={
-            "curriculum_id": ids["curriculum_id"],
-            "course_id": ids["course_id"],
-            "code": "CO1",
-            "statement": "CO to publish",
-        },
-    )
-    co_id = co_resp.json()["id"]
-
-    # Publish the CO
-    await client.post(f"/api/v1/course-outcomes/{co_id}/submit", headers=auth_headers)
-    await client.post(f"/api/v1/course-outcomes/{co_id}/approve", headers=auth_headers)
-    await client.post(f"/api/v1/course-outcomes/{co_id}/publish", headers=auth_headers)
-
-    cp_id = await _create_complex_problem(client, auth_headers)
-    resp = await client.post(
-        "/api/v1/mappings/co-cp",
-        headers=auth_headers,
-        json={"course_outcome_id": co_id, "complex_problem_id": cp_id, "justification": "Test justification"},
-    )
-    assert resp.status_code == 409
+    assert create_resp.json()["justification"] == "Test justification"
 
 
 async def test_delete_co_cp_mapping(client: AsyncClient, auth_headers):
@@ -782,7 +498,7 @@ async def test_delete_co_cp_mapping(client: AsyncClient, auth_headers):
 async def _create_complex_activity(client: AsyncClient, headers: dict) -> str:
     suffix = uuid.uuid4().hex[:6]
     resp = await client.post(
-        "/api/v1/config/complex-activities",
+        "/api/v1/ref-data/complex-activities",
         headers=headers,
         json={"code": f"CA{suffix[:4]}", "description": f"Complex activity {suffix}"},
     )
@@ -790,7 +506,7 @@ async def _create_complex_activity(client: AsyncClient, headers: dict) -> str:
     return resp.json()["id"]
 
 
-async def test_create_and_approve_co_ca_mapping(client: AsyncClient, auth_headers):
+async def test_create_co_ca_mapping(client: AsyncClient, auth_headers):
     ids = await _setup_curriculum(client, auth_headers)
     co_resp = await client.post(
         "/api/v1/course-outcomes",
@@ -811,19 +527,12 @@ async def test_create_and_approve_co_ca_mapping(client: AsyncClient, auth_header
         json={"course_outcome_id": co_id, "complex_activity_id": ca_id, "justification": "Test justification"},
     )
     assert create_resp.status_code == 201, create_resp.text
-    mapping_id = create_resp.json()["id"]
-
-    approve_resp = await client.post(
-        f"/api/v1/mappings/co-ca/{mapping_id}/approve",
-        headers=auth_headers,
-    )
-    assert approve_resp.status_code == 200, approve_resp.text
-    assert approve_resp.json()["status"] == "APPROVED"
+    assert create_resp.json()["justification"] == "Test justification"
 
 
 # ── CO-KP Mappings ────────────────────────────────────────────────────────────
 
-async def test_create_and_approve_co_kp_mapping(client: AsyncClient, auth_headers):
+async def test_create_co_kp_mapping(client: AsyncClient, auth_headers):
     ids = await _setup_curriculum(client, auth_headers)
     co_resp = await client.post(
         "/api/v1/course-outcomes",
@@ -844,14 +553,7 @@ async def test_create_and_approve_co_kp_mapping(client: AsyncClient, auth_header
         json={"course_outcome_id": co_id, "knowledge_profile_id": kp_id, "justification": "Test justification"},
     )
     assert create_resp.status_code == 201, create_resp.text
-    mapping_id = create_resp.json()["id"]
-
-    approve_resp = await client.post(
-        f"/api/v1/mappings/co-kp/{mapping_id}/approve",
-        headers=auth_headers,
-    )
-    assert approve_resp.status_code == 200, approve_resp.text
-    assert approve_resp.json()["status"] == "APPROVED"
+    assert create_resp.json()["justification"] == "Test justification"
 
 
 # ── CO list endpoint ──────────────────────────────────────────────────────────

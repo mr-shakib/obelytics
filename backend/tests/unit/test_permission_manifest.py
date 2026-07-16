@@ -46,12 +46,11 @@ async def test_teacher_manifest_has_only_teacher_permissions(db_session: AsyncSe
 
     assert manifest.is_super_admin is False
     assert "co.create" in manifest.permissions
-    assert "co.submit" in manifest.permissions
     assert "marks.enter" in manifest.permissions
     # Teacher must NOT have admin-only permissions
     assert "system.audit.read" not in manifest.permissions
     assert "attainment.publish" not in manifest.permissions
-    assert "co.publish" not in manifest.permissions
+    assert "user.create" not in manifest.permissions
 
 
 @pytest.mark.asyncio
@@ -65,10 +64,9 @@ async def test_ml_manifest_has_only_ml_permissions(db_session: AsyncSession):
     manifest = await builder.build_manifest(ml.id)
 
     assert manifest.is_super_admin is False
-    assert "co.approve" in manifest.permissions
+    assert "co.update" in manifest.permissions
     assert "result.approve.ml" in manifest.permissions
     # ML must NOT have PC/admin permissions
-    assert "co.publish" not in manifest.permissions
     assert "attainment.initiate" not in manifest.permissions
     assert "user.create" not in manifest.permissions
     assert "program.read" in manifest.permissions

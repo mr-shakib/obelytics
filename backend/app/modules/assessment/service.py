@@ -389,14 +389,14 @@ class AssessmentService:
         if assessment.status == "LOCKED":
             raise AssessmentLockedError()
 
-        # Validate CO is PUBLISHED
+        # Validate CO exists
         co_result = await self._session.execute(
             select(CourseOutcome).where(
                 CourseOutcome.id == co_weight_body.course_outcome_id
             )
         )
         co = co_result.scalar_one_or_none()
-        if co is None or co.status != "PUBLISHED":
+        if co is None:
             raise InvalidCOError()
 
         # Check for duplicate
