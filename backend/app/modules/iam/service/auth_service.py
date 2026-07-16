@@ -14,6 +14,7 @@ from app.core.security import (
     verify_password,
 )
 from app.modules.iam.exceptions import (
+    IncorrectPasswordError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
 )
@@ -96,6 +97,24 @@ class AuthService:
 
         manifest_builder = PermissionManifestBuilder(self._session)
         await manifest_builder.invalidate(user.id)
+
+    async def change_password(
+        self, user_id: UUID, current_password: str, new_password: str
+    ) -> None:
+        user = await self._users.find_by_id(user_id)
+        if user is None or user.credential is None:
+            raise InvalidCredentialsError()
+
+        if not verify_password(current_password, user.credential.hashed_password):
+            raise IncorrectPasswordError()
+
+        user.credential.hashed_password = hash_password(new_password)
+        user.credential.must_change_password = False
+        self._session.add(user.credential)
+        # Invalidate every other session — a password change means any
+        # previously issued refresh token should stop working.
+        await self._tokens.revoke_all_for_user(user_id)
+        await self._session.commit()
 
     async def _issue_tokens(self, user_id: UUID, organization_id: UUID) -> TokenResponse:
         access_token = create_access_token(user_id, organization_id)

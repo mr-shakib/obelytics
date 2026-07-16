@@ -29,6 +29,11 @@ class PasswordResetConfirmBody(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class ChangePasswordBody(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
 # ── User ─────────────────────────────────────────────────────────────────────
 
 class UserCreate(BaseModel):

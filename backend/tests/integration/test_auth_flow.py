@@ -313,3 +313,81 @@ async def test_admin_can_list_roles(client: AsyncClient, auth_headers: dict):
     assert "Super Admin" in names
     assert "Section Teacher" in names
     assert "Student" in names
+
+
+# ── Change password ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_change_password_requires_auth(client: AsyncClient):
+    resp = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "x", "new_password": "NewSecure@123"},
+    )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_change_password_wrong_current_returns_400(client: AsyncClient):
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": TEST_TEACHER_EMAIL, "password": TEST_TEACHER_PASSWORD},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    resp = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"current_password": "definitely-wrong", "new_password": "NewSecure@123"},
+    )
+    assert resp.status_code == 400
+
+    # password unchanged — original still works
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": TEST_TEACHER_EMAIL, "password": TEST_TEACHER_PASSWORD},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_change_password_flow(client: AsyncClient):
+    new_password = "NewSecure@123"
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": TEST_TEACHER_EMAIL, "password": TEST_TEACHER_PASSWORD},
+    )
+    old_refresh = login.json()["refresh_token"]
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    resp = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"current_password": TEST_TEACHER_PASSWORD, "new_password": new_password},
+    )
+    assert resp.status_code == 204
+
+    # old password rejected, new one accepted
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": TEST_TEACHER_EMAIL, "password": TEST_TEACHER_PASSWORD},
+    )
+    assert resp.status_code == 401
+    relogin = await client.post(
+        "/api/v1/auth/login",
+        json={"email": TEST_TEACHER_EMAIL, "password": new_password},
+    )
+    assert relogin.status_code == 200
+
+    # refresh tokens issued before the change are revoked
+    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+    assert resp.status_code == 401
+
+    # restore original password so other tests keep working
+    headers = {"Authorization": f"Bearer {relogin.json()['access_token']}"}
+    resp = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"current_password": new_password, "new_password": TEST_TEACHER_PASSWORD},
+    )
+    assert resp.status_code == 204

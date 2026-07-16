@@ -10,6 +10,14 @@ class InvalidCredentialsError(HTTPException):
         )
 
 
+class IncorrectPasswordError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+
 class UserNotFoundError(HTTPException):
     def __init__(self, user_id=None):
         detail = f"User {user_id} not found" if user_id else "User not found"

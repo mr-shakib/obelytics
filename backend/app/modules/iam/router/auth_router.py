@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.modules.iam.models import User
 from app.modules.iam.schemas import (
+    ChangePasswordBody,
     LoginRequest,
     PasswordResetConfirmBody,
     PasswordResetRequestBody,
@@ -34,6 +35,16 @@ async def refresh_token(body: RefreshRequest, db: Annotated[AsyncSession, Depend
 async def logout(body: RefreshRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     svc = AuthService(db)
     await svc.logout(body.refresh_token)
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    body: ChangePasswordBody,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = AuthService(db)
+    await svc.change_password(current_user.id, body.current_password, body.new_password)
 
 
 @router.post("/password-reset-request", status_code=204)
