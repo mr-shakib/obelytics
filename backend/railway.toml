@@ -7,4 +7,4 @@ healthcheckPath = "/health/live"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
-preDeployCommand = "python -m alembic upgrade head && python -m scripts.seed_superadmin"
+preDeployCommand = "python -m alembic upgrade head && python -m scripts.seed_superadmin --org-id f45ebb5e-412d-4f1e-9419-78e26d6322a7 --org-name 'Daffodil International University' --org-short-name DIU --email admin@obelytics.com"

@@ -34,6 +34,7 @@ async def seed(
     org_id: UUID | None = None,
     org_name: str = "My University",
     org_short_name: str = "UNIV",
+    admin_employee_id: str = "ADMIN001",
 ) -> None:
     if org_id is None:
         org_id = uuid4()
@@ -132,6 +133,7 @@ async def seed(
                 organization_id=org_id,
                 email=admin_email.lower(),
                 full_name="Super Admin",
+                employee_id=admin_employee_id,
                 status="ACTIVE",
             )
             session.add(admin)
@@ -172,7 +174,17 @@ if __name__ == "__main__":
     parser.add_argument("--org-id",         default=None, help="UUID of the organization")
     parser.add_argument("--org-name",       default="My University", help="Organization display name")
     parser.add_argument("--org-short-name", default="UNIV", help="Organization acronym/short name")
+    parser.add_argument("--employee-id",    default="ADMIN001", help="Employee ID for the admin (NOT NULL since 0034)")
     args = parser.parse_args()
 
     org_id = UUID(args.org_id) if args.org_id else None
-    asyncio.run(seed(args.email, args.password, org_id, args.org_name, args.org_short_name))
+    asyncio.run(
+        seed(
+            args.email,
+            args.password,
+            org_id,
+            args.org_name,
+            args.org_short_name,
+            args.employee_id,
+        )
+    )
