@@ -105,13 +105,17 @@ export function BulkUploadDialog({
   const mutation = useMutation({
     mutationFn: () => onImport(rows),
     onSuccess: (res) => {
-      setResult(res)
       onImported?.()
       if (res.errors.length === 0) {
+        // Clean import — nothing left to read, so close and let the toast report it.
         toast.success(`${res.created} ${res.created === 1 ? entityLabel : entityLabelPlural} created`)
-      } else {
-        toast.warning(`${res.created} created, ${res.errors.length} error${res.errors.length === 1 ? "" : "s"}`)
+        setOpen(false)
+        resetState()
+        return
       }
+      // Errors stay on screen: closing would throw away the per-row report.
+      setResult(res)
+      toast.warning(`${res.created} created, ${res.errors.length} error${res.errors.length === 1 ? "" : "s"}`)
     },
     onError: (err: Error) => toast.error(err.message || "Bulk upload failed"),
   })
