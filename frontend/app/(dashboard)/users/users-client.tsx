@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Search, Upload, Trash2 } from "lucide-react"
+import { Plus, Search, Upload, Trash2, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table"
@@ -45,6 +45,17 @@ type User = {
 type Department = { id: string; name: string; short_name: string }
 
 const FACULTY_TYPES = ["Faculty", "Administrative", "Management"] as const
+
+const EXPORT_HEADERS = [
+  "Employee ID", "Faculty Type", "First Name", "Last Name",
+  "Full Name", "Email", "Department", "Designation", "Status",
+] as const
+
+// Quote only when needed; double up embedded quotes (RFC 4180).
+function csvCell(value: string | null | undefined) {
+  const s = value ?? ""
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
 
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -119,6 +130,36 @@ export function UsersClient() {
     .map(([id]) => id)
   const selectedUsers = users.filter((u) => selectedIds.includes(u.id))
   const selectedCount = selectedUsers.length
+
+  function handleExportCsv() {
+    const rows = filtered.map((u) =>
+      [
+        u.employee_id,
+        u.faculty_type,
+        u.first_name,
+        u.last_name,
+        u.full_name,
+        u.email,
+        u.department_id ? (deptMap[u.department_id] ?? "") : "",
+        u.designation,
+        u.status,
+      ].map(csvCell).join(",")
+    )
+
+    // Leading BOM so Excel reads the file as UTF-8 rather than mangling
+    // non-ASCII names.
+    const csv = "\uFEFF" + [EXPORT_HEADERS.join(","), ...rows].join("\r\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const objectUrl = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = objectUrl
+    a.download = `users_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(objectUrl)
+    toast.success(`Exported ${filtered.length} user${filtered.length === 1 ? "" : "s"}`)
+  }
 
   const selectionColumn: ColumnDef<User> = {
     id: "select",
@@ -227,8 +268,17 @@ export function UsersClient() {
         title="Users"
         description="Manage faculty and staff accounts."
         actions={
-          <PermissionGate permission="user.create">
-            <div className="flex gap-2">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={handleExportCsv}
+              disabled={isLoading || filtered.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              Export CSV{filtered.length > 0 ? ` (${filtered.length})` : ""}
+            </Button>
+            <PermissionGate permission="user.create">
               <Button variant="outline" className="gap-2" onClick={() => router.push("/users/new?tab=bulk")}>
                 <Upload className="h-4 w-4" />
                 Bulk Import
@@ -237,8 +287,8 @@ export function UsersClient() {
                 <Plus className="h-4 w-4" />
                 Add User
               </Button>
-            </div>
-          </PermissionGate>
+            </PermissionGate>
+          </div>
         }
       />
 

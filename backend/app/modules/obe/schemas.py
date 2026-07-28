@@ -71,6 +71,35 @@ class ProgramOutcomeResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── PO Bulk Import ────────────────────────────────────────────────────────────
+# Deliberately permissive: every row is validated in the service so a single bad
+# row is reported back as an error instead of rejecting the whole spreadsheet.
+
+
+class ProgramOutcomeBulkImportItem(BaseModel):
+    code: str = ""
+    statement: str = ""
+    po_type: str | None = None
+    reference: str | None = None
+
+
+class ProgramOutcomeBulkImportRequest(BaseModel):
+    po_version_id: UUID | None = None
+    program_id: UUID | None = None
+    items: list[ProgramOutcomeBulkImportItem]
+
+
+class ProgramOutcomeBulkImportError(BaseModel):
+    row: int
+    code: str
+    message: str
+
+
+class ProgramOutcomeBulkImportResponse(BaseModel):
+    created: int
+    errors: list[ProgramOutcomeBulkImportError]
+
+
 # ── PO Knowledge Profiles ─────────────────────────────────────────────────────
 
 

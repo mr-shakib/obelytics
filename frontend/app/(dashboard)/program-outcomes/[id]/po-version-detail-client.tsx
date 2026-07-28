@@ -6,10 +6,14 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Plus, Loader2, ArrowLeft, Pencil, Trash2 } from "lucide-react"
+import { Plus, Loader2, ArrowLeft, Pencil, Trash2, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/data-table"
+import {
+  BulkUploadDialog,
+  type BulkUploadResult,
+} from "@/components/shared/bulk-upload-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
@@ -27,6 +31,7 @@ import {
 } from "@/components/ui/dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { exportToXlsx } from "@/lib/xlsx-export"
 import { usePermissions } from "@/hooks/use-permission"
 import { useAuthStore } from "@/lib/stores/auth-store"
 
@@ -233,6 +238,38 @@ export function POVersionDetailClient({ versionId }: Props) {
     },
   ]
 
+  // ── Download / Bulk upload ───────────────────────────────────────────────
+
+  async function handleDownload() {
+    const slug = (version?.name ?? "program_outcomes")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+    await exportToXlsx({
+      fileName: `program_outcomes_${slug}.xlsx`,
+      sheetName: "Program Outcomes",
+      columns: [
+        { key: "code", header: "code" },
+        { key: "po_type", header: "po_type" },
+        { key: "statement", header: "statement" },
+        { key: "status", header: "status" },
+      ],
+      rows: pos as unknown as Record<string, unknown>[],
+    })
+  }
+
+  async function importPOs(rows: Record<string, string | number | undefined>[]) {
+    const items = rows.map((r) => ({
+      code: String(r["code"] ?? "").trim(),
+      po_type: String(r["po_type"] ?? "").trim(),
+      statement: String(r["statement"] ?? "").trim(),
+    }))
+    const { data } = await apiClient.POST("/program-outcomes/bulk-import" as never, {
+      body: { po_version_id: versionId, items },
+    } as never)
+    return (data as unknown) as BulkUploadResult
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (!isInitialized || !canManageProgramOutcomes) return null
@@ -263,71 +300,103 @@ export function POVersionDetailClient({ versionId }: Props) {
         title={version.name}
         description={version.description ?? "Manage program outcomes for this version."}
         actions={
-          <PermissionGate permission="po.create">
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger
-                render={
-                  <Button>
-                    <Plus />
-                    Add PO
-                  </Button>
-                }
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={handleDownload} disabled={pos.length === 0}>
+              <Download />
+              Download
+            </Button>
+
+            <PermissionGate permission="po.create">
+              <BulkUploadDialog
+                entityLabel="Program Outcome"
+                entityLabelPlural="Program Outcomes"
+                templateFileName="program_outcome_template"
+                notes={[`Every row is added to the ${version.name} version.`]}
+                columns={[
+                  { key: "code", required: true, description: "Unique PO code (max 20 chars)", example: "PO1" },
+                  { key: "po_type", required: false, description: "PO type label (max 100 chars)", example: "Generic" },
+                  { key: "statement", required: true, description: "The program outcome statement", example: "Apply knowledge of mathematics, science and engineering fundamentals to the solution of complex engineering problems" },
+                ]}
+                sampleRows={[
+                  ["PO1", "Engineering Knowledge", "Apply knowledge of mathematics, natural science, computing and engineering fundamentals to the solution of complex engineering problems"],
+                  ["PO2", "Problem Analysis", "Identify, formulate, research literature and analyse complex engineering problems reaching substantiated conclusions"],
+                  ["PO3", "Design/Development of Solutions", "Design solutions for complex engineering problems and design systems, components or processes that meet specified needs"],
+                ]}
+                onImport={importPOs}
+                onImported={() => {
+                  qc.invalidateQueries({ queryKey: queryKeys.programOutcomes.byVersion(versionId) })
+                  qc.invalidateQueries({ queryKey: queryKeys.programOutcomes.all })
+                  qc.invalidateQueries({ queryKey: queryKeys.poVersions.all })
+                }}
               />
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Add Program Outcome to {version.name}</DialogTitle>
-                </DialogHeader>
-                <form
-                  id="create-po-form"
-                  onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
-                  className="space-y-4 py-2"
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor="po-code">Code</Label>
-                    <Input id="po-code" {...createForm.register("code")} placeholder="PO1" />
-                    {createForm.formState.errors.code && (
-                      <p className="text-sm text-destructive">
-                        {createForm.formState.errors.code.message}
-                      </p>
-                    )}
-                  </div>
+            </PermissionGate>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="po-type">PO Type</Label>
-                    <Input id="po-type" {...createForm.register("po_type")} placeholder="e.g. Generic" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="po-statement">Statement</Label>
-                    <Textarea
-                      id="po-statement"
-                      {...createForm.register("statement")}
-                      placeholder="Describe the program outcome..."
-                      rows={4}
-                      maxLength={500}
-                    />
-                    {createForm.formState.errors.statement && (
-                      <p className="text-sm text-destructive">
-                        {createForm.formState.errors.statement.message}
-                      </p>
-                    )}
-                  </div>
-                </form>
-                <DialogFooter showCloseButton>
-                  <Button
-                    type="submit"
-                    form="create-po-form"
-                    disabled={createForm.formState.isSubmitting || createMutation.isPending}
+            <PermissionGate permission="po.create">
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger
+                  render={
+                    <Button>
+                      <Plus />
+                      Add PO
+                    </Button>
+                  }
+                />
+                <DialogContent className="sm:max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Add Program Outcome to {version.name}</DialogTitle>
+                  </DialogHeader>
+                  <form
+                    id="create-po-form"
+                    onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
+                    className="space-y-4 py-2"
                   >
-                    {(createForm.formState.isSubmitting || createMutation.isPending) && (
-                      <Loader2 className="animate-spin" />
-                    )}
-                    Create
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </PermissionGate>
+                    <div className="space-y-2">
+                      <Label htmlFor="po-code">Code</Label>
+                      <Input id="po-code" {...createForm.register("code")} placeholder="PO1" />
+                      {createForm.formState.errors.code && (
+                        <p className="text-sm text-destructive">
+                          {createForm.formState.errors.code.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="po-type">PO Type</Label>
+                      <Input id="po-type" {...createForm.register("po_type")} placeholder="e.g. Generic" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="po-statement">Statement</Label>
+                      <Textarea
+                        id="po-statement"
+                        {...createForm.register("statement")}
+                        placeholder="Describe the program outcome..."
+                        rows={4}
+                        maxLength={500}
+                      />
+                      {createForm.formState.errors.statement && (
+                        <p className="text-sm text-destructive">
+                          {createForm.formState.errors.statement.message}
+                        </p>
+                      )}
+                    </div>
+                  </form>
+                  <DialogFooter showCloseButton>
+                    <Button
+                      type="submit"
+                      form="create-po-form"
+                      disabled={createForm.formState.isSubmitting || createMutation.isPending}
+                    >
+                      {(createForm.formState.isSubmitting || createMutation.isPending) && (
+                        <Loader2 className="animate-spin" />
+                      )}
+                      Create
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </PermissionGate>
+          </div>
         }
       />
 

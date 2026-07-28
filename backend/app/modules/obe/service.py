@@ -70,6 +70,9 @@ from app.modules.obe.schemas import (
     POVersionUpdate,
     ProgramMissionCreate,
     ProgramMissionUpdate,
+    ProgramOutcomeBulkImportError,
+    ProgramOutcomeBulkImportItem,
+    ProgramOutcomeBulkImportResponse,
     ProgramOutcomeCreate,
     ProgramOutcomeUpdate,
 )
@@ -171,6 +174,96 @@ class POService:
         result = await self._repo.update(po, data)
         await self._session.commit()
         return result
+
+    async def bulk_import(
+        self,
+        items: list[ProgramOutcomeBulkImportItem],
+        org_id: UUID,
+        po_version_id: UUID | None = None,
+        program_id: UUID | None = None,
+    ) -> ProgramOutcomeBulkImportResponse:
+        # Codes are unique per (org, program) among active POs, so conflicts are
+        # resolved against that scope rather than the whole organization.
+        scope = await self._repo.list_active_in_scope(org_id, program_id)
+        taken_codes = {po.code.strip().lower() for po in scope}
+        next_index = max(
+            (po.order_index for po in scope if po.po_version_id == po_version_id),
+            default=-1,
+        ) + 1
+
+        created = 0
+        errors: list[ProgramOutcomeBulkImportError] = []
+        seen_codes: set[str] = set()
+
+        for index, item in enumerate(items):
+            row = index + 1
+            code = (item.code or "").strip()
+            statement = (item.statement or "").strip()
+            po_type = (item.po_type or "").strip()
+            reference = (item.reference or "").strip()
+
+            if not code or not statement:
+                errors.append(
+                    ProgramOutcomeBulkImportError(
+                        row=row, code=code, message="Code and statement are required"
+                    )
+                )
+                continue
+            if len(code) > 20:
+                errors.append(
+                    ProgramOutcomeBulkImportError(
+                        row=row, code=code, message="Code must be 20 characters or fewer"
+                    )
+                )
+                continue
+            if len(po_type) > 100:
+                errors.append(
+                    ProgramOutcomeBulkImportError(
+                        row=row, code=code, message="PO type must be 100 characters or fewer"
+                    )
+                )
+                continue
+            if len(reference) > 100:
+                errors.append(
+                    ProgramOutcomeBulkImportError(
+                        row=row, code=code, message="Reference must be 100 characters or fewer"
+                    )
+                )
+                continue
+            if code.lower() in seen_codes:
+                errors.append(
+                    ProgramOutcomeBulkImportError(
+                        row=row, code=code, message="Duplicate code in this import"
+                    )
+                )
+                continue
+            seen_codes.add(code.lower())
+            if code.lower() in taken_codes:
+                errors.append(
+                    ProgramOutcomeBulkImportError(
+                        row=row, code=code, message="A program outcome with this code already exists"
+                    )
+                )
+                continue
+
+            await self._repo.create(
+                ProgramOutcome(
+                    organization_id=org_id,
+                    program_id=program_id,
+                    po_version_id=po_version_id,
+                    code=code,
+                    reference=reference or None,
+                    statement=statement,
+                    po_type=po_type or None,
+                    order_index=next_index,
+                    status="ACTIVE",
+                )
+            )
+            next_index += 1
+            created += 1
+
+        await self._session.commit()
+        return ProgramOutcomeBulkImportResponse(created=created, errors=errors)
 
     async def archive(self, po_id: UUID, org_id: UUID) -> ProgramOutcome:
         po = await self._repo.get_by_id(po_id, org_id)

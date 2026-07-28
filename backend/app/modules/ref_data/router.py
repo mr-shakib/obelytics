@@ -39,6 +39,8 @@ from app.modules.ref_data.schemas import (
     POTypeCreate,
     POTypeResponse,
     POTypeUpdate,
+    RefDataBulkImportRequest,
+    RefDataBulkImportResponse,
 )
 from app.modules.ref_data.service import (
     AssessmentTypeService,
@@ -249,6 +251,16 @@ async def create_complex_problem(
     return await ComplexProblemService(db).create(body, current_user.organization_id)
 
 
+@router.post("/complex-problems/bulk-import", response_model=RefDataBulkImportResponse)
+async def bulk_import_complex_problems(
+    body: RefDataBulkImportRequest,
+    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await ComplexProblemService(db).bulk_import(body.items, current_user.organization_id)
+
+
 @router.patch("/complex-problems/{record_id}", response_model=ComplexProblemResponse)
 async def update_complex_problem(
     record_id: UUID,
@@ -281,6 +293,16 @@ async def create_complex_activity(
     return await ComplexActivityService(db).create(body, current_user.organization_id)
 
 
+@router.post("/complex-activities/bulk-import", response_model=RefDataBulkImportResponse)
+async def bulk_import_complex_activities(
+    body: RefDataBulkImportRequest,
+    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await ComplexActivityService(db).bulk_import(body.items, current_user.organization_id)
+
+
 @router.patch("/complex-activities/{record_id}", response_model=ComplexActivityResponse)
 async def update_complex_activity(
     record_id: UUID,
@@ -311,6 +333,16 @@ async def create_knowledge_profile(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     return await KnowledgeProfileService(db).create(body, current_user.organization_id)
+
+
+@router.post("/knowledge-profiles/bulk-import", response_model=RefDataBulkImportResponse)
+async def bulk_import_knowledge_profiles(
+    body: RefDataBulkImportRequest,
+    _: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await KnowledgeProfileService(db).bulk_import(body.items, current_user.organization_id)
 
 
 @router.patch("/knowledge-profiles/{record_id}", response_model=KnowledgeProfileResponse)

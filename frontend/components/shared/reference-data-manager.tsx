@@ -6,9 +6,14 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Plus, Loader2, Pencil, Trash2 } from "lucide-react"
+import { Plus, Loader2, Pencil, Trash2, Download } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/data-table"
+import {
+  BulkUploadDialog,
+  type BulkUploadColumn,
+  type BulkUploadResult,
+} from "@/components/shared/bulk-upload-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PermissionGate } from "@/components/shared/permission-gate"
@@ -26,6 +31,7 @@ import {
 } from "@/components/ui/dialog"
 import { apiClient } from "@/lib/api/client"
 import { truncate } from "@/lib/utils"
+import { exportToXlsx } from "@/lib/xlsx-export"
 
 export type RefDataField = {
   name: string
@@ -42,6 +48,17 @@ export type RefDataColumn = {
   truncateAt?: number
 }
 
+export type RefDataBulkUpload = {
+  /** POST endpoint accepting `{ items: [...] }`. */
+  importPath: string
+  entityLabelPlural: string
+  /** Spreadsheet contract — keys must match the API item fields. */
+  columns: BulkUploadColumn[]
+  sampleRows: (string | number)[][]
+  templateFileName: string
+  notes?: string[]
+}
+
 export interface ReferenceDataManagerProps {
   title: string
   description: string
@@ -53,6 +70,10 @@ export interface ReferenceDataManagerProps {
   permission: string
   fields: RefDataField[]
   columns: RefDataColumn[]
+  /** Enables the Bulk Upload dialog when the entity has an import endpoint. */
+  bulkUpload?: RefDataBulkUpload
+  /** Base name for the downloaded records file; defaults to a slug of the title. */
+  exportFileName?: string
 }
 
 type RefDataRecord = {
@@ -92,6 +113,8 @@ export function ReferenceDataManager({
   permission,
   fields,
   columns,
+  bulkUpload,
+  exportFileName,
 }: ReferenceDataManagerProps) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<RefDataRecord | null>(null)
@@ -215,18 +238,63 @@ export function ReferenceDataManager({
     },
   ]
 
+  const records = data ?? []
+
+  async function handleDownload() {
+    const slug = exportFileName ?? title.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+    await exportToXlsx({
+      fileName: `${slug}.xlsx`,
+      sheetName: entityLabel.slice(0, 31),
+      columns: [
+        ...columns.map((col) => ({ key: col.key, header: col.key })),
+        { key: "status", header: "status", value: (r: RefDataRecord) => (r.is_active ? "ACTIVE" : "INACTIVE") },
+      ],
+      rows: records,
+    })
+  }
+
   return (
     <div>
       <PageHeader
         title={title}
         description={description}
         actions={
-          <PermissionGate permission={permission}>
-            <Button onClick={openCreateDialog}>
-              <Plus />
-              New {entityLabel}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={handleDownload} disabled={records.length === 0}>
+              <Download />
+              Download
             </Button>
-          </PermissionGate>
+            {bulkUpload && (
+              <PermissionGate permission={permission}>
+                <BulkUploadDialog
+                  entityLabel={entityLabel}
+                  entityLabelPlural={bulkUpload.entityLabelPlural}
+                  columns={bulkUpload.columns}
+                  sampleRows={bulkUpload.sampleRows}
+                  templateFileName={bulkUpload.templateFileName}
+                  notes={bulkUpload.notes}
+                  onImported={() => qc.invalidateQueries({ queryKey })}
+                  onImport={async (rows) => {
+                    const items = rows.map((row) =>
+                      Object.fromEntries(
+                        bulkUpload.columns.map((col) => [col.key, String(row[col.key] ?? "").trim()])
+                      )
+                    )
+                    const { data } = await apiClient.POST(bulkUpload.importPath as never, {
+                      body: { items },
+                    } as never)
+                    return (data as unknown) as BulkUploadResult
+                  }}
+                />
+              </PermissionGate>
+            )}
+            <PermissionGate permission={permission}>
+              <Button onClick={openCreateDialog}>
+                <Plus />
+                New {entityLabel}
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
@@ -285,7 +353,7 @@ export function ReferenceDataManager({
 
       <DataTable
         columns={tableColumns}
-        data={data ?? []}
+        data={records}
         loading={isLoading}
         emptyMessage={`No ${entityLabel.toLowerCase()}s found.`}
       />

@@ -33,6 +33,22 @@ export function ComplexAttributesClient() {
             { key: "name", header: "Name" },
             { key: "description", header: "Characteristics", truncateAt: 80 },
           ]}
+          exportFileName="complex_engineering_problems"
+          bulkUpload={{
+            importPath: "/ref-data/complex-problems/bulk-import",
+            entityLabelPlural: "Complex Engineering Problems",
+            templateFileName: "complex_engineering_problem_template",
+            columns: [
+              { key: "code", required: true, description: "Unique attribute code (max 20 chars)", example: "CEP1" },
+              { key: "name", required: false, description: "Short name for the attribute (max 150 chars)", example: "Depth of knowledge required" },
+              { key: "description", required: true, description: "The characteristics of this attribute", example: "Cannot be resolved without in-depth engineering knowledge" },
+            ],
+            sampleRows: [
+              ["CEP1", "Depth of knowledge required", "Cannot be resolved without in-depth engineering knowledge at the level of one or more of WK3, WK4, WK5, WK6 or WK8"],
+              ["CEP2", "Range of conflicting requirements", "Involves wide-ranging or conflicting technical, engineering and other issues"],
+              ["CEP3", "Depth of analysis required", "Has no obvious solution and requires abstract thinking and originality in analysis"],
+            ],
+          }}
         />
       </TabsContent>
 
@@ -56,6 +72,22 @@ export function ComplexAttributesClient() {
             { key: "name", header: "Name" },
             { key: "description", header: "Characteristics", truncateAt: 80 },
           ]}
+          exportFileName="complex_activities"
+          bulkUpload={{
+            importPath: "/ref-data/complex-activities/bulk-import",
+            entityLabelPlural: "Complex Activities",
+            templateFileName: "complex_activity_template",
+            columns: [
+              { key: "code", required: true, description: "Unique attribute code (max 20 chars)", example: "CA1" },
+              { key: "name", required: false, description: "Short name for the attribute (max 150 chars)", example: "Range of resources" },
+              { key: "description", required: true, description: "The characteristics of this attribute", example: "Involves the use of diverse resources" },
+            ],
+            sampleRows: [
+              ["CA1", "Range of resources", "Involves the use of diverse resources including people, money, equipment, materials, information and technologies"],
+              ["CA2", "Level of interaction", "Requires resolution of significant problems arising from interactions between wide-ranging or conflicting technical, engineering or other issues"],
+              ["CA3", "Innovation", "Involves creative use of engineering principles and research-based knowledge in novel ways"],
+            ],
+          }}
         />
       </TabsContent>
 
@@ -77,6 +109,21 @@ export function ComplexAttributesClient() {
             { key: "code", header: "Code" },
             { key: "description", header: "Description", truncateAt: 80 },
           ]}
+          exportFileName="knowledge_profiles"
+          bulkUpload={{
+            importPath: "/ref-data/knowledge-profiles/bulk-import",
+            entityLabelPlural: "Knowledge Profiles",
+            templateFileName: "knowledge_profile_template",
+            columns: [
+              { key: "code", required: true, description: "Unique knowledge profile code (max 20 chars)", example: "KP1" },
+              { key: "description", required: true, description: "What this knowledge profile covers", example: "A systematic, theory-based understanding of the natural sciences applicable to the discipline" },
+            ],
+            sampleRows: [
+              ["KP1", "A systematic, theory-based understanding of the natural sciences applicable to the discipline"],
+              ["KP2", "Conceptually-based mathematics, numerical analysis, statistics and formal aspects of computer and information science to support analysis and modelling applicable to the discipline"],
+              ["KP3", "A systematic, theory-based formulation of engineering fundamentals required in the engineering discipline"],
+            ],
+          }}
         />
       </TabsContent>
     </Tabs>

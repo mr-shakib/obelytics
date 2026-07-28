@@ -40,6 +40,8 @@ from app.modules.obe.schemas import (
     ProgramMissionCreate,
     ProgramMissionResponse,
     ProgramMissionUpdate,
+    ProgramOutcomeBulkImportRequest,
+    ProgramOutcomeBulkImportResponse,
     ProgramOutcomeCreate,
     ProgramOutcomeResponse,
     ProgramOutcomeUpdate,
@@ -152,6 +154,19 @@ async def create_program_outcome(
 ):
     svc = POService(db)
     return await svc.create(body, current_user.organization_id)
+
+
+@router.post("/program-outcomes/bulk-import", response_model=ProgramOutcomeBulkImportResponse)
+async def bulk_import_program_outcomes(
+    body: ProgramOutcomeBulkImportRequest,
+    _: Annotated[PermissionManifestResponse, Depends(require_permission("po.create"))],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = POService(db)
+    return await svc.bulk_import(
+        body.items, current_user.organization_id, body.po_version_id, body.program_id
+    )
 
 
 @router.get("/program-outcomes/{po_id}", response_model=ProgramOutcomeResponse)

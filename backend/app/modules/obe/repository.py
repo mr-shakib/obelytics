@@ -143,6 +143,22 @@ class PORepository:
         )
         return bool(result.scalar())
 
+    async def list_active_in_scope(
+        self, org_id: UUID, program_id: UUID | None
+    ) -> list[ProgramOutcome]:
+        """Active POs sharing a code namespace — mirrors uq_obe_po_org_program_code_active."""
+        stmt = select(ProgramOutcome).where(
+            and_(
+                ProgramOutcome.organization_id == org_id,
+                ProgramOutcome.status == "ACTIVE",
+                ProgramOutcome.program_id == program_id
+                if program_id is not None
+                else ProgramOutcome.program_id.is_(None),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def create(self, obj: ProgramOutcome) -> ProgramOutcome:
         self._session.add(obj)
         await self._session.flush()

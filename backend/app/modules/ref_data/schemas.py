@@ -249,3 +249,28 @@ class MappingWeightLabelResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+# ── Bulk Import ───────────────────────────────────────────────────────────────
+# Deliberately permissive: every row is validated in the service so a single bad
+# row is reported back as an error instead of rejecting the whole spreadsheet.
+
+class RefDataBulkImportItem(BaseModel):
+    code: str = ""
+    name: str | None = None
+    description: str = ""
+
+
+class RefDataBulkImportRequest(BaseModel):
+    items: list[RefDataBulkImportItem]
+
+
+class RefDataBulkImportError(BaseModel):
+    row: int
+    code: str
+    message: str
+
+
+class RefDataBulkImportResponse(BaseModel):
+    created: int
+    errors: list[RefDataBulkImportError]

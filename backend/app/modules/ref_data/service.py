@@ -49,6 +49,9 @@ from app.modules.ref_data.schemas import (
     MappingWeightLabelUpdate,
     POTypeCreate,
     POTypeUpdate,
+    RefDataBulkImportError,
+    RefDataBulkImportItem,
+    RefDataBulkImportResponse,
 )
 
 _CACHE_TTL = 3600  # 1 hour
@@ -61,6 +64,78 @@ def _cache_key(org_id: UUID, ref_type: str) -> str:
 async def _invalidate(org_id: UUID, ref_type: str) -> None:
     redis = await get_redis()
     await redis.delete(_cache_key(org_id, ref_type))
+
+
+async def _bulk_import_coded(
+    repo,
+    model,
+    items: list[RefDataBulkImportItem],
+    org_id: UUID,
+    *,
+    entity_label: str,
+    ref_type: str,
+    has_name: bool,
+) -> RefDataBulkImportResponse:
+    """Import code/description reference records, collecting per-row errors.
+
+    Shared by the attribute lists (CEP, complex activities, knowledge profiles),
+    which all key off a short code and carry a free-text description.
+    """
+    created = 0
+    errors: list[RefDataBulkImportError] = []
+    seen_codes: set[str] = set()
+
+    for index, item in enumerate(items):
+        row = index + 1
+        code = (item.code or "").strip()
+        description = (item.description or "").strip()
+        name = (item.name or "").strip()
+
+        if not code or not description:
+            errors.append(
+                RefDataBulkImportError(
+                    row=row, code=code, message="Code and description are required"
+                )
+            )
+            continue
+        if len(code) > 20:
+            errors.append(
+                RefDataBulkImportError(
+                    row=row, code=code, message="Code must be 20 characters or fewer"
+                )
+            )
+            continue
+        if has_name and len(name) > 150:
+            errors.append(
+                RefDataBulkImportError(
+                    row=row, code=code, message="Name must be 150 characters or fewer"
+                )
+            )
+            continue
+        if code.lower() in seen_codes:
+            errors.append(
+                RefDataBulkImportError(row=row, code=code, message="Duplicate code in this import")
+            )
+            continue
+        seen_codes.add(code.lower())
+
+        if await repo.find_by_code(code, org_id):
+            errors.append(
+                RefDataBulkImportError(
+                    row=row, code=code, message=f"A {entity_label} with this code already exists"
+                )
+            )
+            continue
+
+        values = {"organization_id": org_id, "code": code, "description": description}
+        if has_name:
+            values["name"] = name or None
+        await repo.create(model(**values))
+        created += 1
+
+    if created:
+        await _invalidate(org_id, ref_type)
+    return RefDataBulkImportResponse(created=created, errors=errors)
 
 
 class BloomDomainService:
@@ -275,6 +350,19 @@ class ComplexProblemService:
         await _invalidate(org_id, "complex_problems")
         return result
 
+    async def bulk_import(
+        self, items: list[RefDataBulkImportItem], org_id: UUID
+    ) -> RefDataBulkImportResponse:
+        return await _bulk_import_coded(
+            self._repo,
+            ComplexProblem,
+            items,
+            org_id,
+            entity_label="complex problem",
+            ref_type="complex_problems",
+            has_name=True,
+        )
+
 
 class ComplexActivityService:
     def __init__(self, session: AsyncSession) -> None:
@@ -309,6 +397,19 @@ class ComplexActivityService:
         await _invalidate(org_id, "complex_activities")
         return result
 
+    async def bulk_import(
+        self, items: list[RefDataBulkImportItem], org_id: UUID
+    ) -> RefDataBulkImportResponse:
+        return await _bulk_import_coded(
+            self._repo,
+            ComplexActivity,
+            items,
+            org_id,
+            entity_label="complex activity",
+            ref_type="complex_activities",
+            has_name=True,
+        )
+
 
 class KnowledgeProfileService:
     def __init__(self, session: AsyncSession) -> None:
@@ -342,6 +443,19 @@ class KnowledgeProfileService:
         result = await self._repo.update(obj, data)
         await _invalidate(org_id, "knowledge_profiles")
         return result
+
+    async def bulk_import(
+        self, items: list[RefDataBulkImportItem], org_id: UUID
+    ) -> RefDataBulkImportResponse:
+        return await _bulk_import_coded(
+            self._repo,
+            KnowledgeProfile,
+            items,
+            org_id,
+            entity_label="knowledge profile",
+            ref_type="knowledge_profiles",
+            has_name=False,
+        )
 
 
 class POTypeService:
