@@ -150,7 +150,7 @@ const programSchema = z.object({
   department_id: z.string().min(1, "Department required"),
   program_type: z.enum(["UNDERGRADUATE", "POSTGRADUATE", "PHD"], { message: "Type required" }),
   minimum_duration_semesters: z.number().int().min(1).max(20),
-  total_credits: z.number().int().min(1).max(500),
+  total_credits: z.number().min(1).max(500),
   study_mode: z.enum(["FULL_TIME", "PART_TIME"], { message: "Mode required" }),
   description: z.string().optional(),
 })
@@ -1085,6 +1085,7 @@ export function ProgramDetailClient({ id }: Props) {
                     type="number"
                     min={1}
                     max={500}
+                    step="0.25"
                     {...register("total_credits", { valueAsNumber: true })}
                   />
                   {errors.total_credits && (

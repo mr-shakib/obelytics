@@ -115,7 +115,7 @@ class ProgramCreate(BaseModel):
     acronym: str = Field(min_length=1, max_length=20)
     program_type: str = Field(pattern="^(UNDERGRADUATE|POSTGRADUATE|PHD)$")
     minimum_duration_semesters: int = Field(ge=1, le=20)
-    total_credits: int = Field(ge=1, le=500)
+    total_credits: float = Field(ge=1, le=500)
     study_mode: str = Field(pattern="^(FULL_TIME|PART_TIME)$")
     description: str | None = None
     po_version_id: UUID | None = None
@@ -126,7 +126,7 @@ class ProgramUpdate(BaseModel):
     acronym: str | None = Field(default=None, min_length=1, max_length=20)
     program_type: str | None = Field(default=None, pattern="^(UNDERGRADUATE|POSTGRADUATE|PHD)$")
     minimum_duration_semesters: int | None = Field(default=None, ge=1, le=20)
-    total_credits: int | None = Field(default=None, ge=1, le=500)
+    total_credits: float | None = Field(default=None, ge=1, le=500)
     study_mode: str | None = Field(default=None, pattern="^(FULL_TIME|PART_TIME)$")
     description: str | None = None
     po_version_id: UUID | None = None
@@ -156,7 +156,7 @@ class ProgramResponse(BaseModel):
     acronym: str
     program_type: str
     minimum_duration_semesters: int
-    total_credits: int
+    total_credits: float
     study_mode: str
     description: str | None
     po_version_id: UUID | None

@@ -154,7 +154,7 @@ class Program(Base):
     acronym = Column(String(20), nullable=False)
     program_type = Column(String(20), nullable=False)  # UNDERGRADUATE, POSTGRADUATE, PHD
     minimum_duration_semesters = Column(SmallInteger, nullable=False)
-    total_credits = Column(SmallInteger, nullable=False)
+    total_credits = Column(sa.Float, nullable=False)
     study_mode = Column(String(20), nullable=False)  # FULL_TIME, PART_TIME
     description = Column(Text, nullable=True)
     po_version_id = Column(
