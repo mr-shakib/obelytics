@@ -17,13 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import {
   Dialog,
   DialogContent,
@@ -45,7 +39,7 @@ type Department = {
   current_hod?: { user_id: string; full_name: string } | null
 }
 
-type User = { id: string; full_name: string }
+type User = { id: string; full_name: string; employee_id?: string | null }
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -253,22 +247,18 @@ export function DepartmentsClient() {
                       name="head_of_department_id"
                       control={control}
                       render={({ field }) => (
-                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a user (optional)">
-                              {(value: string) => value
-                                ? ((users ?? []).find((u) => u.id === value)?.full_name ?? value)
-                                : null}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(users ?? []).map((u) => (
-                              <SelectItem key={u.id} value={u.id}>
-                                {u.full_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Combobox
+                          options={(users ?? []).map((u) => ({
+                            value: u.id,
+                            label: u.employee_id ? `${u.employee_id} — ${u.full_name}` : u.full_name,
+                          }))}
+                          value={field.value ?? ""}
+                          onValueChange={field.onChange}
+                          placeholder="Select a user (optional)"
+                          searchPlaceholder="Search by employee ID or name…"
+                          emptyText="No users found."
+                          triggerClassName="w-full"
+                        />
                       )}
                     />
                   </div>
