@@ -1,0 +1,23 @@
+# Caddy obtains and renews a Let's Encrypt certificate for {$DOMAIN} automatically.
+{$DOMAIN} {
+	encode zstd gzip
+
+	request_body {
+		max_size 50MB
+	}
+
+	# FastAPI backend: versioned API + health checks
+	@backend path /api/v1/* /health/*
+	handle @backend {
+		reverse_proxy backend:8000 {
+			transport http {
+				read_timeout 300s
+			}
+		}
+	}
+
+	# Everything else (pages, /_next, and the /api/auth/* BFF routes) → Next.js
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
