@@ -78,7 +78,7 @@ TEST_PC_PASSWORD      = "TestPC@123"
 _SCHEMAS = [
     "events", "iam", "org", "config", "curriculum", "obe",
     "assessment", "attainment", "approval", "notification",
-    "audit", "accreditation", "reporting", "copilot",
+    "audit", "accreditation", "reporting", "copilot", "cqi",
 ]
 
 

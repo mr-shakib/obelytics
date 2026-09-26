@@ -23,6 +23,7 @@ from app.modules.attainment.repository import (
     COAttainmentResultRepository,
     POAttainmentResultRepository,
 )
+from app.modules.cqi.detector import CQIGapDetector
 from app.modules.curriculum.models import SectionOffering
 from app.modules.obe.models import COPOMappingEntry, COPOMappingSet
 
@@ -37,9 +38,17 @@ class AttainmentEngine:
         self, section_offering_id: UUID, org_id: UUID
     ) -> None:
         """
-        Full attainment computation for a section offering.
-        Called after ResultPublication is PUBLISHED.
+        Full attainment computation for a section offering, followed by CQI gap
+        detection. Called after ResultPublication is PUBLISHED.
         """
+        await self._compute(section_offering_id, org_id)
+        # Gap sync reads the persisted results, so it runs correctly even when
+        # _compute returned early (no assessments, enrollments, or CO-PO map).
+        await CQIGapDetector(self._session).sync_for_section_offering(
+            section_offering_id, org_id
+        )
+
+    async def _compute(self, section_offering_id: UUID, org_id: UUID) -> None:
         # 1. Load section offering to get course_id, curriculum_id
         so_result = await self._session.execute(
             select(SectionOffering).where(SectionOffering.id == section_offering_id)

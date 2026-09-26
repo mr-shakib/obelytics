@@ -76,6 +76,9 @@ ALL_PERMISSIONS: list[dict] = [
     {"code": "attainment.initiate",           "module": "attainment",   "description": "Initiate attainment run"},
     {"code": "attainment.publish",            "module": "attainment",   "description": "Publish attainment run"},
     {"code": "attainment.read",               "module": "attainment",   "description": "Read attainment results"},
+    # ── CQI (Continuous Quality Improvement) ──────────────────────────────────
+    {"code": "cqi.read",                      "module": "cqi",          "description": "View attainment gaps and CQI summary"},
+    {"code": "cqi.gap.waive",                 "module": "cqi",          "description": "Waive an attainment gap with a documented reason"},
     # ── Reporting ─────────────────────────────────────────────────────────────
     {"code": "report.generate",               "module": "reporting",    "description": "Generate all reports"},
     {"code": "report.co.generate",            "module": "reporting",    "description": "Generate CO reports"},
@@ -132,6 +135,7 @@ ROLES: list[dict] = [
             "marks.enter", "marks.update", "marks.read.section",
             "result.submit", "result.approve.ml", "result.reject.ml", "result.read.section",
             "attainment.read",
+            "cqi.read",
             "report.co.generate", "report.assessment.generate",
             "accreditation.read",
             "approval.inbox.read",
@@ -151,6 +155,7 @@ ROLES: list[dict] = [
             "marks.enter", "marks.update",
             "result.submit", "result.read.section",
             "attainment.read",
+            "cqi.read",
             "approval.inbox.read",
             "notification.read.own",
         ],
