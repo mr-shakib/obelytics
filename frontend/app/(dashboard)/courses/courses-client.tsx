@@ -439,7 +439,7 @@ export function CoursesClient() {
                     <MultiCombobox
                       options={allCourses
                         .filter((c) => c.status === "ACTIVE")
-                        .map((c) => ({ value: c.id, label: `${c.code} — ${c.title}` }))}
+                        .map((c) => ({ value: c.id, label: `${c.code} — ${c.title} (${c.credits} cr)` }))}
                       values={selPrereqIds}
                       onValuesChange={(next) => {
                         setSelPrereqIds(next)

@@ -75,12 +75,9 @@ class CurriculumTermDefinition(Base):
 class Course(Base):
     __tablename__ = "courses"
     __table_args__ = (
-        Index(
-            "uq_curriculum_course_org_code_active",
-            "organization_id", "code",
-            unique=True,
-            postgresql_where=sa.text("status = 'ACTIVE'"),
-        ),
+        # Codes are unique per curriculum (enforced on slot placement), not per org:
+        # the same code can name different courses in different curricula.
+        Index("ix_curriculum_courses_org_code", "organization_id", "code"),
         CheckConstraint(
             "course_type IN ('THEORY', 'LAB', 'THESIS_DEFENSE')",
             name="ck_curriculum_course_type_valid",

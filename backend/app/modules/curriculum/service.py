@@ -13,13 +13,15 @@ from app.modules.curriculum.exceptions import (
     BatchHasDependentDataError,
     BatchNameConflictError,
     BatchNotFoundError,
-    CourseCodeConflictError,
     CourseNotFoundError,
+    CourseNotInCurriculumError,
     CurriculumCodeConflictError,
+    CurriculumCourseCodeConflictError,
     CurriculumHasDependentDataError,
     CurriculumLockedError,
     CurriculumNotFoundError,
     CycleDetectedError,
+    DuplicateCourseError,
     FacultyAssignmentConflictError,
     FacultyAssignmentNotFoundError,
     ModuleLeaderAssignmentNotFoundError,
@@ -331,9 +333,10 @@ class CourseService:
         self._repo = CourseRepository(session)
 
     async def create(self, body: CourseCreate, org_id: UUID) -> Course:
-        existing = await self._repo.find_by_code(body.code, org_id)
-        if existing:
-            raise CourseCodeConflictError()
+        if await self._repo.find_identical(
+            body.code, body.title, body.credits, body.course_type, org_id
+        ):
+            raise DuplicateCourseError()
         course = Course(
             organization_id=org_id,
             course_category_id=body.course_category_id,
@@ -360,9 +363,8 @@ class CourseService:
 
         new_code = data.get("code")
         if new_code is not None and new_code != course.code:
-            existing = await self._repo.find_by_code(new_code, org_id)
-            if existing and existing.id != course.id:
-                raise CourseCodeConflictError()
+            if await self._repo.find_code_clash_in_curricula(course.id, new_code):
+                raise CurriculumCourseCodeConflictError(new_code)
 
         result = await self._repo.update(course, data)
         await self._session.commit()
@@ -394,7 +396,7 @@ class CourseService:
 
         created = 0
         errors: list[CourseBulkImportError] = []
-        seen_codes: set[str] = set()
+        seen: set[tuple[str, str, float, str]] = set()
 
         for index, item in enumerate(items):
             row = index + 1
@@ -405,17 +407,20 @@ class CourseService:
                     CourseBulkImportError(row=row, code=code, message="Code and title are required")
                 )
                 continue
-            if code in seen_codes:
+            # A code may repeat (different courses); only exact duplicates are rejected.
+            key = (code, title.lower(), float(item.credits), item.course_type)
+            if key in seen:
                 errors.append(
-                    CourseBulkImportError(row=row, code=code, message="Duplicate code in this import")
+                    CourseBulkImportError(row=row, code=code, message="Duplicate course in this import")
                 )
                 continue
-            seen_codes.add(code)
+            seen.add(key)
 
-            existing = await self._repo.find_by_code(code, org_id)
-            if existing:
+            if await self._repo.find_identical(code, title, item.credits, item.course_type, org_id):
                 errors.append(
-                    CourseBulkImportError(row=row, code=code, message="A course with this code already exists")
+                    CourseBulkImportError(
+                        row=row, code=code, message="An identical course already exists"
+                    )
                 )
                 continue
 
@@ -750,6 +755,11 @@ class CourseSlotService:
         if existing:
             from app.modules.curriculum.exceptions import SectionOfferingConflictError
             raise SectionOfferingConflictError()
+        course = await CourseRepository(self._session).get_by_id(body.course_id, org_id)
+        if course is None:
+            raise CourseNotFoundError()
+        if await self._repo.find_course_with_code(body.curriculum_id, course.code, course.id):
+            raise CurriculumCourseCodeConflictError(course.code)
         slot = CurriculumCourseSlot(
             curriculum_id=body.curriculum_id,
             curriculum_term_definition_id=body.curriculum_term_definition_id,
@@ -1119,6 +1129,12 @@ class BatchService:
 
         section_svc = SectionService(self._session)
         section = await section_svc.get_or_create(section_name.strip().upper(), org_id)
+
+        # Codes repeat across curricula, so the course must be the batch curriculum's own.
+        if not await CourseSlotRepository(self._session).find_by_curriculum_course(
+            batch.curriculum_id, course_id
+        ):
+            raise CourseNotInCurriculumError()
 
         repo = SectionOfferingRepository(self._session)
         if await repo.find_duplicate(batch_id, course_id, academic_term_id, section.id):

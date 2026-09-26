@@ -53,10 +53,27 @@ class CourseNotFoundError(HTTPException):
 
 
 class CourseCodeConflictError(HTTPException):
+    def __init__(self, detail: str = "A course with this code already exists"):
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
+class DuplicateCourseError(CourseCodeConflictError):
     def __init__(self):
         super().__init__(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A course with this code already exists",
+            "An identical course (same code, title, credits and type) already exists"
+        )
+
+
+class CurriculumCourseCodeConflictError(CourseCodeConflictError):
+    def __init__(self, code: str):
+        super().__init__(f"This curriculum already has a different course with code {code}")
+
+
+class CourseNotInCurriculumError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This course is not part of the batch's curriculum",
         )
 
 

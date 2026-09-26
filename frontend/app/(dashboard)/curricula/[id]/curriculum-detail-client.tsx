@@ -567,13 +567,13 @@ export function CurriculumDetailClient({ id }: Props) {
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select course">
-                              {selCourseId && courseById[selCourseId] ? `${courseById[selCourseId].code} — ${courseById[selCourseId].title}` : undefined}
+                              {selCourseId && courseById[selCourseId] ? `${courseById[selCourseId].code} — ${courseById[selCourseId].title} (${courseById[selCourseId].credits} cr)` : undefined}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {allCourses.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
-                                {c.code} — {c.title}
+                                {c.code} — {c.title} ({c.credits} cr)
                               </SelectItem>
                             ))}
                           </SelectContent>

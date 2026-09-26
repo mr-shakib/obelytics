@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import and_, delete, select, text
+from sqlalchemy import and_, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.curriculum.models import (
@@ -133,15 +133,42 @@ class CourseRepository:
         )
         return list(result.scalars().all())
 
-    async def find_by_code(self, code: str, org_id: UUID) -> Course | None:
+    async def find_identical(
+        self, code: str, title: str, credits: float, course_type: str, org_id: UUID
+    ) -> Course | None:
+        """An active course that is an exact duplicate (codes alone may repeat across curricula)."""
         result = await self._session.execute(
             select(Course).where(
                 and_(
-                    Course.code == code,
                     Course.organization_id == org_id,
                     Course.status == "ACTIVE",
+                    Course.code == code,
+                    func.lower(Course.title) == title.lower(),
+                    Course.credits == credits,
+                    Course.course_type == course_type,
+                )
+            ).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def find_code_clash_in_curricula(
+        self, course_id: UUID, code: str
+    ) -> Course | None:
+        """Another course with `code` placed in any curriculum that also contains `course_id`."""
+        own_curricula = select(CurriculumCourseSlot.curriculum_id).where(
+            CurriculumCourseSlot.course_id == course_id
+        )
+        result = await self._session.execute(
+            select(Course)
+            .join(CurriculumCourseSlot, CurriculumCourseSlot.course_id == Course.id)
+            .where(
+                and_(
+                    CurriculumCourseSlot.curriculum_id.in_(own_curricula),
+                    Course.code == code,
+                    Course.id != course_id,
                 )
             )
+            .limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -478,6 +505,24 @@ class CourseSlotRepository:
                     CurriculumCourseSlot.course_id == course_id,
                 )
             )
+        )
+        return result.scalar_one_or_none()
+
+    async def find_course_with_code(
+        self, curriculum_id: UUID, code: str, exclude_course_id: UUID
+    ) -> Course | None:
+        """A different course already placed in the curriculum under the same code."""
+        result = await self._session.execute(
+            select(Course)
+            .join(CurriculumCourseSlot, CurriculumCourseSlot.course_id == Course.id)
+            .where(
+                and_(
+                    CurriculumCourseSlot.curriculum_id == curriculum_id,
+                    Course.code == code,
+                    Course.id != exclude_course_id,
+                )
+            )
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

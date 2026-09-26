@@ -46,7 +46,7 @@ const TEMPLATE_COLUMNS = [
 ]
 
 const COLUMN_GUIDE: { key: string; required: boolean; description: string; example: string }[] = [
-  { key: "code", required: true, description: "Unique course code (max 30 chars)", example: "CSE101" },
+  { key: "code", required: true, description: "Course code (max 30 chars); may repeat across curricula", example: "CSE101" },
   { key: "title", required: true, description: "Course title (max 255 chars)", example: "Introduction to Programming" },
   { key: "credits", required: true, description: "Credit hours (0-20, decimals allowed e.g. 1.5)", example: "3" },
   { key: "course_type", required: true, description: "One of: THEORY, LAB, THESIS_DEFENSE", example: "THEORY" },
@@ -221,7 +221,7 @@ export function BulkImportCoursesDialog() {
                   <li>Replace the example rows with your courses. Don&apos;t rename, reorder, or remove columns.</li>
                   <li><span className="font-mono text-foreground">code</span>, <span className="font-mono text-foreground">title</span>, <span className="font-mono text-foreground">credits</span>, <span className="font-mono text-foreground">course_type</span>, and <span className="font-mono text-foreground">course_category_name</span> are required for every row.</li>
                   <li><span className="font-mono text-foreground">course_category_name</span> must match an existing category exactly (case-insensitive). Create categories first if needed.</li>
-                  <li>If a course code already exists, that row will be reported as an error (no duplicates).</li>
+                  <li>A code may be reused by a different course (e.g. in a newer curriculum). Rows identical to an existing course (same code, title, credits and type) are reported as errors.</li>
                   <li>Save the file as .xlsx, .xls, or .csv and upload it above.</li>
                 </ol>
                 <div className="overflow-auto rounded-lg border">
