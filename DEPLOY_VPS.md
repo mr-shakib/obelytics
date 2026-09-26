@@ -1,132 +1,86 @@
-# Obelytics — VPS Deployment Guide
+# Obelytics — VPS Deployment
 
-Runs the whole stack on one Linux VPS with Docker Compose. Caddy terminates HTTPS
-(automatic Let's Encrypt certificates) and serves frontend and backend on **one domain**:
+Production runs at **https://obelytics.bitstreamhq.com** on the shared VPS
+(`shakib@187.53.136.115`, Ubuntu, Docker). The app lives in `~/obelytics` on the server.
 
 ```
-                 ┌──────────────── VPS (docker compose) ────────────────┐
- Browser ─443──► │ caddy ─┬─ /api/v1/*, /health/* ──► backend (gunicorn) │
-                 │        └─ everything else ───────► frontend (Next.js)│
-                 │ backend, worker (arq) ──► postgres, redis (internal) │
-                 │ migrate (one-shot: alembic upgrade head)             │
-                 └──────────────────────────────────────────────────────┘
+Browser ─443─► host nginx (TLS, certbot) ─┬─ /api/v1/*, /health/* ─► 127.0.0.1:8320 backend
+                                          └─ everything else ──────► 127.0.0.1:3320 frontend
+docker compose (project "obelytics"):
+  backend (gunicorn) · worker (arq) · frontend (Next.js standalone)
+  postgres · redis (internal network only) · migrate (one-shot alembic upgrade head)
 ```
 
-Files: `docker-compose.prod.yml`, `deploy/Caddyfile`, `.env.production.example`,
-`frontend/Dockerfile`, `backend/Dockerfile`, `deploy/backup.sh`.
+The host nginx also serves other sites, so the stack never binds 80/443 itself.
+`/api/auth/*` is intentionally routed to Next.js — those are the BFF auth routes.
 
-## 1. Requirements
+Files: `docker-compose.prod.yml`, `.env.production.example`, `deploy/nginx/obelytics.conf`,
+`deploy/install-nginx.sh`, `deploy/backup.sh`, `frontend/Dockerfile`, `backend/Dockerfile`.
 
-- Ubuntu 22.04/24.04 (or any Linux with Docker), **2 vCPU / 4 GB RAM** recommended
-  (the frontend build needs ~2 GB; add swap on smaller machines)
-- A domain with an **A record** pointing at the VPS IP (e.g. `obelytics.example.com`)
-- Ports **80** and **443** open
+> Tip: on the server, `alias dc='docker compose -f docker-compose.prod.yml --env-file .env.production'`.
+> The commands below use `dc` and run from `~/obelytics`.
 
-## 2. Prepare the server
+## Updating (routine deploy)
 
 ```bash
-# Docker Engine + compose plugin
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker
-
-# Firewall
-sudo ufw allow OpenSSH && sudo ufw allow 80 && sudo ufw allow 443/tcp && sudo ufw allow 443/udp
-sudo ufw enable
-
-# Optional: 2 GB swap for small VPSes
-sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile \
-  && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-```
-
-## 3. Get the code and configure
-
-```bash
-sudo mkdir -p /opt/obelytics && sudo chown $USER /opt/obelytics
-git clone https://github.com/mr-shakib/obelytics.git /opt/obelytics
-cd /opt/obelytics
-cp .env.production.example .env.production
-nano .env.production
-```
-
-Fill in at least `DOMAIN`, `SECRET_KEY`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`
-(generate each with `openssl rand -hex 32`). `ALLOWED_ORIGINS`, DB/Redis hosts and the
-frontend API URL are derived from `DOMAIN` automatically.
-
-## 4. Launch
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-```
-
-Startup order: postgres/redis → `migrate` runs migrations and exits → backend + worker →
-frontend → caddy. The first start takes a few minutes (image builds + certificate).
-
-Check it:
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production ps
-curl https://$DOMAIN/health/ready     # {"status":"ok","db":"ok","redis":"ok"}
-```
-
-> Tip: `alias dc='docker compose -f docker-compose.prod.yml --env-file .env.production'`
-> — the rest of this guide uses `dc`.
-
-## 5. Seed initial data (first deploy only)
-
-```bash
-dc exec backend python -m scripts.seed_superadmin \
-  --email admin@yourdomain.com --password 'ChangeMe!123' \
-  --org-name 'Daffodil International University' --org-short-name DIU
-dc exec backend python -m scripts.seed_reference_data
-```
-
-Both are safe to re-run. Log in at `https://$DOMAIN/login` and change the password.
-
-To keep the same organization ID as an existing deployment, add `--org-id <uuid>`.
-
-## 6. Updating
-
-```bash
-cd /opt/obelytics
-git pull
-dc up -d --build        # rebuilds images, re-runs migrations, restarts changed services
+ssh shakib@187.53.136.115
+cd ~/obelytics && git pull
+dc up -d --build          # rebuilds, runs migrations, restarts changed services
 docker image prune -f
+curl -s https://obelytics.bitstreamhq.com/health/ready
 ```
 
 `NEXT_PUBLIC_*` values are compiled into the frontend, so changing `DOMAIN` or
-`NEXT_PUBLIC_APP_NAME` requires `--build`.
+`NEXT_PUBLIC_APP_NAME` needs `--build`.
 
-## 7. Backups
+## First-time setup (already done — for rebuilding the server)
 
-```bash
-./deploy/backup.sh                      # writes backups/obelytics_<timestamp>.sql.gz
-crontab -e                              # daily at 03:00:
-# 0 3 * * * cd /opt/obelytics && ./deploy/backup.sh >> backups/backup.log 2>&1
-```
+1. DNS: `A obelytics.bitstreamhq.com → 187.53.136.115`.
+2. Code and secrets:
+   ```bash
+   git clone https://github.com/mr-shakib/obelytics.git ~/obelytics && cd ~/obelytics
+   cp .env.production.example .env.production
+   # fill SECRET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD with `openssl rand -hex 32`
+   chmod 600 .env.production
+   ```
+3. Start the stack: `dc up -d --build`.
+4. TLS and nginx site (needs sudo, one time): `sudo ./deploy/install-nginx.sh`.
+   Certbot's systemd timer renews the certificate automatically.
+5. Seed:
+   ```bash
+   dc exec backend python -m scripts.seed_superadmin \
+     --email admin@obelytics.com --password '<strong password>' \
+     --org-name 'Daffodil International University' --org-short-name DIU
+   dc exec backend python -m scripts.seed_reference_data
+   ```
+6. Backups: `crontab -e` →
+   `0 3 * * * cd ~/obelytics && ./deploy/backup.sh >> backups/backup.log 2>&1`
 
-Copy `backups/` off the server regularly. Restore:
+## Backups and restore
+
+`./deploy/backup.sh` writes `backups/obelytics_<timestamp>.sql.gz` and keeps the newest 14.
+Copy them off the server regularly. Restore into the running database:
 
 ```bash
 gunzip -c backups/obelytics_XXXX.sql.gz | dc exec -T postgres psql -U obelytics -d obelytics
 ```
 
-## 8. Operations
+## Operations
 
 | Task | Command |
 |---|---|
-| Logs (all / one service) | `dc logs -f` / `dc logs -f backend` |
+| Status | `dc ps` |
+| Logs | `dc logs -f backend` (or `worker`, `frontend`, `migrate`) |
 | Restart a service | `dc restart backend` |
-| Run migrations manually | `dc run --rm migrate` |
+| Re-run migrations | `dc run --rm migrate` |
 | Postgres shell | `dc exec postgres psql -U obelytics -d obelytics` |
-| Stop everything | `dc down` (data volumes are kept; `down -v` **deletes** them) |
+| Stop | `dc down` (keeps data; `down -v` **deletes** the database) |
 
 ## Troubleshooting
 
-- **No HTTPS certificate** — DNS must resolve to the VPS and ports 80/443 must be open
-  before Caddy starts. Check `dc logs caddy`.
-- **Login loops / logged out immediately** — auth cookies are `Secure`; the site must be
-  served over HTTPS (Caddy does this). Don't access the app by raw IP.
-- **CORS errors** — `DOMAIN` in `.env.production` must match the URL in the browser exactly.
-- **`migrate` failed** — `dc logs migrate`; backend and worker won't start until it succeeds.
-- **Reports stuck in "pending"** — check `dc logs worker`.
-- **Frontend build killed (exit 137)** — out of memory; add swap (step 2).
+- **502 from nginx** — a container is down or starting: `dc ps`, `dc logs backend`.
+- **backend/worker not starting** — `migrate` failed: `dc logs migrate`.
+- **Logged out immediately / login loop** — auth cookies are `Secure`; use the https URL.
+- **CORS errors** — `DOMAIN` in `.env.production` must match the browser URL exactly.
+- **Reports stuck pending** — `dc logs worker`.
+- **nginx changes** — edit `deploy/nginx/obelytics.conf`, then `sudo ./deploy/install-nginx.sh`.

@@ -532,5 +532,5 @@ Before deploying to production:
 **Frontend shows blank page / auth loop**
 → Make sure the backend is running and `.env.local` has the correct `NEXT_PUBLIC_API_URL`. Check the browser console for failed API calls.
 
-manual deploy : railway redeploy --service obelytics --from-source --yes
+Production deployment (VPS): see `DEPLOY_VPS.md`.
 

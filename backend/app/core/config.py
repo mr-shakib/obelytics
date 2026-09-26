@@ -83,8 +83,8 @@ class Settings(BaseSettings):
     CLOUDINARY_FOLDER_LOGOS: str = "logos"
     CLOUDINARY_FOLDER_ACCREDITATION: str = "accreditation"
 
-    # CORS — comma-separated origins (works with any format on Railway/Vercel)
-    # e.g. ALLOWED_ORIGINS=https://obelytics.vercel.app,http://localhost:3000
+    # CORS — comma-separated origins
+    # e.g. ALLOWED_ORIGINS=https://obelytics.bitstreamhq.com,http://localhost:3000
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 
     @computed_field

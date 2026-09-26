@@ -1,4 +1,5 @@
-# Production stack for a single VPS.
+# Production stack for the VPS. Runs behind the host's nginx, which terminates TLS
+# (deploy/nginx/obelytics.conf); app ports are bound to 127.0.0.1 only.
 #   cp .env.production.example .env.production   # fill in values
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 # See DEPLOY_VPS.md for the full guide.
@@ -62,6 +63,8 @@ services:
     build:
       context: ./backend
     pull_policy: build
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8320}:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -94,29 +97,12 @@ services:
     environment:
       # Server-side BFF routes talk to the backend over the internal network
       BACKEND_URL: http://backend:8000
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    environment:
-      DOMAIN: ${DOMAIN}
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - "127.0.0.1:${FRONTEND_PORT:-3320}:3000"
     depends_on:
-      - frontend
       - backend
     restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
-  caddy_data:
-  caddy_config:

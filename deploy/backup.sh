@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Dump the production database to ./backups (keeps the 14 most recent).
-# Cron example (daily 03:00):  0 3 * * * cd /opt/obelytics && ./deploy/backup.sh
+# Cron example (daily 03:00):  0 3 * * * cd ~/obelytics && ./deploy/backup.sh
 set -eu
 cd "$(dirname "$0")/.."
 set -a; . ./.env.production; set +a
