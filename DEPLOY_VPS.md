@@ -54,7 +54,7 @@ curl -s https://obelytics.bitstreamhq.com/health/ready
    dc exec backend python -m scripts.seed_reference_data
    ```
 6. Backups: `crontab -e` →
-   `0 3 * * * cd ~/obelytics && ./deploy/backup.sh >> backups/backup.log 2>&1`
+   `0 3 * * * cd $HOME/obelytics && ./deploy/backup.sh >> $HOME/obelytics/backups/backup.log 2>&1`
 
 ## Backups and restore
 
