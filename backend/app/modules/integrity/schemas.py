@@ -137,3 +137,56 @@ class IntegrityOverview(BaseModel):
 class AuditReviewRequest(BaseModel):
     decision: Literal["ACCEPT", "OVERRIDE"]
     reason: str | None = Field(default=None, max_length=2000)
+
+
+# ── Evidence-weighted attainment ──────────────────────────────────────────────
+
+class COFigures(BaseModel):
+    max_marks: float
+    average_pct: float
+    students_above: int
+    total_students: int
+    # Share of students at or above the threshold; the CO is attained when this reaches it.
+    attained_share_pct: float
+    is_attained: bool
+
+
+class EvidenceQuestion(BaseModel):
+    question_id: UUID
+    label: str
+    exam_type: str
+    max_marks: float
+    # SUPPORTED | CONTRADICTED | UNVERIFIED
+    status: str
+    alignment: str | None
+    review_status: str | None
+    ai_course_outcome: CourseOutcomeRef | None
+
+
+class EvidenceOutcome(BaseModel):
+    course_outcome: CourseOutcomeRef
+    reported: COFigures
+    # None when every question mapped to this CO is contradicted by the audit.
+    evidence: COFigures | None
+    # UNCHANGED | LOWER | NOT_SUPPORTED (reported attained, evidence not) | NO_EVIDENCE
+    verdict: str
+    # Share of this CO's marks on questions the audit judged (supported or contradicted).
+    judged_marks_share: float
+    questions: list[EvidenceQuestion]
+
+
+class EvidenceSummary(BaseModel):
+    outcomes: int
+    reported_attained: int
+    evidence_attained: int
+    not_supported: int
+    contradicted_questions: int
+    contradicted_pending_review: int
+
+
+class EvidenceAttainment(BaseModel):
+    section: AuditableSection
+    threshold_pct: float
+    total_students: int
+    outcomes: list[EvidenceOutcome]
+    summary: EvidenceSummary

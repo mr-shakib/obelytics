@@ -7,6 +7,8 @@ Creates a small synthetic setup for demonstrating the assessment integrity audit
   - a section offering of Numerical Methods
   - course outcomes CO1–CO3 with Bloom levels
   - a FINAL marksheet of six questions with declared CO and Bloom level
+  - 40 synthetic students (DEMO-0001…, @student.example.edu) with random FINAL marks,
+    so attainment and evidence-weighted attainment have numbers to show
 
 The declared Bloom levels follow a typical action-verb list ("identify" → Remember,
 "develop" → Create), which is the habit the auditor is designed to catch. No
@@ -21,6 +23,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import random
 import sys
 from datetime import date
 from decimal import Decimal
@@ -33,11 +36,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.modules.assessment.models import MarksheetQuestion
+from app.modules.assessment.models import (
+    MarksheetMark,
+    MarksheetQuestion,
+    Student,
+    StudentEnrollment,
+)
 from app.modules.curriculum.models import (
     AcademicTerm,
     Batch,
     Course,
+    Curriculum,
     CurriculumCourseSlot,
     Section,
     SectionOffering,
@@ -67,6 +76,12 @@ FINAL_QUESTIONS = [
     ("Q4a", "5", "CO3", "C6"),   # "Develop the second degree polynomial …"
     ("Q4b", "5", "CO3", "C3"),   # "… by applying least squares"
 ]
+
+
+STUDENTS = 40
+# Small per-question differences in how hard the question is (0 = average), so the
+# synthetic marks are not uniform. Marks are random, seeded so re-runs match.
+DIFFICULTY = {"Q1a": 0.0, "Q1b": -0.12, "Q2": 0.05, "Q3": -0.08, "Q4a": 0.08, "Q4b": 0.1}
 
 
 async def _one(session: AsyncSession, stmt):
@@ -176,8 +191,52 @@ async def seed(org_id: UUID | None, course_code: str, course_title: str) -> None
             question.course_outcome_id = outcome_ids[co_code]
             question.declared_bloom_level_id = levels[bloom]
             session.add(question)
-        await session.commit()
+        await session.flush()
         print(f"[+] FINAL marksheet: {len(FINAL_QUESTIONS)} questions with declared CO and Bloom level")
+
+        curriculum = await session.get(Curriculum, curriculum_id)
+        questions = {
+            q.label: q for q in (await session.execute(select(MarksheetQuestion).where(
+                MarksheetQuestion.section_offering_id == offering.id,
+                MarksheetQuestion.exam_type == "FINAL",
+            ))).scalars()
+        }
+        rng = random.Random(2026)
+        added = 0
+        for n in range(1, STUDENTS + 1):
+            number = f"DEMO-{n:04d}"
+            student = await _one(session, select(Student).where(
+                Student.organization_id == org_id, Student.student_id_number == number,
+            ))
+            if student is None:
+                student = Student(organization_id=org_id, student_id_number=number,
+                                  full_name=f"Demo Student {n:02d}", email=f"demo{n:02d}@student.example.edu",
+                                  program_id=curriculum.program_id, batch_id=batch.id)
+                session.add(student)
+                await session.flush()
+            enrollment = await _one(session, select(StudentEnrollment).where(
+                StudentEnrollment.student_id == student.id,
+                StudentEnrollment.section_offering_id == offering.id,
+            ))
+            if enrollment is None:
+                enrollment = StudentEnrollment(organization_id=org_id, student_id=student.id,
+                                               section_offering_id=offering.id)
+                session.add(enrollment)
+                await session.flush()
+            ability = min(max(rng.gauss(0.6, 0.16), 0.05), 0.98)
+            for label, question in questions.items():
+                share = min(max(ability - DIFFICULTY.get(label, 0.0) + rng.gauss(0, 0.12), 0.0), 1.0)
+                obtained = Decimal(str(round(share * float(question.max_marks) * 2) / 2))
+                exists = await _one(session, select(MarksheetMark.id).where(
+                    MarksheetMark.question_id == question.id,
+                    MarksheetMark.student_enrollment_id == enrollment.id,
+                ))
+                if exists is None:  # never overwrite marks someone entered
+                    session.add(MarksheetMark(organization_id=org_id, question_id=question.id,
+                                              student_enrollment_id=enrollment.id, marks_obtained=obtained))
+                    added += 1
+        await session.commit()
+        print(f"[+] Students: {STUDENTS} enrolled; {added} FINAL marks added (synthetic)")
     await engine.dispose()
 
 

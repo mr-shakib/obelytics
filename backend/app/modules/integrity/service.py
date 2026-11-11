@@ -20,12 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.modules.ai.gateway import AIGateway
-from app.modules.assessment.models import MarksheetQuestion
+from app.modules.assessment.models import MarksheetMark, MarksheetQuestion, StudentEnrollment
 from app.modules.audit.writer import write_audit_log
 from app.modules.curriculum.models import (
     AcademicTerm,
     Batch,
     Course,
+    Curriculum,
     FacultyAssignment,
     ModuleLeaderAssignment,
     Section,
@@ -33,7 +34,7 @@ from app.modules.curriculum.models import (
 )
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
-from app.modules.integrity import documents
+from app.modules.integrity import documents, evidence
 from app.modules.integrity.auditing import (
     build_audit_prompt,
     co_key,
@@ -66,7 +67,12 @@ from app.modules.integrity.schemas import (
     AuditableSection,
     AuditedQuestion,
     BloomLevelRef,
+    COFigures,
     CourseOutcomeRef,
+    EvidenceAttainment,
+    EvidenceOutcome,
+    EvidenceQuestion,
+    EvidenceSummary,
     ExtractedQuestion,
     IntegrityJobResponse,
     IntegrityOverview,
@@ -316,6 +322,127 @@ class IntegrityService:
         if job.status in ACTIVE_JOB_STATUSES and job.created_at < _now() - _STALE_AFTER:
             response.status, response.error = "FAILED", _STALE_ERROR
         return response
+
+    # ── Evidence-weighted attainment ──────────────────────────────────────────
+
+    async def evidence_attainment(self, offering: SectionOffering) -> EvidenceAttainment:
+        """Official CO attainment next to the same figure without contradicted questions."""
+        session = self._session
+        section_row = (await session.execute(
+            self._sections_query().where(SectionOffering.id == offering.id)
+        )).one()
+        questions = [
+            q for q in (await session.execute(
+                select(MarksheetQuestion)
+                .where(MarksheetQuestion.section_offering_id == offering.id)
+                .order_by(MarksheetQuestion.exam_type.desc(), MarksheetQuestion.order_index)
+                .execution_options(populate_existing=True)
+            )).scalars().all()
+            if q.course_outcome_id is not None
+        ]
+        audits: dict[UUID, QuestionAudit] = {}
+        if questions:
+            audits = {a.question_id: a for a in (await session.execute(
+                select(QuestionAudit)
+                .where(
+                    QuestionAudit.question_id.in_([q.id for q in questions]),
+                    QuestionAudit.is_current.is_(True),
+                )
+                .execution_options(populate_existing=True)
+            )).scalars().all()}
+        co_ids = {q.course_outcome_id for q in questions}
+        co_ids |= {a.ai_course_outcome_id for a in audits.values() if a.ai_course_outcome_id}
+        outcomes = {
+            co.id: co for co in (await session.execute(
+                select(CourseOutcome).where(CourseOutcome.id.in_(co_ids))
+            )).scalars().all()
+        } if co_ids else {}
+
+        enrollment_ids = list((await session.execute(
+            select(StudentEnrollment.id).where(
+                StudentEnrollment.section_offering_id == offering.id,
+                StudentEnrollment.status == "ACTIVE",
+            )
+        )).scalars().all())
+        marks: dict[tuple[UUID, UUID], Decimal | None] = {}
+        if questions and enrollment_ids:
+            for mark in (await session.execute(
+                select(MarksheetMark).where(
+                    MarksheetMark.question_id.in_([q.id for q in questions]),
+                    MarksheetMark.student_enrollment_id.in_(enrollment_ids),
+                )
+            )).scalars().all():
+                obtained = None if mark.is_absent or mark.marks_obtained is None else Decimal(str(mark.marks_obtained))
+                marks[(mark.question_id, mark.student_enrollment_id)] = obtained
+        curriculum = await session.get(Curriculum, offering.curriculum_id)
+        threshold = Decimal(str(curriculum.threshold_co_score_pct)) if curriculum else Decimal("50.00")
+
+        inputs = []
+        rows: dict[UUID, list[EvidenceQuestion]] = {}
+        for q in questions:
+            audit = audits.get(q.id)
+            status = evidence.evidence_status(
+                audit.alignment if audit else None, audit.review_status if audit else None
+            )
+            inputs.append(evidence.QuestionInput(q.id, q.course_outcome_id, Decimal(str(q.max_marks)), status))
+            ai_co = outcomes.get(audit.ai_course_outcome_id) if audit and audit.ai_course_outcome_id else None
+            rows.setdefault(q.course_outcome_id, []).append(EvidenceQuestion(
+                question_id=q.id, label=q.label, exam_type=q.exam_type, max_marks=float(q.max_marks),
+                status=status, alignment=audit.alignment if audit else None,
+                review_status=audit.review_status if audit else None,
+                ai_course_outcome=None if ai_co is None else CourseOutcomeRef(
+                    id=ai_co.id, code=ai_co.code, statement=ai_co.statement,
+                ),
+            ))
+        reported = evidence.co_attainment(inputs, marks, enrollment_ids, threshold)
+        supported = evidence.co_attainment(inputs, marks, enrollment_ids, threshold, evidence_only=True)
+
+        def figures(stats: evidence.COStats) -> COFigures:
+            return COFigures(
+                max_marks=float(stats.max_marks), average_pct=float(stats.average_pct),
+                students_above=stats.students_above, total_students=stats.total_students,
+                attained_share_pct=round(float(stats.attained_share_pct), 2), is_attained=stats.is_attained,
+            )
+
+        result = []
+        for co_id in sorted(reported, key=lambda c: outcomes[c].code if c in outcomes else ""):
+            official, backed = reported[co_id], supported.get(co_id)
+            if backed is None:
+                verdict = "NO_EVIDENCE"
+            elif official.is_attained and not backed.is_attained:
+                verdict = "NOT_SUPPORTED"
+            elif backed.attained_share_pct < official.attained_share_pct or backed.average_pct < official.average_pct:
+                verdict = "LOWER"
+            else:
+                verdict = "UNCHANGED"
+            judged = sum(
+                (Decimal(str(r.max_marks)) for r in rows[co_id] if r.status != evidence.UNVERIFIED), Decimal("0")
+            )
+            co = outcomes[co_id]
+            result.append(EvidenceOutcome(
+                course_outcome=CourseOutcomeRef(id=co.id, code=co.code, statement=co.statement),
+                reported=figures(official),
+                evidence=figures(backed) if backed else None,
+                verdict=verdict,
+                judged_marks_share=round(float(judged / official.max_marks), 3) if official.max_marks else 0.0,
+                questions=rows[co_id],
+            ))
+        contradicted = [r for rs in rows.values() for r in rs if r.status == evidence.CONTRADICTED]
+        return EvidenceAttainment(
+            section=self._to_section(section_row),
+            threshold_pct=float(threshold),
+            total_students=len(enrollment_ids),
+            outcomes=result,
+            summary=EvidenceSummary(
+                outcomes=len(result),
+                reported_attained=sum(1 for o in result if o.reported.is_attained),
+                evidence_attained=sum(1 for o in result if o.evidence and o.evidence.is_attained),
+                not_supported=sum(1 for o in result if o.verdict in ("NOT_SUPPORTED", "NO_EVIDENCE")
+                                  and o.reported.is_attained),
+                contradicted_questions=len(contradicted),
+                contradicted_pending_review=sum(1 for r in contradicted if r.review_status == "PENDING"),
+            ),
+        )
 
     # ── Starting jobs ─────────────────────────────────────────────────────────
 

@@ -161,3 +161,53 @@ export const integrityApi = {
 export function bloomLabel(level: BloomLevelRef | null) {
   return level ? `${level.code} ${level.name}` : "—"
 }
+
+export type COFigures = {
+  max_marks: number
+  average_pct: number
+  students_above: number
+  total_students: number
+  /** Share of students at or above the threshold. */
+  attained_share_pct: number
+  is_attained: boolean
+}
+
+export type EvidenceQuestion = {
+  question_id: string
+  label: string
+  exam_type: ExamType
+  max_marks: number
+  status: "SUPPORTED" | "CONTRADICTED" | "UNVERIFIED"
+  alignment: QuestionAudit["alignment"] | null
+  review_status: QuestionAudit["review_status"] | null
+  ai_course_outcome: CourseOutcomeRef | null
+}
+
+export type EvidenceOutcome = {
+  course_outcome: CourseOutcomeRef
+  reported: COFigures
+  /** null when every question mapped to this CO is contradicted by the audit. */
+  evidence: COFigures | null
+  verdict: "UNCHANGED" | "LOWER" | "NOT_SUPPORTED" | "NO_EVIDENCE"
+  judged_marks_share: number
+  questions: EvidenceQuestion[]
+}
+
+export type EvidenceAttainment = {
+  section: AuditableSection
+  threshold_pct: number
+  total_students: number
+  outcomes: EvidenceOutcome[]
+  summary: {
+    outcomes: number
+    reported_attained: number
+    evidence_attained: number
+    not_supported: number
+    contradicted_questions: number
+    contradicted_pending_review: number
+  }
+}
+
+export const evidenceApi = {
+  get: (sectionId: string) => readJson<EvidenceAttainment>(`/sections/${sectionId}/evidence`),
+}

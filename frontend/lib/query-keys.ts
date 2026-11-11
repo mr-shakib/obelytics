@@ -219,6 +219,7 @@ export const queryKeys = {
     sections: ["integrity", "sections"] as const,
     overview: (sectionId: string, examType: string) =>
       ["integrity", "overview", sectionId, examType] as const,
+    evidence: (sectionId: string) => ["integrity", "evidence", sectionId] as const,
   },
   copilot: {
     conversations: ["copilot", "conversations"] as const,

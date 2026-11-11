@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/shared/page-header"
@@ -21,6 +21,7 @@ import {
   isJobActive,
 } from "./api"
 import { AuditPanel } from "./audit-panel"
+import { EvidencePanel } from "./evidence-panel"
 import { PaperPanel } from "./paper-panel"
 
 const EXAMS: { value: ExamType; label: string }[] = [
@@ -50,7 +51,7 @@ export function IntegrityClient() {
     // Reading and auditing run in the background; follow them until they finish.
     refetchInterval: (query) => (isJobActive(query.state.data?.job) ? 2000 : false),
   })
-  useJobNotifications(overview?.job)
+  useJobNotifications(overview?.job, sectionId)
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -105,6 +106,7 @@ export function IntegrityClient() {
           <Summary overview={overview} />
           <PaperPanel overview={overview} sectionId={sectionId} examType={examType} canManage={canManage} />
           <AuditPanel overview={overview} sectionId={sectionId} examType={examType} canManage={canManage} />
+          <EvidencePanel sectionId={sectionId} />
         </>
       )}
     </div>
@@ -120,8 +122,9 @@ function jobDoneMessage(job: IntegrityJob) {
   return `Audited ${result.audited ?? 0} questions.`
 }
 
-/** Toast when a job this page watched running finishes. */
-function useJobNotifications(job: IntegrityJob | null | undefined) {
+/** Toast when a job this page watched running finishes, and refresh what it changed. */
+function useJobNotifications(job: IntegrityJob | null | undefined, sectionId: string | null) {
+  const qc = useQueryClient()
   const watching = useRef(new Set<string>())
   useEffect(() => {
     if (!job) return
@@ -130,9 +133,10 @@ function useJobNotifications(job: IntegrityJob | null | undefined) {
       return
     }
     if (!watching.current.delete(job.id)) return
+    if (sectionId) qc.invalidateQueries({ queryKey: queryKeys.integrity.evidence(sectionId) })
     if (job.status === "DONE") toast.success(jobDoneMessage(job))
     else toast.error(job.error ?? "The AI could not finish.")
-  }, [job])
+  }, [job, qc, sectionId])
 }
 
 function Summary({ overview }: { overview: IntegrityOverview }) {

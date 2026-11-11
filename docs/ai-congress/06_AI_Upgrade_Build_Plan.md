@@ -20,10 +20,12 @@ To: **assessment integrity intelligence** — the system that checks whether rep
 - **Output:** per-question flags with the quoted question, the reason, AI Bloom vs declared, confidence; teacher can accept or override with a reason (stored in the audit log).
 - **Acceptance:** AI agreement with the faculty majority label ≥ faculty-vs-faculty agreement (quadratic-weighted kappa, since Bloom levels are ordinal), on a held-out test set (`07` §1). Robust to verb-stuffed rewrites.
 
-## 2. Evidence-weighted attainment
+## 2. Evidence-weighted attainment (implemented)
 
 - Recompute CO attainment with misaligned questions discounted; show next to the reported figure ("Reported 78% · Supported by evidence 52%").
 - Never overwrites official attainment — it is a parallel, explained view.
+- **Built** (`backend/app/modules/integrity/evidence.py`, `GET /integrity/sections/{id}/evidence`, card 3 on the Assessment Integrity page): uses the marksheet's own arithmetic over all of a section's exams. A question counts as *supported* (aligned, or right CO at another Bloom level, or the teacher disagreed with the AI), *contradicted* (tests a different CO, pending review or accepted) or *unverified* (not audited or AI unsure — still counted). The evidence figure leaves out contradicted questions; it does not re-credit them to the CO the AI chose. A test pins the reported figure to the official marksheet attainment.
+- Still to do: a Bloom-level view (are CO2's questions at the CO's declared level?), and program-level roll-up for PO attainment.
 
 ## 3. Improvement (CQI) agent
 

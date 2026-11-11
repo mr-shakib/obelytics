@@ -199,6 +199,8 @@ function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProp
       ),
     onSuccess: (data) => {
       qc.setQueryData(queryKeys.integrity.overview(sectionId, examType), data)
+      // Changed wording retires the old audit, which changes the evidence view.
+      qc.invalidateQueries({ queryKey: queryKeys.integrity.evidence(sectionId) })
       toast.success("Question wording saved. You can run the audit now.")
     },
   })

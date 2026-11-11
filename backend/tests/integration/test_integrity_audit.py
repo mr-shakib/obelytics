@@ -127,7 +127,8 @@ async def _scenario(db: AsyncSession, questions: list[tuple[str, str, str]]) -> 
         await db.flush()
         question_ids[label] = question.id
     await db.commit()
-    return {"offering_id": offering.id, "question_ids": question_ids, "levels": levels}
+    return {"offering_id": offering.id, "question_ids": question_ids, "levels": levels,
+            "batch_id": batch.id, "program_id": program.id, "cos": cos}
 
 
 async def _save_texts(client, headers, offering_id, texts: dict[uuid.UUID, str]):

@@ -87,6 +87,7 @@ export function AuditPanel({
     mutationFn: ({ auditId, decision, reason }: ReviewInput) => integrityApi.review(auditId, decision, reason),
     onSuccess: (data) => {
       qc.setQueryData(key, data)
+      qc.invalidateQueries({ queryKey: queryKeys.integrity.evidence(sectionId) })
       setDisagreeWith(null)
     },
   })

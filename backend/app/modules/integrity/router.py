@@ -16,6 +16,7 @@ from app.modules.integrity.models import IntegrityJob
 from app.modules.integrity.schemas import (
     AuditableSection,
     AuditReviewRequest,
+    EvidenceAttainment,
     ExamType,
     IntegrityOverview,
     QuestionTextsUpdate,
@@ -60,6 +61,20 @@ async def get_integrity_overview(
     svc = IntegrityService(db)
     offering = await svc.get_offering(section_offering_id, current_user, manifest)
     return await svc.overview(offering, exam_type)
+
+
+@router.get("/sections/{section_offering_id}/evidence", response_model=EvidenceAttainment)
+async def get_evidence_attainment(
+    section_offering_id: UUID,
+    manifest: Annotated[PermissionManifestResponse, Depends(_read)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Official CO attainment next to the same figure without questions the audit contradicts.
+    Read-only: nothing is written and the official attainment is never changed."""
+    svc = IntegrityService(db)
+    offering = await svc.get_offering(section_offering_id, current_user, manifest)
+    return await svc.evidence_attainment(offering)
 
 
 @router.post(
