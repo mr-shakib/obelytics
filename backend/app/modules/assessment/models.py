@@ -216,6 +216,15 @@ class MarksheetQuestion(Base):
         nullable=True,
         index=True,
     )
+    # The question's wording and the Bloom level the teacher claims it tests —
+    # the two things the integrity auditor checks (see app/modules/integrity).
+    question_text = Column(Text, nullable=True)
+    declared_bloom_level_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("config.bloom_levels.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     order_index = Column(sa.Integer, nullable=False, server_default="0")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(

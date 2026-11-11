@@ -27,6 +27,8 @@ import {
   FileCheck2,
   Wrench,
   Bot,
+  ScanSearch,
+  Cpu,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -48,6 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Organization & IAM
   { label: "Organization", href: "/organization", icon: Building2, permission: "system.organization.configure", group: "Configuration" },
+  { label: "AI Settings", href: "/ai-settings", icon: Cpu, permission: "system.organization.configure", group: "Configuration" },
   { label: "Departments", href: "/departments", icon: Building, permission: "department.update", group: "Configuration" },
   { label: "Programs", href: "/programs", icon: GraduationCap, permission: "program.update", group: "Configuration" },
   { label: "Users", href: "/users", icon: Users, permission: "user.read", group: "Configuration" },
@@ -65,6 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Assessment
   { label: "My Sections", href: "/my-sections", icon: FileSpreadsheet, permission: "marks.enter", group: "Assessment" },
+  { label: "Assessment Integrity", href: "/integrity", icon: ScanSearch, permission: "integrity.read", group: "Assessment" },
   { label: "Result Submissions", href: "/result-submissions", icon: FileCheck2, permission: ["result.approve.ml", "result.approve.pc", "result.publish"], group: "Assessment" },
   { label: "Students", href: "/students", icon: IdCard, permission: "assessment.configure", group: "Assessment" },
   // Hidden for now: the real workflow never uses these admin pages directly —
@@ -111,7 +115,7 @@ export function canViewNavItem(item: NavItem, permissions: string[]) {
 // Section Teachers get a focused workspace: their assigned sections (cards,
 // with marks entry + attainment) plus approvals/notifications — not the full
 // curriculum/assessment management nav that PCs and Module Leaders see.
-const SECTION_TEACHER_NAV_HREFS = ["/my-sections", "/students", "/notifications"]
+const SECTION_TEACHER_NAV_HREFS = ["/my-sections", "/integrity", "/students", "/notifications"]
 
 export function isSectionTeacherView(permissions: string[]) {
   return (

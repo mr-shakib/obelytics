@@ -79,6 +79,9 @@ ALL_PERMISSIONS: list[dict] = [
     # ── CQI (Continuous Quality Improvement) ──────────────────────────────────
     {"code": "cqi.read",                      "module": "cqi",          "description": "View attainment gaps and CQI summary"},
     {"code": "cqi.gap.waive",                 "module": "cqi",          "description": "Waive an attainment gap with a documented reason"},
+    # ── Integrity (assessment integrity auditor) ──────────────────────────────
+    {"code": "integrity.read",                "module": "integrity",    "description": "View question papers and AI question audits"},
+    {"code": "integrity.manage",              "module": "integrity",    "description": "Upload question papers, run audits, review AI judgments"},
     # ── Reporting ─────────────────────────────────────────────────────────────
     {"code": "report.generate",               "module": "reporting",    "description": "Generate all reports"},
     {"code": "report.co.generate",            "module": "reporting",    "description": "Generate CO reports"},
@@ -136,6 +139,7 @@ ROLES: list[dict] = [
             "result.submit", "result.approve.ml", "result.reject.ml", "result.read.section",
             "attainment.read",
             "cqi.read",
+            "integrity.read", "integrity.manage",
             "report.co.generate", "report.assessment.generate",
             "accreditation.read",
             "approval.inbox.read",
@@ -156,6 +160,7 @@ ROLES: list[dict] = [
             "result.submit", "result.read.section",
             "attainment.read",
             "cqi.read",
+            "integrity.read", "integrity.manage",
             "approval.inbox.read",
             "notification.read.own",
         ],

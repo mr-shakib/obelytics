@@ -1,6 +1,8 @@
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
 
+COPILOT_PROMPT_VERSION = "copilot-v1"
+
 
 def build_system_prompt(
     user: User, manifest: PermissionManifestResponse, live_context: str = ""

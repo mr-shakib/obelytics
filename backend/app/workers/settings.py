@@ -1,5 +1,8 @@
+from arq import func
 from arq.connections import RedisSettings
+
 from app.core.config import settings
+from app.workers.tasks.integrity import run_integrity_job
 from app.workers.tasks.reports import generate_report_run
 
 redis_settings = RedisSettings(
@@ -12,7 +15,17 @@ redis_settings = RedisSettings(
 
 class WorkerSettings:
     redis_settings = redis_settings
-    functions: list = [generate_report_run]
+    functions: list = [
+        generate_report_run,
+        # Reading a paper or auditing a whole exam on a model can take many minutes.
+        # Not retried (the job records its own failure) and no result kept.
+        func(
+            run_integrity_job,
+            timeout=settings.INTEGRITY_JOB_TIMEOUT_SECONDS,
+            keep_result=0,
+            max_tries=1,
+        ),
+    ]
     max_jobs = 10
     job_timeout = 300  # 5 minutes
     keep_result = 3600  # retain job results for 1 hour

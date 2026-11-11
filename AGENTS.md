@@ -58,16 +58,16 @@ Full setup guide: `SETUP.md`
 ```
 backend/app/
 ├── core/           # config, database, security, redis, storage, middleware
-├── modules/        # domain modules (iam, org, curriculum, obe, assessment, attainment, approval, audit, notification, reporting, accreditation, ref_data)
+├── modules/        # domain modules (iam, org, curriculum, obe, assessment, attainment, approval, audit, notification, reporting, accreditation, ref_data, cqi, copilot, integrity, ai)
 ├── shared/         # shared infra (events/outbox)
-└── workers/        # background workers
+└── workers/        # arq background worker (reports, integrity reading/audits)
 ```
 
 - Entry point: `app/main.py` — creates FastAPI app, registers routers
 - Config: `app/core/config.py` — pydantic-settings, reads `.env`
 - DB: async SQLAlchemy with asyncpg; sync URL uses psycopg2 (for Alembic)
 - API prefix: `/api/v1`
-- 13 Postgres schemas: `config`, `iam`, `org`, `curriculum`, `obe`, `assessment`, `attainment`, `approval`, `notification`, `events`, `audit`, `accreditation`, `reporting`
+- 17 Postgres schemas: `config`, `iam`, `org`, `curriculum`, `obe`, `assessment`, `attainment`, `approval`, `notification`, `events`, `audit`, `accreditation`, `reporting`, `copilot`, `cqi`, `integrity`, `ai`
 
 ### Frontend structure
 
@@ -105,7 +105,7 @@ frontend/
 
 ## Migrations
 
-- Sequential naming: `0001_description.py` through `0027_...`
+- Sequential naming: `0001_description.py` through `0057_...`
 - Auto-generate from model changes: `alembic revision --autogenerate -m "what changed"`
 - Always review generated file in `migrations/versions/` before applying
 - Run from `backend/` with venv activated
@@ -117,6 +117,24 @@ frontend/
 - All API routes are under `/api/v1` prefix
 - CORS must include `http://localhost:3000` for local dev
 - Refresh tokens are HttpOnly cookies; access tokens are in-memory (zustand)
+
+## AI Congress upgrade (Oct–Dec 2026)
+
+Planned AI features (assessment integrity auditor, CQI agent, accreditation evidence writer, copilot v2, AI gateway) are specified in `docs/ai-congress/`. Read `docs/ai-congress/README.md` before working on any AI feature — it lists the rules every AI feature must follow (advisory only, no student data to external models, fixed tools, traceable, overridable, measured).
+
+Every model call goes through the AI gateway (`backend/app/modules/ai/`): it picks the organization's provider per feature (local Ollama or a hosted OpenAI-compatible API), redacts personal data before external calls, and logs usage to `ai.calls`. Never call a model API directly from a feature. In tests, use `tests/ai_fakes.py` (`FakeBackend`, `use_fake_ai`) — no model server or worker needed.
+
+The integrity auditor (`backend/app/modules/integrity/`) reads papers and runs audits as background jobs: in development they run in the API process (`INTEGRITY_JOB_RUNNER=inline`); in production the arq worker runs them. `scripts/integrity_gold_set.py` builds and scores the faculty gold set — keep its inputs and outputs in `private/`.
+
+`docs/ai-congress/strategy/` is local-only and gitignored. Never commit it; this repo is public. Task status lives in `docs/ai-congress/strategy/00_TRACKER.md` (local).
+
+## Never commit (this repo is public)
+
+- Credentials: `*_credentials.md`, real `.env` files (only `*.example` files are committed), database backups
+- Real student or faculty data: faculty lists, real rosters, real marks. Committed setup packages must stay synthetic (`@student.example.edu` emails, sequential IDs)
+- Official university documents (e.g. syllabus `.docx` sources)
+- `docs/ai-congress/strategy/`
+- Put any real institutional data in `private/` (gitignored). When adding a new kind of sensitive file, add a `.gitignore` rule in the same change
 
 ## Environment
 

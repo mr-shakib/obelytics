@@ -58,6 +58,8 @@ from app.modules.copilot.models import CopilotConversation, CopilotMessage  # no
 from app.modules.accreditation.models import (  # noqa: F401
     AccreditationCycle, AccreditationCriterion, CriterionPOMapping,
 )
+from app.modules.integrity.models import IntegrityJob, QuestionAudit, QuestionPaper  # noqa: F401
+from app.modules.ai.models import AICall, OrganizationAISettings  # noqa: F401
 from app.modules.iam.seed_data import ALL_PERMISSIONS, ROLES
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +80,7 @@ TEST_PC_PASSWORD      = "TestPC@123"
 _SCHEMAS = [
     "events", "iam", "org", "config", "curriculum", "obe",
     "assessment", "attainment", "approval", "notification",
-    "audit", "accreditation", "reporting", "copilot", "cqi",
+    "audit", "accreditation", "reporting", "copilot", "cqi", "integrity", "ai",
 ]
 
 

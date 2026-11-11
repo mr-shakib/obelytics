@@ -20,6 +20,7 @@ from app.modules.assessment.exceptions import (
     BulkPublishScopeError,
     COWeightConflictError,
     COWeightNotFoundError,
+    DeclaredBloomLevelInvalidError,
     EnrollmentConflictError,
     EnrollmentNotFoundError,
     InvalidCOError,
@@ -97,6 +98,7 @@ from app.modules.iam.models import User
 from app.modules.obe.models import COPOMappingEntry, COPOMappingSet, CourseOutcome, ProgramOutcome
 from app.modules.org.models import Department, Program
 from app.modules.org.repository import OrgRepository
+from app.modules.ref_data.models import BloomLevel
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -1125,6 +1127,20 @@ class MarksheetService:
         if pub is not None and pub.organization_id == org_id and pub.status != "DRAFT":
             raise MarksheetLockedError()
 
+    async def _assert_bloom_levels_in_org(
+        self, items: list[MarksheetQuestionInput], org_id: UUID
+    ) -> None:
+        declared = {item.declared_bloom_level_id for item in items if item.declared_bloom_level_id}
+        if not declared:
+            return
+        found = await self._session.scalar(
+            select(func.count(BloomLevel.id)).where(
+                BloomLevel.id.in_(declared), BloomLevel.organization_id == org_id
+            )
+        )
+        if found != len(declared):
+            raise DeclaredBloomLevelInvalidError()
+
     async def list_questions(
         self, offering_id: UUID, exam_type: str, org_id: UUID
     ) -> list[MarksheetQuestion]:
@@ -1147,6 +1163,7 @@ class MarksheetService:
         if acting_user_id is not None:
             await _assert_section_teacher(self._session, offering_id, acting_user_id)
         await self._assert_not_locked(offering_id, org_id)
+        await self._assert_bloom_levels_in_org(items, org_id)
 
         existing = await self._question_repo.list_by_offering(offering_id, exam_type)
         existing_by_id = {q.id: q for q in existing}
@@ -1159,15 +1176,18 @@ class MarksheetService:
         result: list[MarksheetQuestion] = []
         for item in items:
             if item.id is not None and item.id in existing_by_id:
-                updated = await self._question_repo.update(
-                    existing_by_id[item.id],
-                    {
-                        "label": item.label,
-                        "max_marks": item.max_marks,
-                        "course_outcome_id": item.course_outcome_id,
-                        "order_index": item.order_index,
-                    },
-                )
+                changes = {
+                    "label": item.label,
+                    "max_marks": item.max_marks,
+                    "course_outcome_id": item.course_outcome_id,
+                    "order_index": item.order_index,
+                }
+                # Clients that predate the integrity fields omit them; an omitted
+                # field must not wipe text that was entered or extracted earlier.
+                for field in ("question_text", "declared_bloom_level_id"):
+                    if field in item.model_fields_set:
+                        changes[field] = getattr(item, field)
+                updated = await self._question_repo.update(existing_by_id[item.id], changes)
                 result.append(updated)
             else:
                 created = await self._question_repo.create(
@@ -1179,6 +1199,8 @@ class MarksheetService:
                         max_marks=item.max_marks,
                         course_outcome_id=item.course_outcome_id,
                         order_index=item.order_index,
+                        question_text=item.question_text,
+                        declared_bloom_level_id=item.declared_bloom_level_id,
                     )
                 )
                 result.append(created)

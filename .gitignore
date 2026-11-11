@@ -7,3 +7,11 @@ pc_ml_st_credentials.md
 .env.production
 
 backups/
+
+# AI Congress strategy notes (local only; this repo is public)
+docs/ai-congress/strategy/
+
+# Real institutional data: never commit (repo is public)
+*Faculty List*.xlsx
+*Syllabus*.docx
+private/

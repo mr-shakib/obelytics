@@ -490,6 +490,28 @@ Logos and generated report PDFs are stored on [Cloudinary](https://cloudinary.co
 
 ---
 
+## 10. AI Models (Optional)
+
+All AI features call models through one gateway (`app/modules/ai`). Defaults: the assessment integrity auditor uses a **local** model, the copilot a **hosted** one. An admin can change either per organization under **Configuration → AI Settings**, which also shows whether each provider is reachable and the last 30 days of usage.
+
+**Local (Ollama)** — nothing leaves your machine:
+
+```bash
+ollama pull qwen3.5:4b          # reads photos and judges questions
+```
+
+`AI_LOCAL_BASE_URL` defaults to `http://localhost:11434`. In development, reading papers and audits run inside the API process (`INTEGRITY_JOB_RUNNER=inline`), so no worker is needed.
+
+**Hosted (OpenAI-compatible)** — set `AI_HOSTED_BASE_URL`, `AI_HOSTED_API_KEY` and the model names (see `backend/.env.example`). Personal data is redacted before every hosted call. An existing `DEEPSEEK_API_KEY` keeps working.
+
+**Background worker** — production runs reading and audits on the arq worker (`INTEGRITY_JOB_RUNNER=arq`, set in `docker-compose.prod.yml`). To try that locally:
+
+```bash
+arq app.workers.settings.WorkerSettings
+```
+
+---
+
 ## 9. Production Checklist
 
 Before deploying to production:

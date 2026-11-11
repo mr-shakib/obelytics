@@ -34,6 +34,8 @@ from app.modules.attainment.models import (  # noqa: F401
 from app.modules.audit.models import AuditLog  # noqa: F401
 from app.modules.copilot.models import CopilotConversation, CopilotMessage  # noqa: F401
 from app.modules.cqi.models import COAttainmentGap, POAttainmentGap  # noqa: F401
+from app.modules.integrity.models import IntegrityJob, QuestionAudit, QuestionPaper  # noqa: F401
+from app.modules.ai.models import AICall, OrganizationAISettings  # noqa: F401
 from app.modules.curriculum.models import (  # noqa: F401
     AcademicTerm,
     Batch,

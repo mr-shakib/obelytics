@@ -11,6 +11,7 @@ from app.core.middleware.correlation_id import CorrelationIDMiddleware
 from app.core.middleware.timing import TimingMiddleware
 from app.core.redis_client import close_redis, get_redis
 from app.modules.accreditation.router import router as accreditation_router
+from app.modules.ai.router import router as ai_router
 from app.modules.approval.router import router as approval_router
 from app.modules.assessment.router import router as assessment_router
 from app.modules.attainment.router import router as attainment_router
@@ -22,6 +23,7 @@ from app.modules.iam.router.admin_router import router as admin_router
 from app.modules.iam.router.auth_router import router as auth_router
 from app.modules.iam.router.role_router import router as role_router
 from app.modules.iam.router.user_router import router as user_router
+from app.modules.integrity.router import router as integrity_router
 from app.modules.notification.router import router as notification_router
 from app.modules.obe.router import router as obe_router
 from app.modules.org.router import router as org_router
@@ -107,6 +109,8 @@ def create_app() -> FastAPI:
     # Phase 7 — Approval
     app.include_router(approval_router, prefix=settings.API_V1_PREFIX)
     app.include_router(cqi_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(integrity_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(ai_router, prefix=settings.API_V1_PREFIX)
 
     # Phase 8 — Audit + Notifications
     app.include_router(audit_router, prefix=settings.API_V1_PREFIX)

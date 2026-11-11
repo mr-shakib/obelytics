@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_permission_manifest
-from app.modules.copilot.agent import build_system_prompt
-from app.modules.copilot.provider import CopilotProviderError, DeepSeekProvider
+from app.modules.ai.gateway import AIGateway, BackendFactory, get_backend_factory
+from app.modules.ai.providers import AIError
+from app.modules.copilot.agent import COPILOT_PROMPT_VERSION, build_system_prompt
 from app.modules.copilot.schemas import (
     ConversationCreate,
     ConversationResponse,
@@ -121,11 +122,19 @@ async def stream_message(
     current_user: Annotated[User, Depends(get_current_user)],
     manifest: Annotated[PermissionManifestResponse, Depends(get_permission_manifest)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    backend_factory: Annotated[BackendFactory, Depends(get_backend_factory)],
 ):
-    if not settings.DEEPSEEK_API_KEY:
+    gateway = await AIGateway.for_feature(
+        db,
+        feature="copilot",
+        organization_id=current_user.organization_id,
+        user_id=current_user.id,
+        backend_factory=backend_factory,
+    )
+    if not gateway.available:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Copilot is not configured. Set DEEPSEEK_API_KEY on the backend.",
+            detail=f"Copilot is not available: {gateway.unavailable_reason()}.",
         )
 
     service = service_for(db, current_user)
@@ -154,7 +163,7 @@ async def stream_message(
         "assistant",
         "",
         message_status="STREAMING",
-        model=settings.DEEPSEEK_MODEL,
+        model=gateway.model_for("chat"),
     )
     await db.commit()
 
@@ -162,18 +171,28 @@ async def stream_message(
         content = ""
         yield sse("message", {"id": str(assistant_message.id), "status": "STREAMING"})
         try:
-            async for token in DeepSeekProvider().stream(provider_messages):
+            # Through the AI gateway: the user's name and email are redacted
+            # before an external provider sees them, and usage is logged.
+            async for token in gateway.stream_chat(
+                purpose="chat",
+                messages=provider_messages,
+                prompt_version=COPILOT_PROMPT_VERSION,
+                max_tokens=settings.COPILOT_MAX_OUTPUT_TOKENS,
+                names=[current_user.full_name, current_user.email],
+            ):
                 content += token
                 yield sse("delta", {"content": token})
             await service.update_message(
                 assistant_message, content=content, message_status="COMPLETE"
             )
+            gateway.record_usage(db)
             await db.commit()
             yield sse("done", {"id": str(assistant_message.id), "status": "COMPLETE"})
-        except CopilotProviderError as exc:
+        except AIError as exc:
             await service.update_message(
                 assistant_message, content=content, message_status="FAILED"
             )
+            gateway.record_usage(db)
             await db.commit()
             yield sse("error", {"message": str(exc)})
 

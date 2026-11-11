@@ -1,7 +1,7 @@
 import json
 from typing import Literal
 
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -108,11 +108,72 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "Obelytics <noreply@yourdomain.com>"
 
-    # Copilot (DeepSeek, OpenAI-compatible Chat Completions API)
+    # Copilot
+    COPILOT_MAX_OUTPUT_TOKENS: int = 2048
+
+    # ── AI gateway (app/modules/ai) — every model call goes through it ────────
+    # "local"  = an Ollama server you run (self-hosted: data stays on your servers)
+    # "hosted" = any OpenAI-compatible Chat Completions API (DeepSeek, OpenAI, vLLM…)
+    # Each organization can choose per feature; these are the defaults until it does.
+    AI_INTEGRITY_PROVIDER: Literal["local", "hosted", "off"] = "local"
+    AI_COPILOT_PROVIDER: Literal["local", "hosted", "off"] = "hosted"
+    AI_TIMEOUT_SECONDS: float = 300.0
+
+    AI_LOCAL_BASE_URL: str = "http://localhost:11434"
+    AI_LOCAL_TEXT_MODEL: str = "qwen3.5:4b"
+    AI_LOCAL_VISION_MODEL: str = "qwen3.5:4b"
+    AI_LOCAL_CHAT_MODEL: str = "qwen3.5:4b"
+    AI_LOCAL_CONTEXT_TOKENS: int = 16384
+    AI_LOCAL_CONCURRENCY: int = 1
+
+    AI_HOSTED_BASE_URL: str = ""
+    AI_HOSTED_API_KEY: str = ""
+    AI_HOSTED_TEXT_MODEL: str = ""
+    AI_HOSTED_VISION_MODEL: str = ""  # empty: the hosted provider is not used to read photos
+    AI_HOSTED_CHAT_MODEL: str = ""
+    # json_schema: strict structured output (OpenAI, vLLM). json_object: JSON mode only (DeepSeek).
+    AI_HOSTED_JSON_MODE: Literal["json_schema", "json_object"] = "json_schema"
+    AI_HOSTED_EXTRA_BODY: dict = {}  # merged into every request body
+    # true when the "hosted" server is your institution's own (then nothing is redacted)
+    AI_HOSTED_SELF_HOSTED: bool = False
+    AI_HOSTED_CONCURRENCY: int = 4
+    AI_HOSTED_INPUT_USD_PER_MTOK: float = 0.0
+    AI_HOSTED_OUTPUT_USD_PER_MTOK: float = 0.0
+
+    # Extra regex for institution-specific ID formats, redacted before external calls
+    AI_REDACT_EXTRA_PATTERN: str = ""
+
+    # Deprecated — used for the hosted provider when AI_HOSTED_API_KEY is not set
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
-    COPILOT_MAX_OUTPUT_TOKENS: int = 2048
+
+    @model_validator(mode="after")
+    def _hosted_provider_from_deepseek(self) -> "Settings":
+        if self.AI_HOSTED_API_KEY or not self.DEEPSEEK_API_KEY:
+            return self
+        self.AI_HOSTED_API_KEY = self.DEEPSEEK_API_KEY
+        self.AI_HOSTED_BASE_URL = self.AI_HOSTED_BASE_URL or self.DEEPSEEK_BASE_URL
+        self.AI_HOSTED_CHAT_MODEL = self.AI_HOSTED_CHAT_MODEL or self.DEEPSEEK_MODEL
+        self.AI_HOSTED_TEXT_MODEL = self.AI_HOSTED_TEXT_MODEL or self.DEEPSEEK_MODEL
+        if "AI_HOSTED_JSON_MODE" not in self.model_fields_set:
+            self.AI_HOSTED_JSON_MODE = "json_object"
+        if not self.AI_HOSTED_EXTRA_BODY:
+            self.AI_HOSTED_EXTRA_BODY = {"thinking": {"type": "disabled"}}
+        return self
+
+    # ── Assessment integrity auditor ──────────────────────────────────────────
+    INTEGRITY_MAX_UPLOAD_BYTES: int = 15 * 1024 * 1024
+    INTEGRITY_MAX_PAGES: int = 8
+    # Independent judgments per question; confidence = how often they agree (self-consistency)
+    INTEGRITY_AUDIT_SAMPLES: int = 3
+    INTEGRITY_MIN_CONFIDENCE: float = 0.5
+    # Optional JSON file mapping raw confidence to measured accuracy (fitted on the gold set)
+    INTEGRITY_CALIBRATION_FILE: str = ""
+    # "arq": the background worker reads papers and runs audits (production).
+    # "inline": run them in the API process — for local development without a worker.
+    INTEGRITY_JOB_RUNNER: Literal["arq", "inline"] = "inline"
+    INTEGRITY_JOB_TIMEOUT_SECONDS: int = 1800
 
 
 settings = Settings()

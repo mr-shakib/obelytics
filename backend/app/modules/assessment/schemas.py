@@ -310,6 +310,9 @@ class MarksheetQuestionInput(BaseModel):
     max_marks: Decimal
     course_outcome_id: Optional[UUID] = None
     order_index: int
+    # Omit to keep the stored value; send null to clear it.
+    question_text: Optional[str] = Field(default=None, max_length=5000)
+    declared_bloom_level_id: Optional[UUID] = None
 
 
 class MarksheetQuestionResponse(BaseModel):
@@ -322,6 +325,8 @@ class MarksheetQuestionResponse(BaseModel):
     max_marks: Decimal
     course_outcome_id: Optional[UUID]
     order_index: int
+    question_text: Optional[str] = None
+    declared_bloom_level_id: Optional[UUID] = None
 
 
 class MarksheetQuestionsUpdate(BaseModel):

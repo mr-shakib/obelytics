@@ -211,6 +211,15 @@ export const queryKeys = {
     run: (id: string) => ["reports", "run", id] as const,
   },
 
+  ai: {
+    settings: ["ai", "settings"] as const,
+    usage: (days: number) => ["ai", "usage", days] as const,
+  },
+  integrity: {
+    sections: ["integrity", "sections"] as const,
+    overview: (sectionId: string, examType: string) =>
+      ["integrity", "overview", sectionId, examType] as const,
+  },
   copilot: {
     conversations: ["copilot", "conversations"] as const,
     messages: (conversationId: string) => ["copilot", "conversations", conversationId, "messages"] as const,
