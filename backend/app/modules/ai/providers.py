@@ -28,6 +28,8 @@ class Completion:
     model: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    # Set by backends whose price depends on the call (e.g. a separate vision endpoint).
+    cost_usd: float | None = None
 
 
 @dataclass
@@ -187,10 +189,34 @@ class OllamaBackend:
             return None
 
 
+@dataclass
+class _Endpoint:
+    base_url: str
+    api_key: str
+    json_mode: str
+    extra_body: dict
+    input_usd_per_mtok: float
+    output_usd_per_mtok: float
+
+
 class OpenAICompatibleBackend:
     def __init__(self) -> None:
         self.base_url = settings.AI_HOSTED_BASE_URL.rstrip("/")
         self.api_key = settings.AI_HOSTED_API_KEY
+        main = _Endpoint(
+            self.base_url, self.api_key, settings.AI_HOSTED_JSON_MODE, settings.AI_HOSTED_EXTRA_BODY,
+            settings.AI_HOSTED_INPUT_USD_PER_MTOK, settings.AI_HOSTED_OUTPUT_USD_PER_MTOK,
+        )
+        separate = bool(settings.AI_HOSTED_VISION_BASE_URL)
+        self.vision = _Endpoint(
+            (settings.AI_HOSTED_VISION_BASE_URL or self.base_url).rstrip("/"),
+            settings.AI_HOSTED_VISION_API_KEY or self.api_key,
+            settings.AI_HOSTED_VISION_JSON_MODE or settings.AI_HOSTED_JSON_MODE,
+            settings.AI_HOSTED_VISION_EXTRA_BODY if separate else settings.AI_HOSTED_EXTRA_BODY,
+            _price(settings.AI_HOSTED_VISION_INPUT_USD_PER_MTOK, main.input_usd_per_mtok),
+            _price(settings.AI_HOSTED_VISION_OUTPUT_USD_PER_MTOK, main.output_usd_per_mtok),
+        )
+        self.main = main
         self.info = BackendInfo(
             name="hosted",
             is_external=not settings.AI_HOSTED_SELF_HOSTED,
@@ -204,7 +230,11 @@ class OpenAICompatibleBackend:
 
     @property
     def configured(self) -> bool:
-        return bool(self.base_url and self.api_key)
+        return bool(self.base_url and self.api_key) or self.vision_configured
+
+    @property
+    def vision_configured(self) -> bool:
+        return bool(self.vision.base_url and self.vision.api_key and self.info.models.get("vision"))
 
     def model_for(self, kind: ModelKind) -> str | None:
         return self.info.models.get(kind) or None
@@ -215,14 +245,16 @@ class OpenAICompatibleBackend:
             + (output_tokens or 0) * settings.AI_HOSTED_OUTPUT_USD_PER_MTOK
         ) / 1_000_000
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+    def _headers(self, endpoint: "_Endpoint | None" = None) -> dict[str, str]:
+        key = (endpoint or self.main).api_key
+        return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
     async def complete_json(self, *, prompt, schema, images, temperature, seed) -> Completion:
         model = self.model_for("vision" if images else "text")
-        if not self.configured or not model:
+        endpoint = self.vision if images else self.main
+        if not (endpoint.base_url and endpoint.api_key) or not model:
             raise AIError("The hosted AI provider is not configured for this task")
-        if settings.AI_HOSTED_JSON_MODE == "json_object":
+        if endpoint.json_mode == "json_object":
             # JSON mode does not take a schema, so state it in the prompt.
             prompt = f"{prompt}\n\nRespond with one JSON object matching this JSON Schema:\n{json.dumps(schema)}"
             response_format: dict = {"type": "json_object"}
@@ -239,7 +271,7 @@ class OpenAICompatibleBackend:
                 for image in images
             ]
         payload = {
-            **settings.AI_HOSTED_EXTRA_BODY,
+            **endpoint.extra_body,
             "model": model,
             "messages": [{"role": "user", "content": content}],
             "temperature": temperature,
@@ -249,7 +281,7 @@ class OpenAICompatibleBackend:
         try:
             async with httpx.AsyncClient(timeout=_timeout()) as client:
                 response = await client.post(
-                    f"{self.base_url}/chat/completions", headers=self._headers(), json=payload
+                    f"{endpoint.base_url}/chat/completions", headers=self._headers(endpoint), json=payload
                 )
         except httpx.HTTPError as exc:
             raise AIError("Could not reach the hosted AI provider") from exc
@@ -261,11 +293,16 @@ class OpenAICompatibleBackend:
         except (KeyError, IndexError, ValueError) as exc:
             raise AIError("Hosted AI provider returned an unexpected response") from exc
         tokens = body.get("usage") or {}
+        input_tokens, output_tokens = tokens.get("prompt_tokens"), tokens.get("completion_tokens")
         return Completion(
             data=_parse_json(text),
             model=body.get("model") or model,
-            input_tokens=tokens.get("prompt_tokens"),
-            output_tokens=tokens.get("completion_tokens"),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=(
+                (input_tokens or 0) * endpoint.input_usd_per_mtok
+                + (output_tokens or 0) * endpoint.output_usd_per_mtok
+            ) / 1_000_000,
         )
 
     async def stream_chat(self, *, messages, max_tokens, usage) -> AsyncIterator[str]:
@@ -309,6 +346,10 @@ class OpenAICompatibleBackend:
                                 yield text
         except httpx.HTTPError as exc:
             raise AIError("Could not connect to the hosted AI provider") from exc
+
+
+def _price(value: float | None, fallback: float) -> float:
+    return fallback if value is None else value
 
 
 def build_backend(provider: str) -> AIBackend | None:

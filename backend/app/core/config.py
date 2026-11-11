@@ -1,7 +1,7 @@
 import json
 from typing import Literal
 
-from pydantic import computed_field, model_validator
+from pydantic import computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -139,6 +139,14 @@ class Settings(BaseSettings):
     AI_HOSTED_CONCURRENCY: int = 4
     AI_HOSTED_INPUT_USD_PER_MTOK: float = 0.0
     AI_HOSTED_OUTPUT_USD_PER_MTOK: float = 0.0
+    # Optional separate endpoint for reading photos, e.g. text on DeepSeek (no vision)
+    # and photos on another provider. Empty values fall back to the AI_HOSTED_* above.
+    AI_HOSTED_VISION_BASE_URL: str = ""
+    AI_HOSTED_VISION_API_KEY: str = ""
+    AI_HOSTED_VISION_JSON_MODE: Literal["", "json_schema", "json_object"] = ""
+    AI_HOSTED_VISION_EXTRA_BODY: dict = {}  # used only with a separate vision endpoint
+    AI_HOSTED_VISION_INPUT_USD_PER_MTOK: float | None = None
+    AI_HOSTED_VISION_OUTPUT_USD_PER_MTOK: float | None = None
 
     # Extra regex for institution-specific ID formats, redacted before external calls
     AI_REDACT_EXTRA_PATTERN: str = ""
@@ -147,6 +155,13 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+
+    @field_validator(
+        "AI_HOSTED_VISION_INPUT_USD_PER_MTOK", "AI_HOSTED_VISION_OUTPUT_USD_PER_MTOK", mode="before"
+    )
+    @classmethod
+    def _blank_price_is_unset(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
 
     @model_validator(mode="after")
     def _hosted_provider_from_deepseek(self) -> "Settings":

@@ -152,6 +152,7 @@ class AIGateway:
         self._log(
             purpose, result.model, prompt_version, started, images, redactions,
             input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+            cost=result.cost_usd,
         )
         return result
 
@@ -202,8 +203,10 @@ class AIGateway:
         input_tokens: int | None = None,
         output_tokens: int | None = None,
         error: str | None = None,
+        cost: float | None = None,
     ) -> None:
-        cost = self.backend.cost_usd(input_tokens, output_tokens) if self.backend else 0.0
+        if cost is None:
+            cost = self.backend.cost_usd(input_tokens, output_tokens) if self.backend else 0.0
         self._calls.append(AICall(
             organization_id=self.organization_id,
             user_id=self.user_id,

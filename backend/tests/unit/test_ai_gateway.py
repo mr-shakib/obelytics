@@ -107,3 +107,59 @@ def test_explicit_hosted_settings_win_over_deepseek():
     assert (s.AI_HOSTED_API_KEY, s.AI_HOSTED_BASE_URL, s.AI_HOSTED_JSON_MODE) == (
         "sk-new", "https://api.openai.com/v1", "json_schema"
     )
+
+
+# ── Hosted provider endpoints ─────────────────────────────────────────────────
+
+async def test_photos_can_go_to_a_separate_vision_endpoint(monkeypatch):
+    import json as _json
+
+    import httpx
+
+    from app.core.config import settings
+    from app.modules.ai import providers
+
+    sent: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = _json.loads(request.content)
+        sent.append({"url": str(request.url), "auth": request.headers["Authorization"], "body": body})
+        return httpx.Response(200, json={
+            "model": body["model"], "usage": {"prompt_tokens": 1_000_000, "completion_tokens": 0},
+            "choices": [{"message": {"content": '{"questions": []}'}}],
+        })
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(providers.httpx, "AsyncClient",
+                        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    for key, value in {
+        "AI_HOSTED_BASE_URL": "https://text.example/v1", "AI_HOSTED_API_KEY": "sk-text",
+        "AI_HOSTED_TEXT_MODEL": "cheap-text", "AI_HOSTED_VISION_MODEL": "cheap-vision",
+        "AI_HOSTED_JSON_MODE": "json_object", "AI_HOSTED_EXTRA_BODY": {"thinking": {"type": "disabled"}},
+        "AI_HOSTED_INPUT_USD_PER_MTOK": 0.25,
+        "AI_HOSTED_VISION_BASE_URL": "https://vision.example/v1", "AI_HOSTED_VISION_API_KEY": "sk-vision",
+        "AI_HOSTED_VISION_JSON_MODE": "json_schema", "AI_HOSTED_VISION_INPUT_USD_PER_MTOK": 0.1,
+    }.items():
+        monkeypatch.setattr(settings, key, value)
+
+    backend = providers.OpenAICompatibleBackend()
+    photo = await backend.complete_json(prompt="read", schema={"type": "object"}, images=[b"jpg"],
+                                        temperature=0, seed=None)
+    text = await backend.complete_json(prompt="split", schema={"type": "object"}, images=None,
+                                       temperature=0, seed=None)
+
+    vision_call, text_call = sent
+    assert vision_call["url"] == "https://vision.example/v1/chat/completions"
+    assert vision_call["auth"] == "Bearer sk-vision"
+    assert "thinking" not in vision_call["body"]  # DeepSeek options stay with DeepSeek
+    assert vision_call["body"]["response_format"]["type"] == "json_schema"
+    assert text_call["url"] == "https://text.example/v1/chat/completions"
+    assert text_call["auth"] == "Bearer sk-text"
+    assert text_call["body"]["thinking"] == {"type": "disabled"}
+    assert text_call["body"]["response_format"] == {"type": "json_object"}
+    assert (photo.cost_usd, text.cost_usd) == (0.1, 0.25)
+
+
+def test_blank_vision_prices_in_an_env_file_mean_unset():
+    s = Settings(_env_file=None, AI_HOSTED_VISION_INPUT_USD_PER_MTOK="", AI_HOSTED_VISION_OUTPUT_USD_PER_MTOK=" ")
+    assert (s.AI_HOSTED_VISION_INPUT_USD_PER_MTOK, s.AI_HOSTED_VISION_OUTPUT_USD_PER_MTOK) == (None, None)
