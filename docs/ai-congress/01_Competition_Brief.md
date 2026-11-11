@@ -26,7 +26,7 @@ Source: the official event page text (pasted 2026-10-26) plus the public event l
 
 | Phase | Window |
 |---|---|
-| 1. Idea to Unicorn — Preliminary Submission | 2026-07-01 → **2026-10-31** |
+| 1. Idea to Unicorn — Preliminary Submission | 2026-07-01 → ~~2026-10-31~~ **2026-11-20** (extended) |
 | 2. Zero to Launch — Preliminary Submission | 2026-10-15 → 2026-11-15 |
 | 3. Congress Day | 2026-12-26 |
 

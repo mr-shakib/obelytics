@@ -245,16 +245,29 @@ def cmd_sheets(args) -> None:
 
 # ── audit ─────────────────────────────────────────────────────────────────────
 
+def _ai_file(out: Path, provider: str) -> Path:
+    return out / f"ai_{AUDIT_PROMPT_VERSION}_{provider}.json"
+
+
 async def cmd_audit(args) -> None:
     out = Path(args.out)
     items = _items(_load_extracted(out))
     outcomes = json.loads(Path(args.outcomes).read_text()) if args.outcomes else {}
-    target = out / f"ai_{AUDIT_PROMPT_VERSION}.json"
+    target = _ai_file(out, args.provider)
     done = json.loads(target.read_text()) if target.exists() else {}
     gateway = _gateway(args.provider)
-    for n, item in enumerate(items, 1):
-        if item["item_id"] in done:
-            continue
+    todo = [(n, item) for n, item in enumerate(items, 1) if item["item_id"] not in done]
+    if args.limit:
+        todo = todo[: args.limit]
+    limit = asyncio.Semaphore(max(1, args.parallel))
+    await asyncio.gather(*(
+        _audit_one(gateway, outcomes, item, n, len(items), done, target, args.samples, limit)
+        for n, item in todo
+    ))
+
+
+async def _audit_one(gateway, outcomes, item, n, total, done, target, samples, limit) -> None:
+    async with limit:
         course_outcomes = outcomes.get(item["course"], [])
         prompt = build_audit_prompt(
             course=item["course"],
@@ -263,8 +276,12 @@ async def cmd_audit(args) -> None:
             marks=f"{item['marks']:g}" if isinstance(item["marks"], (int, float)) else "?",
             question=item["text"], context=item["context"], figure=item["figure"],
         )
-        judgment = await judge(gateway, prompt, samples=args.samples,
-                               co_codes=[co["code"] for co in course_outcomes])
+        try:
+            judgment = await judge(gateway, prompt, samples=samples,
+                                   co_codes=[co["code"] for co in course_outcomes])
+        except Exception as exc:  # keep going; a re-run picks up what failed
+            print(f"  [{n}/{total}] {item['item_id']}: FAILED — {exc}")
+            return
         done[item["item_id"]] = {
             "bloom": judgment.bloom, "co": judgment.co, "abstain": judgment.abstain,
             "confidence": judgment.confidence, "raw_confidence": judgment.raw_confidence,
@@ -272,7 +289,7 @@ async def cmd_audit(args) -> None:
             "prompt_version": AUDIT_PROMPT_VERSION, "votes": judgment.details()["votes"],
         }
         target.write_text(json.dumps(done, indent=2))
-        print(f"  [{n}/{len(items)}] {item['item_id']}: {judgment.bloom} {judgment.co} "
+        print(f"  [{n}/{total}] {item['item_id']}: {judgment.bloom} {judgment.co} "
               f"({judgment.raw_confidence:.2f})")
 
 
@@ -338,9 +355,6 @@ def cmd_score(args) -> None:
         gold_source = "REFERENCE LABELS FROM A STRONGER MODEL — not faculty; development signal only"
     else:
         sys.exit("Need at least two completed faculty workbooks in labels/, or --reference.")
-    ai_path = out / f"ai_{AUDIT_PROMPT_VERSION}.json"
-    ai = json.loads(ai_path.read_text()) if ai_path.exists() else {}
-
     ids = [i for i in items if all(i in r for r in raters)]
     gold_bloom = {i: majority([r[i]["bloom"] for r in raters], ordinal=True) for i in ids}
     gold_co = {i: majority([r[i]["co"] for r in raters]) for i in ids}
@@ -370,13 +384,6 @@ def cmd_score(args) -> None:
                 [reference[i]["bloom"] for i in both], [gold_bloom[i] for i in both]
             )
 
-    judged = [i for i in ids if i in ai and not ai[i]["abstain"] and gold_bloom[i]]
-    ai_bloom = [ai[i]["bloom"] for i in judged]
-    gold = [gold_bloom[i] for i in judged]
-    co_ids = [i for i in judged if gold_co[i]]
-    flag_ids = [i for i in co_ids if items[i]["printed_co"]]
-    predicted = [ai[i]["co"] != (items[i]["printed_co"] or "").upper().replace(" ", "") for i in flag_ids]
-    precision, recall = precision_recall(predicted, [gold_misaligned[i] for i in flag_ids])
     printed = [i for i in ids if items[i]["printed_co"] and gold_co[i]]
     report.update({
         "gold_bloom_distribution": dict(sorted(Counter(v for v in gold_bloom.values() if v).items())),
@@ -384,30 +391,63 @@ def cmd_score(args) -> None:
             sum(gold_co[i] != items[i]["printed_co"].upper().replace(" ", "") for i in printed) / len(printed)
             if printed else None
         ),
-        "ai_items_judged": len(judged),
-        "ai_abstained": sum(1 for i in ids if i in ai and ai[i]["abstain"]),
-        "ai_vs_gold_bloom_qwk": weighted_kappa(ai_bloom, gold),
-        "ai_vs_gold_bloom_exact": exact_agreement(ai_bloom, gold),
-        "ai_vs_gold_bloom_within_one": within_one_level(ai_bloom, gold),
-        "ai_vs_gold_co_exact": exact_agreement([ai[i]["co"] for i in co_ids], [gold_co[i] for i in co_ids]),
-        "misaligned_flags_checked": len(flag_ids),
-        "misaligned_flag_precision": precision,
-        "misaligned_flag_recall": recall,
-        "ai_model": next((ai[i]["model"] for i in judged), None),
-        "ai_prompt_version": AUDIT_PROMPT_VERSION,
+        "ai": {},
     })
-    for key, value in report.items():
-        shown = value if isinstance(value, (str, int, list, dict)) else _fmt(value)
-        print(f"  {key:36} {shown}")
+    for path in sorted(out.glob(f"ai_{AUDIT_PROMPT_VERSION}_*.json")):
+        ai = json.loads(path.read_text())
+        name = path.stem.removeprefix(f"ai_{AUDIT_PROMPT_VERSION}_")
+        report["ai"][name] = {
+            "model": next((v["model"] for v in ai.values() if v.get("model")), None),
+            "prompt_version": AUDIT_PROMPT_VERSION,
+            "answered": sum(1 for i in ids if i in ai),
+            # Every non-abstaining answer, and only what the app would show (confidence ≥ threshold).
+            "all_answers": _ai_metrics(ai, ids, items, gold_bloom, gold_co, gold_misaligned, 0.0),
+            "shown_in_app": _ai_metrics(ai, ids, items, gold_bloom, gold_co, gold_misaligned,
+                                        settings.INTEGRITY_MIN_CONFIDENCE),
+        }
+        if args.split == "dev" and len(faculty) >= 2:
+            judged = [i for i in ids if i in ai and not ai[i]["abstain"] and gold_bloom[i]]
+            points = fit_isotonic([(ai[i]["raw_confidence"], ai[i]["bloom"] == gold_bloom[i]) for i in judged])
+            calibration = {"prompt_version": AUDIT_PROMPT_VERSION, "fitted_on": len(judged), "points": points}
+            target = out / f"calibration_{AUDIT_PROMPT_VERSION}_{name}.json"
+            target.write_text(json.dumps(calibration, indent=2))
+            print(f"  calibration → {target} (set INTEGRITY_CALIBRATION_FILE to use it)")
+
+    def show(data: dict, indent: str = "  ") -> None:
+        for key, value in data.items():
+            if isinstance(value, dict) and key not in ("gold_bloom_distribution",):
+                print(f"{indent}{key}:")
+                show(value, indent + "  ")
+            else:
+                shown = value if isinstance(value, (str, int, list, dict)) else _fmt(value)
+                print(f"{indent}{key:36} {shown}")
+
+    show(report)
     suffix = "" if len(faculty) >= 2 else "_reference"
     (out / f"score_{args.split}{suffix}.json").write_text(json.dumps(report, indent=2))
 
-    if args.split == "dev" and judged and len(faculty) >= 2:
-        points = fit_isotonic([(ai[i]["raw_confidence"], ai[i]["bloom"] == gold_bloom[i]) for i in judged])
-        calibration = {"prompt_version": AUDIT_PROMPT_VERSION, "fitted_on": len(judged), "points": points}
-        path = out / f"calibration_{AUDIT_PROMPT_VERSION}.json"
-        path.write_text(json.dumps(calibration, indent=2))
-        print(f"  calibration → {path} (set INTEGRITY_CALIBRATION_FILE to use it)")
+
+def _ai_metrics(ai, ids, items, gold_bloom, gold_co, gold_misaligned, min_confidence) -> dict:
+    judged = [i for i in ids if i in ai and not ai[i]["abstain"] and gold_bloom[i]
+              and ai[i]["confidence"] >= min_confidence]
+    ai_bloom = [ai[i]["bloom"] for i in judged]
+    gold = [gold_bloom[i] for i in judged]
+    co_ids = [i for i in judged if gold_co[i]]
+    flag_ids = [i for i in co_ids if items[i]["printed_co"]]
+    predicted = [ai[i]["co"] != (items[i]["printed_co"] or "").upper().replace(" ", "") for i in flag_ids]
+    precision, recall = precision_recall(predicted, [gold_misaligned[i] for i in flag_ids])
+    with_gold = [i for i in ids if i in ai and gold_bloom[i]]
+    return {
+        "judged": len(judged),
+        "coverage": len(judged) / len(with_gold) if with_gold else None,
+        "bloom_qwk": weighted_kappa(ai_bloom, gold),
+        "bloom_exact": exact_agreement(ai_bloom, gold),
+        "bloom_within_one": within_one_level(ai_bloom, gold),
+        "co_exact": exact_agreement([ai[i]["co"] for i in co_ids], [gold_co[i] for i in co_ids]),
+        "misaligned_flags_checked": len(flag_ids),
+        "misaligned_flag_precision": precision,
+        "misaligned_flag_recall": recall,
+    }
 
 
 def main() -> None:
@@ -428,6 +468,8 @@ def main() -> None:
     audit.add_argument("--outcomes")
     audit.add_argument("--provider", default="local", choices=["local", "hosted"])
     audit.add_argument("--samples", type=int, default=settings.INTEGRITY_AUDIT_SAMPLES)
+    audit.add_argument("--limit", type=int, default=0, help="Audit at most this many new questions")
+    audit.add_argument("--parallel", type=int, default=1, help="Questions judged at once (hosted APIs)")
     score = sub.add_parser("score")
     score.add_argument("--out", required=True)
     score.add_argument("--split", default="dev", choices=["dev", "test", "all"])
