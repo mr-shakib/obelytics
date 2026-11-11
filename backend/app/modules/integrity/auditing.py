@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.modules.ai.gateway import AIGateway
 from app.modules.ai.providers import AIError
 from app.modules.integrity.calibration import calibrate
-from app.modules.integrity.prompts import AUDIT_PROMPT, AUDIT_PROMPT_VERSION, AUDIT_SCHEMA
+from app.modules.integrity.prompts import AUDIT_PROMPT, AUDIT_PROMPT_VERSION, audit_schema
 
 SAMPLE_TEMPERATURE = 0.7
 BLOOM_CODES = ("C1", "C2", "C3", "C4", "C5", "C6")
@@ -145,13 +145,17 @@ def build_audit_prompt(
     )
 
 
-async def judge(gateway: AIGateway, prompt: str, samples: int | None = None) -> Judgment:
+async def judge(
+    gateway: AIGateway, prompt: str, samples: int | None = None, co_codes: list[str] | None = None
+) -> Judgment:
+    """co_codes: the course's outcome codes; the model may only answer one of them (or null)."""
     samples = max(1, samples or settings.INTEGRITY_AUDIT_SAMPLES)
+    schema = audit_schema(co_codes or [])
     calls = [
         gateway.complete_json(
             purpose="audit_question",
             prompt=prompt,
-            schema=AUDIT_SCHEMA,
+            schema=schema,
             prompt_version=AUDIT_PROMPT_VERSION,
             temperature=0.0 if i == 0 else SAMPLE_TEMPERATURE,
             seed=None if i == 0 else i,

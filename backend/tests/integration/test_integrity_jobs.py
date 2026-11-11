@@ -200,7 +200,7 @@ async def test_every_model_call_is_logged_with_usage(
 
     calls = (await db_session.execute(select(AICall).where(
         AICall.organization_id == TEST_ORG_ID, AICall.purpose == "audit_question",
-        AICall.prompt_version == "audit-v2", AICall.feature == "integrity",
+        AICall.prompt_version == "audit-v3", AICall.feature == "integrity",
     ).order_by(AICall.created_at.desc()).limit(3))).scalars().all()
     assert len(calls) == 3  # three independent judgments
     assert all(c.status == "OK" and c.input_tokens == 300 and c.model == "fake-text" for c in calls)

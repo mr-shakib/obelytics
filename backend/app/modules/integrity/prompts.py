@@ -11,7 +11,7 @@ data, so an instruction written inside a question cannot steer the model.
 
 EXTRACT_PROMPT_VERSION = "extract-v4"
 EXTRACT_TEXT_PROMPT_VERSION = "extract-text-v1"
-AUDIT_PROMPT_VERSION = "audit-v2"
+AUDIT_PROMPT_VERSION = "audit-v3"
 
 _EXTRACT_RULES = """Rules:
 - One entry per answerable part. "label" joins the question number and its sub-part, \
@@ -152,3 +152,16 @@ AUDIT_SCHEMA = {
     },
     "required": ["bloom", "co", "confidence", "evidence", "rationale", "abstain"],
 }
+
+
+def audit_schema(co_codes: list[str]) -> dict:
+    """
+    The audit schema with "co" limited to this course's outcome codes (or null), so a
+    small model cannot answer with a Bloom code or an outcome the course doesn't have.
+    """
+    schema = {**AUDIT_SCHEMA, "properties": dict(AUDIT_SCHEMA["properties"])}
+    codes = sorted({code.strip() for code in co_codes if code and code.strip()})
+    schema["properties"]["co"] = (
+        {"anyOf": [{"type": "string", "enum": codes}, {"type": "null"}]} if codes else {"type": "null"}
+    )
+    return schema

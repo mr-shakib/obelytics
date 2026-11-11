@@ -49,6 +49,9 @@ def repair_latex(text: str | None) -> str | None:
     return _BROKEN_LATEX.sub(lambda m: _LATEX_ESCAPES[m.group()], text) if text else text
 
 
+_CO_CODE = re.compile(r"\s*(?:CO|CLO)\s*-?\s*\d{1,2}\s*", re.IGNORECASE)
+
+
 def clean_extracted(data: dict) -> list[dict]:
     questions = data.get("questions") if isinstance(data, dict) else None
     cleaned = []
@@ -65,7 +68,8 @@ def clean_extracted(data: dict) -> list[dict]:
             "text": text,
             "context": repair_latex(_optional_text(item.get("context"), 5000)),
             "marks": float(marks) if isinstance(marks, (int, float)) and not isinstance(marks, bool) else None,
-            "co": _optional_text(item.get("co"), 20),
+            # Only CO-shaped values: models sometimes put the marks ("[03]") here.
+            "co": co if (co := _optional_text(item.get("co"), 20)) and _CO_CODE.fullmatch(co) else None,
             "figure": repair_latex(_optional_text(item.get("figure"), 1000)),
             "continues": item.get("continues") is True,
         })
@@ -88,6 +92,34 @@ def merge_continuation(existing: list[dict], found: list[dict]) -> list[dict]:
             last["_checked"] = last.get("_checked", False) or head.get("_checked", False)
             found = found[1:]
     return existing + [item for item in found if item["label"]]
+
+
+_BARE_PART = re.compile(r"\(?([a-z]{1,4})\)?\.?")
+_ROMAN = re.compile(r"i{1,3}|iv|vi{0,3}|ix|x")
+_NUMBER = re.compile(r"\s*(\d+)")
+_NUMBER_LETTER = re.compile(r"\s*(\d+)\s*\(?([a-z])\)?")
+_ENDS_ROMAN = re.compile(r"\((?:i{1,3}|iv|vi{0,3}|ix|x)\)\s*$")
+
+
+def attach_bare_labels(questions: list[dict]) -> list[dict]:
+    """
+    A sub-part printed without its question number — "d)" at the top of a new page —
+    belongs to the last numbered question: "3(d)". A roman part after "2(b)(i)"
+    becomes "2(b)(ii)".
+    """
+    previous: str | None = None
+    for question in questions:
+        bare = _BARE_PART.fullmatch(question["label"].strip().lower())
+        if bare and previous:
+            token = bare.group(1)
+            lettered = _NUMBER_LETTER.match(previous.lower())
+            if _ROMAN.fullmatch(token) and lettered and _ENDS_ROMAN.search(previous.lower()):
+                question["label"] = f"{lettered.group(1)}({lettered.group(2)})({token})"
+            elif number := _NUMBER.match(previous):
+                question["label"] = f"{number.group(1)}({token})"
+        if _NUMBER.match(question["label"]):
+            previous = question["label"]
+    return questions
 
 
 def fold_stems(questions: list[dict]) -> list[dict]:
@@ -177,7 +209,7 @@ async def read_paper(
         if on_progress is not None:
             await on_progress(index + 1)
 
-    items = fold_stems(items)
+    items = fold_stems(attach_bare_labels(items))
     source_pairs = _word_pairs(paper.source_text) if paper.source_text else set()
     questions = []
     for item in items:

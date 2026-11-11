@@ -21,6 +21,11 @@ the app, so the measured accuracy is the app's accuracy.
     # 4. Score: faculty-vs-faculty, AI-vs-faculty, reading accuracy; fit calibration on dev
     python -m scripts.integrity_gold_set score --out ../private/gold --split dev
 
+    # Without faculty labels yet: score against reference labels from a stronger model
+    # (a development signal only — never report it as faculty agreement)
+    python -m scripts.integrity_gold_set score --out ../private/gold --split all \
+        --reference ../private/gold/reference/claude_reference.json
+
 outcomes.json maps a course title to its outcomes: {"Data Structures": [{"code": "CO1",
 "statement": "..."}, ...]}. Without it, labellers and the AI can judge Bloom levels and
 wording but not which CO a question tests.
@@ -36,6 +41,7 @@ import json
 import sys
 import time
 import uuid
+from collections import Counter
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
@@ -58,7 +64,7 @@ from app.modules.integrity.evaluation import (
     within_one_level,
 )
 from app.modules.integrity.prompts import AUDIT_PROMPT_VERSION
-from app.modules.integrity.reading import read_paper
+from app.modules.integrity.reading import _CO_CODE, attach_bare_labels, read_paper
 
 LABEL_COLUMNS = [
     ("wording_ok", "Wording read correctly? (yes/no)"),
@@ -112,18 +118,26 @@ def _load_extracted(out: Path) -> list[dict]:
 
 
 def _items(papers: list[dict]) -> list[dict]:
+    """
+    One row per question. Readings stored by an earlier pipeline get today's label and
+    CO clean-up. A label repeated within a paper gets "#2", "#3" so every id is unique.
+    """
     rows = []
     for paper in papers:
-        for q in paper["questions"]:
+        seen: Counter = Counter()
+        for q in attach_bare_labels([dict(q) for q in paper["questions"]]):
+            seen[q["label"]] += 1
+            suffix = f"#{seen[q['label']]}" if seen[q["label"]] > 1 else ""
+            printed_co = q.get("co") if q.get("co") and _CO_CODE.fullmatch(q["co"]) else None
             rows.append({
-                "item_id": f"{paper['paper_id']}:{q['label']}",
+                "item_id": f"{paper['paper_id']}:{q['label']}{suffix}",
                 "paper_id": paper["paper_id"],
                 "course": paper["course"],
                 "exam": paper["exam_type"],
                 "semester": paper["semester"],
                 "label": q["label"],
                 "marks": q.get("marks"),
-                "printed_co": q.get("co"),
+                "printed_co": printed_co,
                 "context": q.get("context"),
                 "text": q["text"],
                 "figure": q.get("figure"),
@@ -249,7 +263,8 @@ async def cmd_audit(args) -> None:
             marks=f"{item['marks']:g}" if isinstance(item["marks"], (int, float)) else "?",
             question=item["text"], context=item["context"], figure=item["figure"],
         )
-        judgment = await judge(gateway, prompt, samples=args.samples)
+        judgment = await judge(gateway, prompt, samples=args.samples,
+                               co_codes=[co["code"] for co in course_outcomes])
         done[item["item_id"]] = {
             "bloom": judgment.bloom, "co": judgment.co, "abstain": judgment.abstain,
             "confidence": judgment.confidence, "raw_confidence": judgment.raw_confidence,
@@ -290,64 +305,104 @@ def _fmt(value) -> str:
     return "n/a" if value is None else f"{value:.3f}"
 
 
+def _has_labels(rater: dict[str, dict]) -> bool:
+    return any(v["bloom"] or v["co"] or v["aligned"] for v in rater.values())
+
+
+def _read_reference(path: str) -> dict[str, dict]:
+    data = json.loads(Path(path).read_text())
+    return {
+        item_id: {
+            "wording_ok": None,
+            "bloom": (v.get("bloom") or None),
+            "co": (v.get("co") or "").upper().replace(" ", "") or None,
+            "aligned": v.get("aligned"),
+        }
+        for item_id, v in data.items()
+    }
+
+
 def cmd_score(args) -> None:
     out = Path(args.out)
     items = {i["item_id"]: i for i in _items(_load_extracted(out))}
     if args.split != "all":
         items = {k: v for k, v in items.items() if v["split"] == args.split}
     sheets = sorted((out / "labels").glob("labels_*.xlsx"))
-    raters = [_read_labels(path) for path in sheets]
-    if len(raters) < 2:
-        sys.exit("Need at least two completed labelling workbooks in labels/.")
+    faculty = {p.stem: r for p in sheets if _has_labels(r := _read_labels(p))}
+    reference = _read_reference(args.reference) if args.reference else None
+    if len(faculty) >= 2:
+        raters = list(faculty.values())
+        gold_source = f"faculty majority ({len(faculty)} raters: {', '.join(faculty)})"
+    elif reference is not None:
+        raters = [reference]
+        gold_source = "REFERENCE LABELS FROM A STRONGER MODEL — not faculty; development signal only"
+    else:
+        sys.exit("Need at least two completed faculty workbooks in labels/, or --reference.")
     ai_path = out / f"ai_{AUDIT_PROMPT_VERSION}.json"
     ai = json.loads(ai_path.read_text()) if ai_path.exists() else {}
 
     ids = [i for i in items if all(i in r for r in raters)]
-    bloom_sets = [[r[i]["bloom"] for r in raters] for i in ids]
-    full_bloom = [labels for labels in bloom_sets if all(labels)]
-    pairwise = [
-        weighted_kappa([r1[i]["bloom"] for i in ids], [r2[i]["bloom"] for i in ids])
-        for n, r1 in enumerate(raters) for r2 in raters[n + 1:]
-    ]
-    pairwise = [k for k in pairwise if k is not None]
-    co_sets = [[r[i]["co"] for r in raters] for i in ids if all(r[i]["co"] for r in raters)]
-    wording = [majority([r[i]["wording_ok"] for r in raters]) for i in ids]
-    wording = [w for w in wording if w in ("yes", "no")]
-
     gold_bloom = {i: majority([r[i]["bloom"] for r in raters], ordinal=True) for i in ids}
     gold_co = {i: majority([r[i]["co"] for r in raters]) for i in ids}
     gold_misaligned = {i: majority([r[i]["aligned"] for r in raters]) == "no" for i in ids}
 
+    report: dict = {"split": args.split, "gold": gold_source, "items": len(ids)}
+    if len(raters) >= 2:
+        bloom_sets = [[r[i]["bloom"] for r in raters] for i in ids]
+        pairwise = [
+            weighted_kappa([r1[i]["bloom"] for i in ids], [r2[i]["bloom"] for i in ids])
+            for n, r1 in enumerate(raters) for r2 in raters[n + 1:]
+        ]
+        pairwise = [k for k in pairwise if k is not None]
+        wording = [majority([r[i]["wording_ok"] for r in raters]) for i in ids]
+        wording = [w for w in wording if w in ("yes", "no")]
+        report.update({
+            "reading_accuracy": (sum(w == "yes" for w in wording) / len(wording)) if wording else None,
+            "faculty_bloom_fleiss_kappa": fleiss_kappa([b for b in bloom_sets if all(b)]),
+            "faculty_bloom_pairwise_qwk_mean": sum(pairwise) / len(pairwise) if pairwise else None,
+            "faculty_co_fleiss_kappa": fleiss_kappa(
+                [[r[i]["co"] for r in raters] for i in ids if all(r[i]["co"] for r in raters)]
+            ),
+        })
+        if reference is not None:
+            both = [i for i in ids if i in reference and reference[i]["bloom"] and gold_bloom[i]]
+            report["reference_vs_faculty_bloom_qwk"] = weighted_kappa(
+                [reference[i]["bloom"] for i in both], [gold_bloom[i] for i in both]
+            )
+
     judged = [i for i in ids if i in ai and not ai[i]["abstain"] and gold_bloom[i]]
     ai_bloom = [ai[i]["bloom"] for i in judged]
     gold = [gold_bloom[i] for i in judged]
-    flag_ids = [i for i in judged if items[i]["printed_co"] and gold_co[i]]
+    co_ids = [i for i in judged if gold_co[i]]
+    flag_ids = [i for i in co_ids if items[i]["printed_co"]]
     predicted = [ai[i]["co"] != (items[i]["printed_co"] or "").upper().replace(" ", "") for i in flag_ids]
     precision, recall = precision_recall(predicted, [gold_misaligned[i] for i in flag_ids])
-
-    report = {
-        "split": args.split,
-        "items": len(ids),
-        "raters": [p.stem for p in sheets],
-        "reading_accuracy": (sum(w == "yes" for w in wording) / len(wording)) if wording else None,
-        "faculty_bloom_fleiss_kappa": fleiss_kappa(full_bloom),
-        "faculty_bloom_pairwise_qwk_mean": sum(pairwise) / len(pairwise) if pairwise else None,
-        "faculty_co_fleiss_kappa": fleiss_kappa(co_sets),
+    printed = [i for i in ids if items[i]["printed_co"] and gold_co[i]]
+    report.update({
+        "gold_bloom_distribution": dict(sorted(Counter(v for v in gold_bloom.values() if v).items())),
+        "printed_co_differs_from_gold": (
+            sum(gold_co[i] != items[i]["printed_co"].upper().replace(" ", "") for i in printed) / len(printed)
+            if printed else None
+        ),
         "ai_items_judged": len(judged),
         "ai_abstained": sum(1 for i in ids if i in ai and ai[i]["abstain"]),
-        "ai_vs_majority_bloom_qwk": weighted_kappa(ai_bloom, gold),
-        "ai_vs_majority_bloom_exact": exact_agreement(ai_bloom, gold),
-        "ai_vs_majority_bloom_within_one": within_one_level(ai_bloom, gold),
-        "ai_vs_majority_co_exact": exact_agreement([ai[i]["co"] for i in judged], [gold_co[i] for i in judged]),
+        "ai_vs_gold_bloom_qwk": weighted_kappa(ai_bloom, gold),
+        "ai_vs_gold_bloom_exact": exact_agreement(ai_bloom, gold),
+        "ai_vs_gold_bloom_within_one": within_one_level(ai_bloom, gold),
+        "ai_vs_gold_co_exact": exact_agreement([ai[i]["co"] for i in co_ids], [gold_co[i] for i in co_ids]),
+        "misaligned_flags_checked": len(flag_ids),
         "misaligned_flag_precision": precision,
         "misaligned_flag_recall": recall,
+        "ai_model": next((ai[i]["model"] for i in judged), None),
         "ai_prompt_version": AUDIT_PROMPT_VERSION,
-    }
+    })
     for key, value in report.items():
-        print(f"  {key:36} {value if isinstance(value, (str, int, list)) else _fmt(value)}")
-    (out / f"score_{args.split}.json").write_text(json.dumps(report, indent=2))
+        shown = value if isinstance(value, (str, int, list, dict)) else _fmt(value)
+        print(f"  {key:36} {shown}")
+    suffix = "" if len(faculty) >= 2 else "_reference"
+    (out / f"score_{args.split}{suffix}.json").write_text(json.dumps(report, indent=2))
 
-    if args.split == "dev" and judged:
+    if args.split == "dev" and judged and len(faculty) >= 2:
         points = fit_isotonic([(ai[i]["raw_confidence"], ai[i]["bloom"] == gold_bloom[i]) for i in judged])
         calibration = {"prompt_version": AUDIT_PROMPT_VERSION, "fitted_on": len(judged), "points": points}
         path = out / f"calibration_{AUDIT_PROMPT_VERSION}.json"
@@ -376,6 +431,7 @@ def main() -> None:
     score = sub.add_parser("score")
     score.add_argument("--out", required=True)
     score.add_argument("--split", default="dev", choices=["dev", "test", "all"])
+    score.add_argument("--reference", help="Reference labels JSON, used when faculty labels are missing")
     args = parser.parse_args()
 
     if args.command == "read":

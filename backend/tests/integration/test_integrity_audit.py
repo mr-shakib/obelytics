@@ -298,7 +298,7 @@ async def test_audit_compares_ai_judgment_with_declared_mapping(
     assert alignment == {"Q1": "ALIGNED", "Q2": "MISALIGNED", "Q3": "MISALIGNED", "Q4": "ABSTAINED"}
     q1 = next(q for q in body["questions"] if q["label"] == "Q1")
     assert q1["audit"]["ai_bloom_level"]["code"] == "C3"
-    assert q1["audit"]["prompt_version"] == "audit-v2"
+    assert q1["audit"]["prompt_version"] == "audit-v3"
     assert (q1["audit"]["samples"], q1["audit"]["agreement"]) == (3, 1.0)
     q4 = next(q for q in body["questions"] if q["label"] == "Q4")
     assert q4["audit"]["ai_bloom_level"] is None  # abstained judgments are not stored

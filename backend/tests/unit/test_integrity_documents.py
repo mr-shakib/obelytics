@@ -265,3 +265,28 @@ def test_wording_check_flags_invented_text():
     assert wording_found("Define a binary search tree and state its ordering property.", pairs) == 1.0
     assert wording_found("Write a program that reverses a linked list in place.", pairs) < 0.6
     assert WORDING_WARNING
+
+
+def test_bare_sub_parts_join_the_last_numbered_question():
+    from app.modules.integrity.reading import attach_bare_labels
+
+    labels = ["3(a)", "3(c)", "d)", "(e)", "f.", "4", "2(b)(i)", "ii", "(iii)", "5(h)", "i"]
+    result = [q["label"] for q in attach_bare_labels([_item(label, "x") for label in labels])]
+    assert result == ["3(a)", "3(c)", "3(d)", "3(e)", "3(f)", "4", "2(b)(i)", "2(b)(ii)", "2(b)(iii)",
+                      "5(h)", "5(i)"]
+
+
+def test_a_bare_part_with_nothing_before_it_is_left_alone():
+    from app.modules.integrity.reading import attach_bare_labels
+
+    assert attach_bare_labels([_item("a)", "x")])[0]["label"] == "a)"
+
+
+def test_marks_read_into_the_co_field_are_dropped():
+    cleaned = clean_extracted({"questions": [
+        {"label": "1", "text": "Write a program.", "context": None, "marks": None, "co": "[03]",
+         "figure": None, "continues": False},
+        {"label": "2", "text": "Explain.", "context": None, "marks": 3, "co": "CLO-2", "figure": None,
+         "continues": False},
+    ]})
+    assert [q["co"] for q in cleaned] == [None, "CLO-2"]

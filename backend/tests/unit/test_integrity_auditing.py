@@ -135,3 +135,24 @@ def test_calibration_file_is_used_only_for_its_prompt_version(tmp_path, monkeypa
 
 def test_no_calibration_file_means_identity():
     assert calibrate(0.42, "audit-v2") == (0.42, "none")
+
+
+def test_audit_schema_only_allows_the_course_outcomes():
+    from app.modules.integrity.prompts import audit_schema
+
+    co = audit_schema(["CO2", "CO1", " CO1 ", ""])["properties"]["co"]
+    assert co == {"anyOf": [{"type": "string", "enum": ["CO1", "CO2"]}, {"type": "null"}]}
+    assert audit_schema([])["properties"]["co"] == {"type": "null"}
+
+
+async def test_judge_sends_the_course_outcome_schema():
+    class Recording(FakeBackend):
+        schemas: list = []
+
+        async def complete_json(self, **kwargs):
+            self.schemas.append(kwargs["schema"])
+            return await super().complete_json(**kwargs)
+
+    backend = Recording(verdicts={"heap": verdict("C3", "CO1")})
+    await judge(_gateway(backend), "heap", samples=1, co_codes=["CO1", "CO2"])
+    assert backend.schemas[0]["properties"]["co"]["anyOf"][0]["enum"] == ["CO1", "CO2"]

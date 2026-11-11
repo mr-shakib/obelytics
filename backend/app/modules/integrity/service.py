@@ -626,7 +626,8 @@ class IntegrityJobService:
 
         judgments = []
         for done, (question_id, declared_bloom_id, declared_co_id, prompt) in enumerate(work, 1):
-            judgments.append((question_id, declared_bloom_id, declared_co_id, await judge(self._gateway, prompt)))
+            judgment = await judge(self._gateway, prompt, co_codes=[co.code for co in outcomes])
+            judgments.append((question_id, declared_bloom_id, declared_co_id, judgment))
             await self._progress(done)
 
         # All judgments are in: replace the current audits in one step.
