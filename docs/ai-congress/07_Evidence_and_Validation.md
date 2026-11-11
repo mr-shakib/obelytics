@@ -65,3 +65,15 @@ From department heads, IQAC directors or deans. Content: the problem they have, 
 | Institutions piloting | 1 (DIU) | 2026-10-26 | Live deployment |
 | Letters of intent | 0 | 2026-10-26 | |
 | Interviews completed | 0 | 2026-10-26 | |
+
+## 8. Development measurements (not faculty-validated — do not use as pitch numbers)
+
+Measured while building, to choose models and find bugs. The "reference labels" are Bloom/CO labels for all 226 gold-set questions written by a stronger AI model (Claude) before any auditor run; they are **not** faculty labels, and an AI may share blind spots with the models it checks. The faculty rows in §7 stay TBD until a faculty panel labels the gold set.
+
+| Measurement | Result | Date | Source |
+|---|---|---|---|
+| Question reading: wording read exactly | 56 / 59 questions (95%) on a 7-paper sample of the gold set; 1 question missed, 2 lost a code line or table | 2026-11-12 | Extracted text compared with the page images by Claude; faculty check pending |
+| Bloom level vs reference labels, shown in app (confidence ≥ 0.5) | DeepSeek `deepseek-v4-flash`: 80% exact, 94% within one level, weighted κ 0.59 · local `qwen3.5:4b`: 64% exact, 82% within one, κ 0.28 | 2026-11-12 | `scripts/integrity_gold_set.py score --reference`, prompt `audit-v3`, 3 judgments per question, 226 questions from 30 DIU CSE papers |
+| Robustness (synthetic set `robustness-v1`, DeepSeek) | Added higher-order verbs raised the level in 0 / 13 cases; planted instructions moved it in 0 / 4; plain wording lowered a demanding question in 1 / 6 | 2026-11-12 | `scripts/integrity_robustness.py` |
+| CO alignment on the gold set | **Not valid yet**: the CO statements used come from the 2022 syllabus, but Summer 2026 papers follow newer course outlines with different COs (checked for CSE311: 3 COs vs the syllabus's 4). Needs the Summer 2026 outlines | 2026-11-12 | — |
+
