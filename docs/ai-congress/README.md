@@ -11,7 +11,8 @@ Obelytics is being upgraded for the International AI Builders Congress 2026 (Con
 | `01_Competition_Brief.md` | Event, tracks, domains and challenges, timeline, judging rubric |
 | `06_AI_Upgrade_Build_Plan.md` | AI features to build, data-model changes, infrastructure, codebase touchpoints |
 | `07_Evidence_and_Validation.md` | How accuracy, impact and demand will be measured; results table |
-| `09_Ethics_and_Governance.md` | Safeguards, data flow, bias evaluation, risk register |
+| `09_Ethics_and_Governance.md` | Ethics pack: data and sovereignty strategy, data flow, retention, model card, bias evaluation, consent note, risk register |
+| `10_Scalability_Roadmap.md` | How the platform scales, measured AI cost per unit of work, roadmap |
 
 ## Rules for every AI feature
 

@@ -28,7 +28,8 @@ Source: the official event page text (pasted 2026-10-26) plus the public event l
 |---|---|
 | 1. Idea to Unicorn — Preliminary Submission | 2026-07-01 → ~~2026-10-31~~ **2026-11-20** (extended) |
 | 2. Zero to Launch — Preliminary Submission | 2026-10-15 → 2026-11-15 |
-| 3. Congress Day | 2026-12-26 |
+| Team preliminary selection announced | 2026-11-25 |
+| 3. Congress Day | 2026-12-26 (team judging 11:00–15:00) |
 
 ## Domains and challenges (11 domains, 55 challenges)
 
@@ -48,38 +49,49 @@ Source: the official event page text (pasted 2026-10-26) plus the public event l
 
 Observation: the listing says "10 domains, 50 challenges"; the official page shows 11. JusticeSphere's description is a title fragment rather than a sentence, suggesting it was added later (inference, not confirmed).
 
-## Judging rubric (official)
+## Judging rubric — team competition (participant guide §11)
 
-Weighted total normalized to 0–100. **Minimum 5 judges per submission.**
+Source: the official Participants Guide (received 2026-11-17). It replaces the six-criterion rubric from the event page that this file used before. Projects are scored independently against the rubric, not against other teams.
 
-| # | Criterion | Range | Weight | What judges assess |
-|---|---|---|---|---|
-| 1 | Innovation | 0–20 | 20% | Originality, non-obvious AI application, systems-level thinking |
-| 2 | Technical Execution | 0–20 | 20% | Architecture, input→processing→output workflow, model-selection logic, AI integration depth, reliability, explainability of the intelligence core |
-| 3 | Business Model + Global Readiness | 0–20 | 20% | Value proposition, monetization, adoption strategy, cross-border viability, evidence of market validation |
-| 4 | Real-World Impact + Ethical AI | 0–20 | 20% | Problem significance, measurable KPIs, responsible data use, bias mitigation, transparency |
-| 5 | Scalability + NRB Collaboration | 0–10 | 10% | Cloud readiness, modular architecture, NRB/global collaboration, international standards |
-| 6 | Presentation | 0–10 | 10% | Storytelling, demo, explaining AI decisions, professionalism |
+| # | Criterion | Points | What judges evaluate |
+|---|---|---:|---|
+| 1 | Innovation & AI-Native Design | 20 | Originality, creativity, non-obvious and transformative use of AI |
+| 2 | Technical Excellence & Architecture | 20 | Architecture quality, AI integration depth, robustness, explainability of the intelligence core |
+| 3 | Business Value & Commercial Viability | 20 | Measurable economic value, clear value proposition, realistic path to a sustainable business |
+| 4 | Global Scalability & Real-World Impact | 20 | Capacity to scale to millions and international markets; jobs, productivity, exports or societal benefit |
+| 5 | Responsible AI, Data Sovereignty & Presentation | 20 | Fairness, explainability, bias mitigation, privacy, governance and data ownership, communicated clearly |
 
-### Score bands
+- NRB or global collaboration is not scored on its own. It is a qualitative advantage within criteria 2 and 4.
+- Score bands, for each criterion out of 20:
+  - 0–5: incremental or weak;
+  - 6–10: functional with limited depth or validation;
+  - 11–15: strong AI-native design with clear outcomes;
+  - 16–20: globally competitive, production-grade, **with documented safeguards**.
 
-- **Innovation:** 0–5 incremental/common · 6–10 moderately differentiated · 11–15 strong originality · 16–20 breakthrough/globally competitive
-- **Technical:** 0–5 basic prototype, limited AI · 6–10 functional, moderate depth · 11–15 well-structured AI-native design · 16–20 production-grade maturity
-- **Business:** 0–5 no model · 6–10 basic logic, limited validation · 11–15 viable pathway, defined users · 16–20 scalable, globally adaptable
-- **Impact:** 0–5 weak · 6–10 localized benefit · 11–15 national relevance, measurable outcomes · 16–20 high social return + documented ethical safeguards
-- **Scalability:** 0–3 demo-only · 4–7 early scaling strategy · 8–10 clear deployment pathway + strong global collaboration
-- **Presentation:** 0–3 unclear · 4–7 clear, moderate structure · 8–10 compelling, data-driven, investor-ready
+## Format and requirements (participant guide §9, §13)
 
-## Open questions for the organizers (ask now)
+- **Preliminary:** a 3-minute (180 s) structured video. The segments are:
+  - 0:00–0:30 problem;
+  - 0:30–1:00 solution and differentiation;
+  - 1:00–2:00 demo or flow;
+  - 2:00–2:30 AI approach (models, RAG, data, personalization, tools);
+  - 2:30–3:00 impact and next step.
 
-1. Are prizes awarded **per domain, per challenge, or overall**?
-2. ~~Is the challenge locked at preliminary submission?~~ **Answered 2026-10-26: yes — the challenge chosen at the preliminary submission is final.**
-3. Are **per-domain registration counts** visible on the CloudCamp platform?
-4. What exactly must the preliminary submission contain (deck, video, repo, live link)? *(unconfirmed)*
-5. Is the NRB collaborator mandatory or optional, and what must they contribute? *(unconfirmed)*
-6. Are pre-existing projects allowed if the team built them? *(assumed yes — "build a production-ready AI product")*
+  It must show users, an AI-native approach, an input → AI → output flow, a demo, consideration for Bangla or localization, and KPIs.
+- **Submission package:** a 1-page summary, a demo video and a live demo. It covers the problem, AI architecture, data and sovereignty strategy, demo, scalability roadmap, and ethical safeguards.
+- **Congress Day:** 5 minutes per team: 1 minute transition, a **3-minute pitch** (problem → solution → demo → AI → impact) with judge questions, and 1 minute scoring.
+- **Team:** 3–5 members. Five roles, each owned by a named member and declared in the submission:
+  - team leader;
+  - business analyst or data scientist;
+  - UI/UX or frontend developer;
+  - backend or data engineer;
+  - presentation lead.
+
+  At least one woman on the team earns bonus points. An NRB member is encouraged, and their contribution must be documented.
+- **Workforce Ready, as the guide defines it:** "Enterprise upskilling and certification intelligence". Capabilities: assessment, analytics and copilots. Winning signal: verified capability gains.
 
 ## Sources
 
+- Official Participants Guide, International AI Builders Congress 2026 (received 2026-11-17; local copy, not committed)
 - [Event listing — happeningnext.com](https://happeningnext.com/event/international-ai-builders-congress-2026-eid3a0du8w1gw)
 - [Application page — cloudcampbd.com](https://cloudcampbd.com/ai-builders-congress)

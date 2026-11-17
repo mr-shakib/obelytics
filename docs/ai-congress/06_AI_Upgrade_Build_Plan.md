@@ -109,10 +109,11 @@ Helps teachers write course outcomes and map them to POs. Gateway feature `autho
 
 ## Workforce readiness — job market ↔ outcomes (implemented — migration `0061_workforce_market`, `backend/app/modules/workforce/`)
 
-- **Workforce Readiness** page (Curriculum → Workforce Readiness): a program collects job postings; AI reads each posting's skills (`job-skills-v1`), then judges which of the curriculum's COs develop each in-demand skill (`skill-coverage-v1`).
+- **Workforce Readiness** page (Curriculum → Workforce Readiness): a program collects job postings; AI reads each posting's skills (`job-skills-v1`), then judges which of the curriculum's COs develop each in-demand skill (`skill-coverage-v2`).
 - Code does the rest: counts demand across postings, drops CO references that don't exist (a claimed "covered" with no real CO becomes a gap), derives POs from the CO-PO mapping, and scores **demand-weighted coverage** (covered 1, partial ½, gap 0, weighted by how many postings ask).
 - Each gap or partial skill has a suggested course and **Draft a CO** (today's CO writer, given the skill as focus); the teacher edits and adds it, then maps it with ✨ per CO.
-- Known limit: near-duplicate skill names across postings ("Python" / "Python scripting") are counted separately; a merge step is still to do. Postings hold no student data.
+- Near-duplicate skill names are merged in code before counting (`workforce/analysis.py`): known aliases (JS → JavaScript, OOP, k8s…), filler words ("strong", "experience with"), and a generic suffix or plural that folds into a head skill other postings ask for ("Python scripting" → Python). A posting counts once per merged skill; the merged spellings are shown and passed to the coverage prompt. Postings hold no student data.
+- **Real postings:** import from links to public job pages (schema.org `JobPosting` data first, visible text otherwise) or from a CSV export (`workforce/importing.py`). The fetcher only reaches public addresses, re-checks every redirect, and caps size (2 MB) and time (15 s). Imported postings are read at the next analysis.
 - Tests: `backend/tests/integration/test_workforce.py`, `backend/tests/unit/test_workforce_analysis.py`.
 
 ## Improvement agent (implemented — migration `0062_improvement_agent`, `backend/app/modules/improvement/`)
@@ -149,3 +150,18 @@ Helps teachers write course outcomes and map them to POs. Gateway feature `autho
 - A student-facing chatbot
 - Any AI that changes marks or official attainment
 - Rebuilding modules that already work
+
+## Student verified skills (implemented — no migration, `GET /workforce/students/me/skills`)
+
+- Student portal → **My Skills**: each skill the program's latest market analysis found in job postings, matched with the student's own published CO results. **Verified** if the student attained a CO that develops the skill, **developing** if they took it but did not attain it, **not yet** if none of their completed courses develops it. A readiness bar counts verified skills among the 10 most demanded.
+- Pure computation over the student's own results and the stored analysis; **no model call**, so student data never reaches a model.
+- Tests: `backend/tests/unit/test_workforce_import.py`. Demo data: `scripts/seed_student_demo.py` (a synthetic student login with published results).
+
+## Bangla (implemented)
+
+- **Interface:** English/বাংলা switch in the header, the student portal and the login page (`frontend/lib/i18n/`). Typed dictionaries, so a missing Bangla string fails the type-check. Translated: navigation, Assessment Integrity, Workforce Readiness, the student portal and login. Model-written explanations stay in the language the model wrote them in.
+- **Bangla-medium papers:** labels printed with Bangla numerals and letters (১(ক), প্রশ্ন ২) are matched to marksheet labels (`integrity/documents.py: normalize_label`). A synthetic Bangla sample paper is downloadable from the integrity page.
+
+## Bias check (implemented)
+
+- `scripts/integrity_gold_set.py strata` reports the auditor's accuracy per group of questions: exam, course, reference Bloom level, and wording style (math, code, scenario, figure, length). Results and limits are in `09` §6.
