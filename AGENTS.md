@@ -96,6 +96,7 @@ frontend/
 
 ## Testing
 
+- The full suite passes (464 tests, 2026-11-17); keep it green.
 - Tests use a **separate `obelytics_test` database** (auto-created from main DB name + `_test` suffix)
 - Docker must be running for tests
 - pytest-asyncio with `asyncio_mode = "auto"` and session-scoped event loop
