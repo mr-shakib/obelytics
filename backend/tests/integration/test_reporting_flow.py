@@ -91,7 +91,7 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
     batch_resp = await client.post(
         "/api/v1/batches",
         headers=headers,
-        json={"curriculum_id": curriculum_id, "name": f"Rep Batch {suffix[:8]}", "intake_year": 2024},
+        json={"curriculum_id": curriculum_id, "name": f"Rep Batch {suffix[:8]}", "start_date": "2024-09-01", "term_system": "SEMESTER", "num_semesters": 8},
     )
     assert batch_resp.status_code == 201, batch_resp.text
     batch_id = batch_resp.json()["id"]
@@ -110,6 +110,8 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
     )
     assert term_resp.status_code == 201, term_resp.text
     term_id = term_resp.json()["id"]
+    # Marks can only be entered once the semester has been started.
+    await client.patch(f"/api/v1/academic-terms/{term_id}", headers=headers, json={"status": "ACTIVE"})
 
     # Section
     sec_resp = await client.post(
@@ -137,7 +139,7 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
 
     # Assessment type
     at_resp = await client.post(
-        "/api/v1/config/assessment-types",
+        "/api/v1/ref-data/assessment-types",
         headers=headers,
         json={"name": f"RepQuiz {suffix[:8]}"},
     )
@@ -184,7 +186,7 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
     await client.put(
         f"/api/v1/mappings/co-po/{mapping_set_id}/entries",
         headers=headers,
-        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2}],
+        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2, "justification": "Test mapping."}],
     )
 
     # Assessment
@@ -221,6 +223,7 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
             "full_name": f"Rep Student 1 {suffix[:4]}",
             "email": f"r1_{suffix[:8]}@test.com",
             "program_id": program_id,
+            "batch_id": batch_id,
         },
     )
     assert stu1_resp.status_code == 201, stu1_resp.text
@@ -242,6 +245,7 @@ async def _setup_reporting_scenario(client: AsyncClient, headers: dict) -> dict:
             "full_name": f"Rep Student 2 {suffix[:4]}",
             "email": f"r2_{suffix[:8]}@test.com",
             "program_id": program_id,
+            "batch_id": batch_id,
         },
     )
     assert stu2_resp.status_code == 201, stu2_resp.text
@@ -383,7 +387,7 @@ async def test_assessment_summary_no_assessments(client: AsyncClient, auth_heade
     batch_resp = await client.post(
         "/api/v1/batches",
         headers=auth_headers,
-        json={"curriculum_id": curriculum_id, "name": f"Empty Batch {suffix}", "intake_year": 2024},
+        json={"curriculum_id": curriculum_id, "name": f"Empty Batch {suffix}", "start_date": "2024-09-01", "term_system": "SEMESTER", "num_semesters": 8},
     )
     batch_id = batch_resp.json()["id"]
 
@@ -399,6 +403,8 @@ async def test_assessment_summary_no_assessments(client: AsyncClient, auth_heade
         },
     )
     term_id = term_resp.json()["id"]
+    # Marks can only be entered once the semester has been started.
+    await client.patch(f"/api/v1/academic-terms/{term_id}", headers=auth_headers, json={"status": "ACTIVE"})
 
     sec_resp = await client.post(
         "/api/v1/sections",
@@ -529,7 +535,7 @@ async def test_co_attainment_report_empty_before_publish(client: AsyncClient, au
     batch_resp = await client.post(
         "/api/v1/batches",
         headers=auth_headers,
-        json={"curriculum_id": curriculum_id, "name": f"PrePub Batch {suffix}", "intake_year": 2024},
+        json={"curriculum_id": curriculum_id, "name": f"PrePub Batch {suffix}", "start_date": "2024-09-01", "term_system": "SEMESTER", "num_semesters": 8},
     )
     batch_id = batch_resp.json()["id"]
 
@@ -545,6 +551,8 @@ async def test_co_attainment_report_empty_before_publish(client: AsyncClient, au
         },
     )
     term_id = term_resp.json()["id"]
+    # Marks can only be entered once the semester has been started.
+    await client.patch(f"/api/v1/academic-terms/{term_id}", headers=auth_headers, json={"status": "ACTIVE"})
 
     sec_resp = await client.post(
         "/api/v1/sections",
@@ -605,7 +613,8 @@ async def test_program_po_attainment_report(client: AsyncClient, auth_headers):
     assert row["program_outcome_id"] == scenario["po_id"]
     assert row["offering_count"] == 1
     assert row["attained_count"] == 1  # both students passed
-    assert float(row["avg_attainment_pct"]) == pytest.approx(70.0, abs=0.1)
+    # Attainment is the share of students reaching the threshold (both did), not the average score.
+    assert float(row["avg_attainment_pct"]) == pytest.approx(100.0, abs=0.1)
 
 
 async def test_program_po_attainment_no_offerings(client: AsyncClient, auth_headers):
@@ -653,7 +662,7 @@ async def test_assessment_report_denied_without_auth(client: AsyncClient):
     resp = await client.get(
         "/api/v1/reports/section-offerings/00000000-0000-0000-0000-000000000000/assessment-summary"
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 401  # no token: unauthenticated
 
 
 async def test_assessment_report_denied_for_student(client: AsyncClient, auth_headers):
@@ -675,4 +684,4 @@ async def test_assessment_report_denied_for_student(client: AsyncClient, auth_he
     resp = await client.get(
         "/api/v1/reports/section-offerings/00000000-0000-0000-0000-000000000000/assessment-summary"
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 401  # no token: unauthenticated

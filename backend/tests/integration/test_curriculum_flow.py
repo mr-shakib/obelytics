@@ -63,7 +63,8 @@ async def test_create_curriculum_as_admin(client: AsyncClient, auth_headers):
     )
     assert resp.status_code == 201, resp.text
     data = resp.json()
-    assert data["code"] == "CS-2024"
+    # The curriculum code is derived from the name and no longer returned.
+    assert data["name"] == "CS Curriculum 2024"
     assert data["status"] == "DRAFT"
     assert data["version_number"] == 1
     assert data["parent_curriculum_id"] is None

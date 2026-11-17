@@ -92,7 +92,7 @@ async def _setup_assessment_chain(client: AsyncClient, headers: dict) -> dict:
     batch_resp = await client.post(
         "/api/v1/batches",
         headers=headers,
-        json={"curriculum_id": curriculum_id, "name": f"Batch {suffix}", "intake_year": 2024},
+        json={"curriculum_id": curriculum_id, "name": f"Batch {suffix}", "start_date": "2024-09-01", "term_system": "SEMESTER", "num_semesters": 8},
     )
     assert batch_resp.status_code == 201, batch_resp.text
     batch_id = batch_resp.json()["id"]
@@ -111,6 +111,9 @@ async def _setup_assessment_chain(client: AsyncClient, headers: dict) -> dict:
     )
     assert term_resp.status_code == 201, term_resp.text
     term_id = term_resp.json()["id"]
+    # Marks can only be entered once the semester has been started.
+    start_resp = await client.patch(f"/api/v1/academic-terms/{term_id}", headers=headers, json={"status": "ACTIVE"})
+    assert start_resp.status_code == 200, start_resp.text
 
     # Section
     sec_resp = await client.post(
@@ -145,6 +148,7 @@ async def _setup_assessment_chain(client: AsyncClient, headers: dict) -> dict:
             "full_name": f"Test Student {suffix}",
             "email": f"student_{suffix}@test.com",
             "program_id": program_id,
+            "batch_id": batch_id,
         },
     )
     assert student_resp.status_code == 201, student_resp.text
@@ -161,7 +165,7 @@ async def _setup_assessment_chain(client: AsyncClient, headers: dict) -> dict:
 
     # Assessment type
     at_resp = await client.post(
-        "/api/v1/config/assessment-types",
+        "/api/v1/ref-data/assessment-types",
         headers=headers,
         json={"name": f"Quiz {suffix}"},
     )
@@ -204,8 +208,14 @@ async def _setup_published_co(client: AsyncClient, headers: dict, curriculum_id:
 
 # ── Student Tests ─────────────────────────────────────────────────────────────
 
+async def _batch(client: AsyncClient, headers: dict) -> str:
+    """Students belong to a batch; borrow one from a fresh assessment chain."""
+    return (await _setup_assessment_chain(client, headers))["batch_id"]
+
+
 async def test_create_student(client: AsyncClient, auth_headers):
     suffix = uuid.uuid4().hex[:8]
+    batch_id = await _batch(client, auth_headers)
     resp = await client.post(
         "/api/v1/students",
         headers=auth_headers,
@@ -213,6 +223,7 @@ async def test_create_student(client: AsyncClient, auth_headers):
             "student_id_number": f"ST-{suffix}",
             "full_name": f"Jane Doe {suffix}",
             "email": f"jane_{suffix}@test.com",
+            "batch_id": batch_id,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -223,7 +234,8 @@ async def test_create_student(client: AsyncClient, auth_headers):
 
 async def test_create_student_duplicate_id_number(client: AsyncClient, auth_headers):
     suffix = uuid.uuid4().hex[:8]
-    payload = {"student_id_number": f"DUP-{suffix}", "full_name": "First Student"}
+    payload = {"student_id_number": f"DUP-{suffix}", "full_name": "First Student",
+               "batch_id": await _batch(client, auth_headers)}
     await client.post("/api/v1/students", headers=auth_headers, json=payload)
     resp = await client.post("/api/v1/students", headers=auth_headers, json=payload)
     assert resp.status_code == 409, resp.text
@@ -234,7 +246,7 @@ async def test_get_student(client: AsyncClient, auth_headers):
     create_resp = await client.post(
         "/api/v1/students",
         headers=auth_headers,
-        json={"student_id_number": f"GET-{suffix}", "full_name": "Get Me"},
+        json={"student_id_number": f"GET-{suffix}", "full_name": "Get Me", "batch_id": await _batch(client, auth_headers)},
     )
     student_id = create_resp.json()["id"]
     resp = await client.get(f"/api/v1/students/{student_id}", headers=auth_headers)
@@ -247,7 +259,8 @@ async def test_update_student(client: AsyncClient, auth_headers):
     create_resp = await client.post(
         "/api/v1/students",
         headers=auth_headers,
-        json={"student_id_number": f"UPD-{suffix}", "full_name": "Original Name"},
+        json={"student_id_number": f"UPD-{suffix}", "full_name": "Original Name",
+              "batch_id": await _batch(client, auth_headers)},
     )
     student_id = create_resp.json()["id"]
     resp = await client.patch(
@@ -680,7 +693,8 @@ async def test_marks_immutable_after_publish(client: AsyncClient, auth_headers):
     stu_resp = await client.post(
         "/api/v1/students",
         headers=auth_headers,
-        json={"student_id_number": f"IMMUT-{new_suffix}", "full_name": "Immutable Test"},
+        json={"student_id_number": f"IMMUT-{new_suffix}", "full_name": "Immutable Test",
+              "batch_id": chain["batch_id"]},
     )
     stu2_id = stu_resp.json()["id"]
     enroll_resp = await client.post(
@@ -866,14 +880,15 @@ async def test_cannot_enter_mark_before_open_marks(client: AsyncClient, auth_hea
 
 # ── Permission Checks ─────────────────────────────────────────────────────────
 
-async def test_create_student_denied_for_teacher(client: AsyncClient, teacher_auth_headers):
-    """Section Teacher does not have assessment.configure permission."""
+async def test_student_with_unknown_batch_is_rejected(client: AsyncClient, teacher_auth_headers):
+    """Section Teachers may add students to their sections (enrollment.manage_own), but
+    only into a batch that exists — an unknown batch is a 404, not a database error."""
     resp = await client.post(
         "/api/v1/students",
         headers=teacher_auth_headers,
-        json={"student_id_number": "PERM-001", "full_name": "Perm Test"},
+        json={"student_id_number": "PERM-001", "full_name": "Perm Test", "batch_id": str(uuid.uuid4())},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404, resp.text
 
 
 async def test_read_students_allowed_for_teacher(client: AsyncClient, auth_headers, teacher_auth_headers):
@@ -952,6 +967,13 @@ async def test_approve_ml_allowed_for_ml_user(client: AsyncClient, auth_headers,
         },
     )
     offering_id = chain["offering_id"]
+    # A Module Leader approves only courses they lead: assign them to this one.
+    ml_user_id = (await client.get("/api/v1/users/me", headers=ml_auth_headers)).json()["id"]
+    assign = await client.post("/api/v1/module-leader-assignments", headers=auth_headers, json={
+        "batch_id": chain["batch_id"], "academic_term_id": chain["term_id"],
+        "course_id": chain["course_id"], "user_id": ml_user_id,
+    })
+    assert assign.status_code == 201, assign.text
     await client.post(f"/api/v1/results/{offering_id}/submit", headers=auth_headers)
     resp = await client.post(f"/api/v1/results/{offering_id}/approve-ml", headers=ml_auth_headers)
     assert resp.status_code == 200, resp.text

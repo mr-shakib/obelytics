@@ -65,10 +65,10 @@ async def test_get_me_returns_current_user(client: AsyncClient, auth_headers: di
 
 
 @pytest.mark.asyncio
-async def test_get_me_without_token_returns_403(client: AsyncClient):
-    # HTTPBearer returns 403 when the Authorization header is missing
+async def test_get_me_without_token_returns_401(client: AsyncClient):
+    # HTTPBearer returns 401 (not authenticated) when the Authorization header is missing
     resp = await client.get("/api/v1/users/me")
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -169,7 +169,7 @@ async def test_teacher_cannot_create_user(
         headers=teacher_auth_headers,
         json={
             "email": "newuser@obelytics-test.com",
-            "full_name": "New User",
+            "first_name": "New", "last_name": "User", "employee_id": "EMP-AUTH-1",
             "password": "Password1!",
             "role_id": "00000000-0000-0000-0000-000000000000",
             "scope_type": "GLOBAL",
@@ -259,7 +259,7 @@ async def test_admin_can_create_user(client: AsyncClient, auth_headers: dict):
         headers=auth_headers,
         json={
             "email": "newteacher@obelytics-test.com",
-            "full_name": "New Teacher",
+            "first_name": "New", "last_name": "Teacher", "employee_id": "EMP-AUTH-2",
             "password": "Secure@Pass123",
             "role_id": teacher_role["id"],
             "scope_type": "PROGRAM",
@@ -283,7 +283,7 @@ async def test_duplicate_email_returns_409(client: AsyncClient, auth_headers: di
         headers=auth_headers,
         json={
             "email": "dup@obelytics-test.com",
-            "full_name": "First",
+            "first_name": "First", "last_name": "User", "employee_id": "EMP-AUTH-3",
             "password": "Secure@Pass123",
             "role_id": teacher_role["id"],
             "scope_type": "PROGRAM",
@@ -296,7 +296,7 @@ async def test_duplicate_email_returns_409(client: AsyncClient, auth_headers: di
         headers=auth_headers,
         json={
             "email": "dup@obelytics-test.com",
-            "full_name": "Second",
+            "first_name": "Second", "last_name": "User", "employee_id": "EMP-AUTH-4",
             "password": "Secure@Pass123",
             "role_id": teacher_role["id"],
             "scope_type": "PROGRAM",

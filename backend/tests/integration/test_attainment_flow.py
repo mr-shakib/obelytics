@@ -121,6 +121,8 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
     )
     assert term_resp.status_code == 201, term_resp.text
     term_id = term_resp.json()["id"]
+    # Marks can only be entered once the semester has been started.
+    await client.patch(f"/api/v1/academic-terms/{term_id}", headers=headers, json={"status": "ACTIVE"})
 
     # Section
     sec_resp = await client.post(
@@ -195,7 +197,7 @@ async def _setup_attainment_scenario(client: AsyncClient, headers: dict) -> dict
     entries_resp = await client.put(
         f"/api/v1/mappings/co-po/{mapping_set_id}/entries",
         headers=headers,
-        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2}],
+        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2, "justification": "Test mapping."}],
     )
     assert entries_resp.status_code == 200, entries_resp.text
 
@@ -567,6 +569,8 @@ async def test_attainment_summary_not_found_before_publish(client: AsyncClient, 
         },
     )
     term_id = term_resp.json()["id"]
+    # Marks can only be entered once the semester has been started.
+    await client.patch(f"/api/v1/academic-terms/{term_id}", headers=auth_headers, json={"status": "ACTIVE"})
     sec_resp = await client.post(
         "/api/v1/sections",
         headers=auth_headers,

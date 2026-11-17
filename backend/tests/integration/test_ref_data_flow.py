@@ -1,4 +1,6 @@
 """Integration tests for Reference Data (config) endpoints."""
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -6,25 +8,27 @@ from httpx import AsyncClient
 # ── Bloom Domains ─────────────────────────────────────────────────────────────
 
 async def test_create_bloom_domain(client: AsyncClient, auth_headers):
+    # Other tests seed a "Cognitive" domain in the shared test organization; use a fresh name.
+    name = f"Cognitive {uuid.uuid4().hex[:6]}"
     resp = await client.post(
-        "/api/v1/config/bloom-domains",
+        "/api/v1/ref-data/bloom-domains",
         headers=auth_headers,
-        json={"name": "Cognitive", "description": "Bloom cognitive domain"},
+        json={"name": name, "description": "Bloom cognitive domain"},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     data = resp.json()
-    assert data["name"] == "Cognitive"
+    assert data["name"] == name
     assert data["is_active"] is True
 
 
 async def test_create_bloom_domain_duplicate_name(client: AsyncClient, auth_headers):
     await client.post(
-        "/api/v1/config/bloom-domains",
+        "/api/v1/ref-data/bloom-domains",
         headers=auth_headers,
         json={"name": "Affective"},
     )
     resp = await client.post(
-        "/api/v1/config/bloom-domains",
+        "/api/v1/ref-data/bloom-domains",
         headers=auth_headers,
         json={"name": "Affective"},
     )
@@ -33,11 +37,11 @@ async def test_create_bloom_domain_duplicate_name(client: AsyncClient, auth_head
 
 async def test_list_bloom_domains(client: AsyncClient, auth_headers):
     await client.post(
-        "/api/v1/config/bloom-domains",
+        "/api/v1/ref-data/bloom-domains",
         headers=auth_headers,
         json={"name": "Psychomotor"},
     )
-    resp = await client.get("/api/v1/config/bloom-domains", headers=auth_headers)
+    resp = await client.get("/api/v1/ref-data/bloom-domains", headers=auth_headers)
     assert resp.status_code == 200
     names = [d["name"] for d in resp.json()]
     assert "Psychomotor" in names
@@ -45,13 +49,13 @@ async def test_list_bloom_domains(client: AsyncClient, auth_headers):
 
 async def test_update_bloom_domain(client: AsyncClient, auth_headers):
     create_resp = await client.post(
-        "/api/v1/config/bloom-domains",
+        "/api/v1/ref-data/bloom-domains",
         headers=auth_headers,
         json={"name": "TempDomain"},
     )
     domain_id = create_resp.json()["id"]
     resp = await client.patch(
-        f"/api/v1/config/bloom-domains/{domain_id}",
+        f"/api/v1/ref-data/bloom-domains/{domain_id}",
         headers=auth_headers,
         json={"description": "Updated desc"},
     )
@@ -61,7 +65,7 @@ async def test_update_bloom_domain(client: AsyncClient, auth_headers):
 
 async def test_bloom_domain_denied_for_teacher(client: AsyncClient, teacher_auth_headers):
     resp = await client.post(
-        "/api/v1/config/bloom-domains",
+        "/api/v1/ref-data/bloom-domains",
         headers=teacher_auth_headers,
         json={"name": "Forbidden Domain"},
     )
@@ -72,7 +76,7 @@ async def test_bloom_domain_denied_for_teacher(client: AsyncClient, teacher_auth
 
 async def _create_domain(client: AsyncClient, headers, name: str) -> str:
     resp = await client.post(
-        "/api/v1/config/bloom-domains",
+        "/api/v1/ref-data/bloom-domains",
         headers=headers,
         json={"name": name},
     )
@@ -83,7 +87,7 @@ async def _create_domain(client: AsyncClient, headers, name: str) -> str:
 async def test_create_bloom_level(client: AsyncClient, auth_headers):
     domain_id = await _create_domain(client, auth_headers, "CognitiveLvl")
     resp = await client.post(
-        "/api/v1/config/bloom-levels",
+        "/api/v1/ref-data/bloom-levels",
         headers=auth_headers,
         json={"bloom_domain_id": domain_id, "code": "C1", "name": "Remember", "order_index": 1},
     )
@@ -97,11 +101,11 @@ async def test_list_bloom_levels_by_domain(client: AsyncClient, auth_headers):
     domain_id = await _create_domain(client, auth_headers, "CognitiveLvlList")
     for i, (code, name) in enumerate([("C1", "Remember"), ("C2", "Understand")], 1):
         await client.post(
-            "/api/v1/config/bloom-levels",
+            "/api/v1/ref-data/bloom-levels",
             headers=auth_headers,
             json={"bloom_domain_id": domain_id, "code": code, "name": name, "order_index": i},
         )
-    resp = await client.get(f"/api/v1/config/bloom-domains/{domain_id}/levels", headers=auth_headers)
+    resp = await client.get(f"/api/v1/ref-data/bloom-domains/{domain_id}/levels", headers=auth_headers)
     assert resp.status_code == 200
     assert len(resp.json()) == 2
 
@@ -109,8 +113,8 @@ async def test_list_bloom_levels_by_domain(client: AsyncClient, auth_headers):
 async def test_create_bloom_level_duplicate_code(client: AsyncClient, auth_headers):
     domain_id = await _create_domain(client, auth_headers, "CognitiveDup")
     payload = {"bloom_domain_id": domain_id, "code": "C1", "name": "Remember", "order_index": 1}
-    await client.post("/api/v1/config/bloom-levels", headers=auth_headers, json=payload)
-    resp = await client.post("/api/v1/config/bloom-levels", headers=auth_headers, json=payload)
+    await client.post("/api/v1/ref-data/bloom-levels", headers=auth_headers, json=payload)
+    resp = await client.post("/api/v1/ref-data/bloom-levels", headers=auth_headers, json=payload)
     assert resp.status_code == 409
 
 
@@ -118,7 +122,7 @@ async def test_create_bloom_level_duplicate_code(client: AsyncClient, auth_heade
 
 async def test_create_delivery_method(client: AsyncClient, auth_headers):
     resp = await client.post(
-        "/api/v1/config/delivery-methods",
+        "/api/v1/ref-data/delivery-methods",
         headers=auth_headers,
         json={"name": "Lecture", "description": "Instructor-led"},
     )
@@ -127,14 +131,14 @@ async def test_create_delivery_method(client: AsyncClient, auth_headers):
 
 
 async def test_create_delivery_method_duplicate(client: AsyncClient, auth_headers):
-    await client.post("/api/v1/config/delivery-methods", headers=auth_headers, json={"name": "Lab"})
-    resp = await client.post("/api/v1/config/delivery-methods", headers=auth_headers, json={"name": "Lab"})
+    await client.post("/api/v1/ref-data/delivery-methods", headers=auth_headers, json={"name": "Lab"})
+    resp = await client.post("/api/v1/ref-data/delivery-methods", headers=auth_headers, json={"name": "Lab"})
     assert resp.status_code == 409
 
 
 async def test_list_delivery_methods(client: AsyncClient, auth_headers):
-    await client.post("/api/v1/config/delivery-methods", headers=auth_headers, json={"name": "Tutorial"})
-    resp = await client.get("/api/v1/config/delivery-methods", headers=auth_headers)
+    await client.post("/api/v1/ref-data/delivery-methods", headers=auth_headers, json={"name": "Tutorial"})
+    resp = await client.get("/api/v1/ref-data/delivery-methods", headers=auth_headers)
     assert resp.status_code == 200
     assert any(d["name"] == "Tutorial" for d in resp.json())
 
@@ -143,7 +147,7 @@ async def test_list_delivery_methods(client: AsyncClient, auth_headers):
 
 async def test_create_assessment_type(client: AsyncClient, auth_headers):
     resp = await client.post(
-        "/api/v1/config/assessment-types",
+        "/api/v1/ref-data/assessment-types",
         headers=auth_headers,
         json={"name": "Quiz", "is_sessional": False},
     )
@@ -155,7 +159,7 @@ async def test_create_assessment_type(client: AsyncClient, auth_headers):
 
 async def test_create_sessional_assessment_type(client: AsyncClient, auth_headers):
     resp = await client.post(
-        "/api/v1/config/assessment-types",
+        "/api/v1/ref-data/assessment-types",
         headers=auth_headers,
         json={"name": "Lab Report", "is_sessional": True},
     )
@@ -168,7 +172,7 @@ async def test_create_sessional_assessment_type(client: AsyncClient, auth_header
 async def test_create_mapping_weights(client: AsyncClient, auth_headers):
     for value, label in [(1, "Low"), (2, "Medium"), (3, "High")]:
         resp = await client.post(
-            "/api/v1/config/mapping-weights",
+            "/api/v1/ref-data/mapping-weights",
             headers=auth_headers,
             json={"weight_value": value, "label": label},
         )
@@ -180,7 +184,7 @@ async def test_create_mapping_weights(client: AsyncClient, auth_headers):
 
 async def test_create_mapping_weight_invalid_value(client: AsyncClient, auth_headers):
     resp = await client.post(
-        "/api/v1/config/mapping-weights",
+        "/api/v1/ref-data/mapping-weights",
         headers=auth_headers,
         json={"weight_value": 5, "label": "Invalid"},
     )
@@ -189,12 +193,12 @@ async def test_create_mapping_weight_invalid_value(client: AsyncClient, auth_hea
 
 async def test_create_mapping_weight_duplicate(client: AsyncClient, auth_headers):
     await client.post(
-        "/api/v1/config/mapping-weights",
+        "/api/v1/ref-data/mapping-weights",
         headers=auth_headers,
         json={"weight_value": 1, "label": "Low"},
     )
     resp = await client.post(
-        "/api/v1/config/mapping-weights",
+        "/api/v1/ref-data/mapping-weights",
         headers=auth_headers,
         json={"weight_value": 1, "label": "Also Low"},
     )
@@ -204,11 +208,11 @@ async def test_create_mapping_weight_duplicate(client: AsyncClient, auth_headers
 async def test_list_mapping_weights(client: AsyncClient, auth_headers):
     for value, label in [(1, "Low"), (2, "Medium"), (3, "High")]:
         await client.post(
-            "/api/v1/config/mapping-weights",
+            "/api/v1/ref-data/mapping-weights",
             headers=auth_headers,
             json={"weight_value": value, "label": label},
         )
-    resp = await client.get("/api/v1/config/mapping-weights", headers=auth_headers)
+    resp = await client.get("/api/v1/ref-data/mapping-weights", headers=auth_headers)
     assert resp.status_code == 200
     weights = resp.json()
     assert len([w for w in weights if w["weight_value"] in (1, 2, 3)]) >= 3
@@ -216,13 +220,13 @@ async def test_list_mapping_weights(client: AsyncClient, auth_headers):
 
 async def test_update_mapping_weight_label(client: AsyncClient, auth_headers):
     create_resp = await client.post(
-        "/api/v1/config/mapping-weights",
+        "/api/v1/ref-data/mapping-weights",
         headers=auth_headers,
         json={"weight_value": 2, "label": "Mid"},
     )
     record_id = create_resp.json()["id"]
     resp = await client.patch(
-        f"/api/v1/config/mapping-weights/{record_id}",
+        f"/api/v1/ref-data/mapping-weights/{record_id}",
         headers=auth_headers,
         json={"label": "Medium"},
     )
@@ -234,7 +238,7 @@ async def test_update_mapping_weight_label(client: AsyncClient, auth_headers):
 
 async def test_create_complex_problem(client: AsyncClient, auth_headers):
     resp = await client.post(
-        "/api/v1/config/complex-problems",
+        "/api/v1/ref-data/complex-problems",
         headers=auth_headers,
         json={"code": "CP1", "description": "Involves novel design constraints"},
     )
@@ -244,7 +248,7 @@ async def test_create_complex_problem(client: AsyncClient, auth_headers):
 
 async def test_create_complex_activity(client: AsyncClient, auth_headers):
     resp = await client.post(
-        "/api/v1/config/complex-activities",
+        "/api/v1/ref-data/complex-activities",
         headers=auth_headers,
         json={"code": "CA1", "description": "Design and implementation activity"},
     )
@@ -254,7 +258,7 @@ async def test_create_complex_activity(client: AsyncClient, auth_headers):
 
 async def test_create_knowledge_profile(client: AsyncClient, auth_headers):
     resp = await client.post(
-        "/api/v1/config/knowledge-profiles",
+        "/api/v1/ref-data/knowledge-profiles",
         headers=auth_headers,
         json={"code": "KP1", "description": "Fundamental knowledge"},
     )

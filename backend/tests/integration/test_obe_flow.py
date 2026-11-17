@@ -203,7 +203,7 @@ async def test_archive_po_blocked_when_mapping_entries_exist(client: AsyncClient
     await client.put(
         f"/api/v1/mappings/co-po/{set_id}/entries",
         headers=auth_headers,
-        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2}],
+        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2, "justification": "Test mapping."}],
     )
 
     # Now try to archive the PO
@@ -325,7 +325,7 @@ async def test_create_co(client: AsyncClient, auth_headers):
 async def _create_delivery_method(client: AsyncClient, headers: dict) -> str:
     suffix = uuid.uuid4().hex[:6]
     resp = await client.post(
-        "/api/v1/config/delivery-methods",
+        "/api/v1/ref-data/delivery-methods",
         headers=headers,
         json={"name": f"Lecture {suffix}"},
     )
@@ -418,7 +418,7 @@ async def test_upsert_co_po_entries(client: AsyncClient, auth_headers):
     entries_resp = await client.put(
         f"/api/v1/mappings/co-po/{set_id}/entries",
         headers=auth_headers,
-        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2}],
+        json=[{"course_outcome_id": co_id, "program_outcome_id": po_id, "weight": 2, "justification": "Test mapping."}],
     )
     assert entries_resp.status_code == 200, entries_resp.text
     entries = entries_resp.json()

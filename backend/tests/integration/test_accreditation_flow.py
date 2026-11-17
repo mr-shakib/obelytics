@@ -67,18 +67,18 @@ async def test_create_accreditation_cycle(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "ABET 2024-2027",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     assert resp.status_code == 201, resp.text
     data = resp.json()
     assert data["program_id"] == program_id
     assert data["name"] == "ABET 2024-2027"
-    assert data["accreditation_body"] == "ABET"
-    assert data["cycle_start_year"] == 2024
-    assert data["cycle_end_year"] == 2027
+    assert data["body"] == "ABET"
+    assert data["start_date"] == "2024-01-01"
+    assert data["end_date"] == "2027-12-31"
     assert data["status"] == "DRAFT"
     assert "id" in data
 
@@ -94,9 +94,9 @@ async def test_list_accreditation_cycles(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "NBA 2025-2028",
-            "accreditation_body": "NBA",
-            "cycle_start_year": 2025,
-            "cycle_end_year": 2028,
+            "body": "NBA",
+            "start_date": "2025-01-01",
+            "end_date": "2028-12-31",
         },
     )
     assert create_resp.status_code == 201, create_resp.text
@@ -119,9 +119,9 @@ async def test_list_cycles_filter_by_program(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Filter Test Cycle",
-            "accreditation_body": "NAAC",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "NAAC",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     assert create_resp.status_code == 201, create_resp.text
@@ -152,9 +152,9 @@ async def test_get_cycle_by_id(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Get Test Cycle",
-            "accreditation_body": "OTHER",
-            "cycle_start_year": 2023,
-            "cycle_end_year": 2026,
+            "body": "OTHER",
+            "start_date": "2023-01-01",
+            "end_date": "2026-12-31",
         },
     )
     cycle_id = create_resp.json()["id"]
@@ -186,9 +186,9 @@ async def test_patch_cycle_in_draft(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Patch Test Old Name",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = create_resp.json()["id"]
@@ -213,9 +213,9 @@ async def test_activate_cycle(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Activate Test",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = create_resp.json()["id"]
@@ -239,9 +239,9 @@ async def test_close_cycle(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Close Test",
-            "accreditation_body": "NBA",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "NBA",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = create_resp.json()["id"]
@@ -268,9 +268,9 @@ async def test_patch_cycle_after_active_returns_400(client: AsyncClient, auth_he
         json={
             "program_id": program_id,
             "name": "No Patch After Active",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = create_resp.json()["id"]
@@ -304,9 +304,9 @@ async def test_invalid_status_transition_activate_already_active(
         json={
             "program_id": program_id,
             "name": "Double Activate Test",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = create_resp.json()["id"]
@@ -333,9 +333,9 @@ async def test_add_criterion_to_cycle(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Criterion Test Cycle",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -369,9 +369,9 @@ async def test_list_criteria(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "List Criteria Cycle",
-            "accreditation_body": "NBA",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "NBA",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -403,9 +403,9 @@ async def test_patch_criterion(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Patch Criterion Cycle",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -437,9 +437,9 @@ async def test_add_criterion_to_closed_cycle_fails(client: AsyncClient, auth_hea
         json={
             "program_id": program_id,
             "name": "Closed Cycle Test",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -469,9 +469,9 @@ async def test_map_po_to_criterion(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "PO Map Cycle",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -507,9 +507,9 @@ async def test_list_po_mappings(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "List PO Map Cycle",
-            "accreditation_body": "NBA",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "NBA",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -549,9 +549,9 @@ async def test_duplicate_po_mapping_returns_400(client: AsyncClient, auth_header
         json={
             "program_id": program_id,
             "name": "Dup PO Map Cycle",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -592,9 +592,9 @@ async def test_delete_po_mapping(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Del PO Map Cycle",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -637,9 +637,9 @@ async def test_delete_criterion(client: AsyncClient, auth_headers):
         json={
             "program_id": program_id,
             "name": "Del Criterion Cycle",
-            "accreditation_body": "NAAC",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "NAAC",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     cycle_id = cycle_resp.json()["id"]
@@ -671,7 +671,7 @@ async def test_delete_criterion(client: AsyncClient, auth_headers):
 async def test_accreditation_read_denied_without_auth(client: AsyncClient):
     """Unauthenticated request is rejected."""
     resp = await client.get("/api/v1/accreditation/cycles")
-    assert resp.status_code == 403
+    assert resp.status_code == 401  # no token: unauthenticated
 
 
 async def test_accreditation_read_denied_for_teacher(client: AsyncClient, teacher_auth_headers):
@@ -694,9 +694,9 @@ async def test_accreditation_manage_denied_for_ml(client: AsyncClient, ml_auth_h
         json={
             "program_id": str(uuid.uuid4()),
             "name": "ML Should Fail",
-            "accreditation_body": "ABET",
-            "cycle_start_year": 2024,
-            "cycle_end_year": 2027,
+            "body": "ABET",
+            "start_date": "2024-01-01",
+            "end_date": "2027-12-31",
         },
     )
     # ML does not have accreditation.cycle.create

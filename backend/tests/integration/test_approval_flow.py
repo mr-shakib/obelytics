@@ -88,7 +88,7 @@ async def _setup_submitted_result(client: AsyncClient, headers: dict) -> dict:
     batch_resp = await client.post(
         "/api/v1/batches",
         headers=headers,
-        json={"curriculum_id": curriculum_id, "name": f"Approval Batch {suffix}", "intake_year": 2024},
+        json={"curriculum_id": curriculum_id, "name": f"Approval Batch {suffix}", "start_date": "2024-09-01", "term_system": "SEMESTER", "num_semesters": 8},
     )
     assert batch_resp.status_code == 201, batch_resp.text
     batch_id = batch_resp.json()["id"]
@@ -107,6 +107,8 @@ async def _setup_submitted_result(client: AsyncClient, headers: dict) -> dict:
     )
     assert term_resp.status_code == 201, term_resp.text
     term_id = term_resp.json()["id"]
+    # Marks can only be entered once the semester has been started.
+    await client.patch(f"/api/v1/academic-terms/{term_id}", headers=headers, json={"status": "ACTIVE"})
 
     # Section
     sec_resp = await client.post(
@@ -141,6 +143,7 @@ async def _setup_submitted_result(client: AsyncClient, headers: dict) -> dict:
             "full_name": f"Approval Student {suffix}",
             "email": f"apstu_{suffix}@test.com",
             "program_id": program_id,
+            "batch_id": batch_id,
         },
     )
     assert student_resp.status_code == 201, student_resp.text
@@ -157,7 +160,7 @@ async def _setup_submitted_result(client: AsyncClient, headers: dict) -> dict:
 
     # Assessment type
     at_resp = await client.post(
-        "/api/v1/config/assessment-types",
+        "/api/v1/ref-data/assessment-types",
         headers=headers,
         json={"name": f"Approval Quiz {suffix}"},
     )
