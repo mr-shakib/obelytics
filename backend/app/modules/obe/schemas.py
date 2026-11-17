@@ -273,7 +273,16 @@ class COKPMappingResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── CO-PO Mapping Validation (CEP/CEA requirements) ───────────────────────────
+# ── CO-PO Mapping Validation (K / CEP / CEA requirements) ─────────────────────
+# The rules themselves live in app/modules/obe/mapping_rules.py.
+
+
+class COKnowledgeGap(BaseModel):
+    """The CO is mapped to this PO but to none of the knowledge profiles it requires."""
+
+    program_outcome_id: UUID
+    program_outcome_code: str
+    required_kp_codes: list[str]
 
 
 class COMappingValidationIssue(BaseModel):
@@ -281,6 +290,7 @@ class COMappingValidationIssue(BaseModel):
     course_outcome_code: str
     missing_cep: bool
     missing_cea: bool
+    missing_kp: list[COKnowledgeGap] = Field(default_factory=list)
 
 
 class COPOMappingValidationResponse(BaseModel):

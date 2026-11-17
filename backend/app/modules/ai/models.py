@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.core.database import Base
 
 PROVIDERS = ("local", "hosted", "off")
-FEATURES = ("integrity", "copilot")
+FEATURES = ("integrity", "copilot", "authoring", "improvement")
 
 
 class OrganizationAISettings(Base):
@@ -40,6 +40,14 @@ class OrganizationAISettings(Base):
             "copilot_provider IS NULL OR copilot_provider IN ('local','hosted','off')",
             name="chk_ai_settings_copilot_provider",
         ),
+        CheckConstraint(
+            "authoring_provider IS NULL OR authoring_provider IN ('local','hosted','off')",
+            name="chk_ai_settings_authoring_provider",
+        ),
+        CheckConstraint(
+            "improvement_provider IS NULL OR improvement_provider IN ('local','hosted','off')",
+            name="chk_ai_settings_improvement_provider",
+        ),
         {"schema": "ai"},
     )
 
@@ -50,6 +58,8 @@ class OrganizationAISettings(Base):
     )
     integrity_provider = Column(String(10), nullable=True)
     copilot_provider = Column(String(10), nullable=True)
+    authoring_provider = Column(String(10), nullable=True)
+    improvement_provider = Column(String(10), nullable=True)
     # Plain UUID — no FK constraint (cross-schema IAM)
     updated_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
     updated_at = Column(

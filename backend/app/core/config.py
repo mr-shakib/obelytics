@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     # Each organization can choose per feature; these are the defaults until it does.
     AI_INTEGRITY_PROVIDER: Literal["local", "hosted", "off"] = "local"
     AI_COPILOT_PROVIDER: Literal["local", "hosted", "off"] = "hosted"
+    # Course outcome writing and CO-PO mapping suggestions (no student data involved)
+    AI_AUTHORING_PROVIDER: Literal["local", "hosted", "off"] = "hosted"
+    # Improvement agent (reads class aggregates only: averages and shares, no students)
+    AI_IMPROVEMENT_PROVIDER: Literal["local", "hosted", "off"] = "hosted"
     AI_TIMEOUT_SECONDS: float = 300.0
 
     AI_LOCAL_BASE_URL: str = "http://localhost:11434"

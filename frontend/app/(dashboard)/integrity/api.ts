@@ -34,6 +34,35 @@ export type QuestionAudit = {
   created_at: string
 }
 
+export type RewriteAttempt = {
+  text: string
+  changes: string[]
+  judged_bloom: string | null
+  judged_co: string | null
+  alignment: QuestionAudit["alignment"]
+  confidence: number | null
+  rationale: string | null
+  evidence: string | null
+}
+
+/** An AI rewrite of a question, checked by the auditor (which is not told the target). */
+export type QuestionRewrite = {
+  id: string
+  question_id: string
+  target_course_outcome: CourseOutcomeRef | null
+  target_bloom_code: string | null
+  original_text: string
+  rewritten_text: string
+  changes: string[]
+  verified_alignment: QuestionAudit["alignment"]
+  verified_confidence: number | null
+  attempts: RewriteAttempt[]
+  model: string
+  prompt_version: string
+  decision: "KEPT" | "DISCARDED" | null
+  created_at: string
+}
+
 export type AuditedQuestion = {
   question_id: string
   label: string
@@ -42,6 +71,8 @@ export type AuditedQuestion = {
   declared_bloom_level: BloomLevelRef | null
   declared_course_outcome: CourseOutcomeRef | null
   audit: QuestionAudit | null
+  /** The latest rewrite the teacher kept for the next paper. */
+  kept_rewrite: QuestionRewrite | null
 }
 
 export type ExtractedQuestion = {
@@ -156,6 +187,16 @@ export const integrityApi = {
 
   review: (auditId: string, decision: "ACCEPT" | "OVERRIDE", reason?: string) =>
     readJson<IntegrityOverview>(`/audits/${auditId}/review`, jsonBody("POST", { decision, reason })),
+
+  /** Write, then verify with the auditor (up to two tries): allow for several model calls. */
+  rewrite: (questionId: string, instruction?: string) =>
+    readJson<QuestionRewrite>(`/questions/${questionId}/rewrite`, {
+      ...jsonBody("POST", { instruction: instruction || undefined }),
+      timeoutMs: 240_000,
+    }),
+
+  decideRewrite: (rewriteId: string, decision: "KEPT" | "DISCARDED") =>
+    readJson<QuestionRewrite>(`/rewrites/${rewriteId}/decision`, jsonBody("POST", { decision })),
 }
 
 export function bloomLabel(level: BloomLevelRef | null) {

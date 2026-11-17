@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -21,6 +20,7 @@ from app.modules.obe.exceptions import (
     SubMappingConflictError,
     SubMappingNotFoundError,
 )
+from app.modules.obe.mapping_rules import load_facts, natural_key, po_number
 from app.modules.obe.models import (
     COCAMapping,
     COCPMapping,
@@ -55,6 +55,7 @@ from app.modules.obe.repository import (
 from app.modules.obe.schemas import (
     COCAMappingCreate,
     COCPMappingCreate,
+    COKnowledgeGap,
     COKPMappingCreate,
     COMappingValidationIssue,
     COPOMappingEntryUpsert,
@@ -76,6 +77,7 @@ from app.modules.obe.schemas import (
     ProgramOutcomeCreate,
     ProgramOutcomeUpdate,
 )
+
 
 class POVersionService:
     def __init__(self, session: AsyncSession) -> None:
@@ -500,80 +502,48 @@ class MappingSetService:
         if ms is None:
             raise MappingSetNotFoundError()
         entries = await self._entry_repo.list_by_set(set_id)
+        facts = await load_facts(
+            self._session,
+            {e.course_outcome_id for e in entries},
+            {e.program_outcome_id for e in entries},
+        )
 
-        # Batch-fetch all POs
-        po_ids = {e.program_outcome_id for e in entries}
-        po_map: dict[UUID, ProgramOutcome] = {}
-        if po_ids:
-            po_result = await self._session.execute(
-                select(ProgramOutcome).where(ProgramOutcome.id.in_(po_ids))
-            )
-            po_map = {po.id: po for po in po_result.scalars().all()}
-
-        po_codes: dict[UUID, str] = {po_id: po.code for po_id, po in po_map.items()}
-
-        co_to_po_numbers: dict[UUID, set[int]] = {}
+        issues_by_co: dict[UUID, COMappingValidationIssue] = {}
         for e in entries:
-            match = re.fullmatch(r"PO(\d+)", po_codes.get(e.program_outcome_id, ""))
-            if not match:
+            check = facts.check(e.course_outcome_id, e.program_outcome_id)
+            if check.ok:
                 continue
-            co_to_po_numbers.setdefault(e.course_outcome_id, set()).add(int(match.group(1)))
-
-        co_ids_needing_check = set()
-        for co_id, po_numbers in co_to_po_numbers.items():
-            needs_cep = any(1 <= n <= 7 for n in po_numbers)
-            needs_cea = 10 in po_numbers
-            if needs_cep or needs_cea:
-                co_ids_needing_check.add(co_id)
-
-        # Batch-fetch CEP and CEA mappings for all COs that need checking
-        cep_by_co: dict[UUID, bool] = {}
-        cea_by_co: dict[UUID, bool] = {}
-        if co_ids_needing_check:
-            cep_result = await self._session.execute(
-                select(COCPMapping.course_outcome_id).where(
-                    COCPMapping.course_outcome_id.in_(co_ids_needing_check)
-                )
-            )
-            cep_co_ids = {row[0] for row in cep_result.all()}
-            cea_result = await self._session.execute(
-                select(COCAMapping.course_outcome_id).where(
-                    COCAMapping.course_outcome_id.in_(co_ids_needing_check)
-                )
-            )
-            cea_co_ids = {row[0] for row in cea_result.all()}
-            for co_id in co_ids_needing_check:
-                cep_by_co[co_id] = co_id in cep_co_ids
-                cea_by_co[co_id] = co_id in cea_co_ids
-
-        # Batch-fetch COs for issue reporting
-        co_map: dict[UUID, CourseOutcome] = {}
-        if co_ids_needing_check:
-            co_result = await self._session.execute(
-                select(CourseOutcome).where(CourseOutcome.id.in_(co_ids_needing_check))
-            )
-            co_map = {co.id: co for co in co_result.scalars().all()}
-
-        issues: list[COMappingValidationIssue] = []
-        for co_id, po_numbers in co_to_po_numbers.items():
-            needs_cep = any(1 <= n <= 7 for n in po_numbers)
-            needs_cea = 10 in po_numbers
-            if not needs_cep and not needs_cea:
-                continue
-            missing_cep = needs_cep and not cep_by_co.get(co_id, False)
-            missing_cea = needs_cea and not cea_by_co.get(co_id, False)
-            if not missing_cep and not missing_cea:
-                continue
-            co = co_map.get(co_id)
-            issues.append(
+            issue = issues_by_co.setdefault(
+                e.course_outcome_id,
                 COMappingValidationIssue(
-                    course_outcome_id=co_id,
-                    course_outcome_code=co.code if co else "",
-                    missing_cep=missing_cep,
-                    missing_cea=missing_cea,
+                    course_outcome_id=e.course_outcome_id,
+                    course_outcome_code="",
+                    missing_cep=False,
+                    missing_cea=False,
+                ),
+            )
+            issue.missing_cep = issue.missing_cep or check.missing_cep
+            issue.missing_cea = issue.missing_cea or check.missing_cea
+            if check.missing_kp:
+                issue.missing_kp.append(
+                    COKnowledgeGap(
+                        program_outcome_id=e.program_outcome_id,
+                        program_outcome_code=facts.po_codes.get(e.program_outcome_id, ""),
+                        required_kp_codes=facts.required_kp_codes(e.program_outcome_id),
+                    )
+                )
+
+        if issues_by_co:
+            co_result = await self._session.execute(
+                select(CourseOutcome.id, CourseOutcome.code).where(
+                    CourseOutcome.id.in_(issues_by_co)
                 )
             )
-
+            for co_id, code in co_result.all():
+                issues_by_co[co_id].course_outcome_code = code
+        for issue in issues_by_co.values():
+            issue.missing_kp.sort(key=lambda gap: po_number(gap.program_outcome_code) or 0)
+        issues = sorted(issues_by_co.values(), key=lambda i: natural_key(i.course_outcome_code))
         return COPOMappingValidationResponse(is_valid=not issues, issues=issues)
 
 

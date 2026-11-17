@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { PageHeader } from "@/components/shared/page-header"
+import { ImportOutlineDialog } from "@/components/courses/import-outline-dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { useCourseCompletion } from "./use-course-completion"
@@ -141,8 +142,9 @@ export function CourseWorkspaceShell({ id, children }: Props) {
           title={`${data.code} — ${data.title}`}
           description={`${data.credits} credits · ${categoryName} · ${courseTypeLabel} · ${data.theory_hours} theory hrs · ${data.lab_hours} lab hrs`}
            actions={
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <StatusBadge status={data.status} />
+              <ImportOutlineDialog curriculumId={curriculumId} courseId={id} />
               <Button
                 variant="outline"
                 size="sm"

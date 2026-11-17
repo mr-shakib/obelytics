@@ -58,7 +58,7 @@ Full setup guide: `SETUP.md`
 ```
 backend/app/
 ├── core/           # config, database, security, redis, storage, middleware
-├── modules/        # domain modules (iam, org, curriculum, obe, assessment, attainment, approval, audit, notification, reporting, accreditation, ref_data, cqi, copilot, integrity, ai)
+├── modules/        # domain modules (iam, org, curriculum, obe, assessment, attainment, approval, audit, notification, reporting, accreditation, ref_data, cqi, copilot, integrity, ai, authoring, workforce, improvement)
 ├── shared/         # shared infra (events/outbox)
 └── workers/        # arq background worker (reports, integrity reading/audits)
 ```
@@ -105,7 +105,7 @@ frontend/
 
 ## Migrations
 
-- Sequential naming: `0001_description.py` through `0057_...`
+- Sequential naming: `0001_description.py` through `0062_...`
 - Auto-generate from model changes: `alembic revision --autogenerate -m "what changed"`
 - Always review generated file in `migrations/versions/` before applying
 - Run from `backend/` with venv activated

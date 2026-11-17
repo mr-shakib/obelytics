@@ -559,6 +559,11 @@ KNOWLEDGE_PROFILES = [
 ]
 
 
+def _db_course_type(source_type: str) -> str:
+    """THEORY_LAB was removed (migration 0046): such courses are stored as THEORY."""
+    return "THEORY" if source_type == "THEORY_LAB" else source_type
+
+
 async def _one(session: AsyncSession, stmt):
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
@@ -1025,7 +1030,6 @@ async def replace_course_details(
             course_id=course.id,
             code=code,
             statement=statement,
-            status="DRAFT",
         )
         session.add(co)
         await session.flush()
@@ -1074,7 +1078,6 @@ async def replace_course_details(
                         f"{co.code} addresses {cp_code} by requiring students to handle "
                         f"non-trivial {source['title'].lower()} analysis, constraints, and trade-offs."
                     ),
-                    status="DRAFT",
                 )
             )
         for kp_code in kp_codes:
@@ -1088,7 +1091,6 @@ async def replace_course_details(
                         f"{co.code} uses {kp_code} knowledge through assessed "
                         f"{source['title'].lower()} concepts, tools, design work, or reflection."
                     ),
-                    status="DRAFT",
                 )
             )
 
@@ -1104,7 +1106,6 @@ async def replace_course_details(
             organization_id=course.organization_id,
             curriculum_id=curriculum.id,
             course_id=course.id,
-            status="DRAFT",
         )
         session.add(mapping_set)
         await session.flush()
@@ -1339,7 +1340,7 @@ async def seed_courses(org_id: UUID | None = None, curriculum_id: UUID | None = 
                 course = Course(
                     organization_id=org.id,
                     course_category_id=category.id,
-                    course_type=source["type"],
+                    course_type=_db_course_type(source["type"]),
                     code=source["code"],
                     title=source["title"],
                     credits=source["credits"],
@@ -1354,7 +1355,7 @@ async def seed_courses(org_id: UUID | None = None, curriculum_id: UUID | None = 
                 print(f"  Created course: {source['code']} - {source['title']}")
             else:
                 course.course_category_id = category.id
-                course.course_type = source["type"]
+                course.course_type = _db_course_type(source["type"])
                 course.title = source["title"]
                 course.credits = source["credits"]
                 course.theory_hours = source["theory_hours"]

@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useForm, Controller } from "react-hook-form"
+import { useForm, useWatch, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { PageHeader } from "@/components/shared/page-header"
 import { PermissionGate } from "@/components/shared/permission-gate"
+import { RefineStatement } from "@/components/courses/refine-statement"
 import { BloomLevelCheckboxGroup, sortBloomLevelIds } from "@/components/shared/bloom-level-checkbox-group"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
@@ -24,6 +25,7 @@ type CourseOutcome = {
   code: string
   statement: string
   course_id: string
+  curriculum_id: string
   bloom_level_ids: string[]
   course_name?: string
   curriculum_name?: string
@@ -38,6 +40,8 @@ const schema = z.object({
   bloom_level_ids: z.array(z.string()),
 })
 type FormValues = z.infer<typeof schema>
+
+const EMPTY_IDS: string[] = []
 
 interface Props {
   id: string
@@ -76,6 +80,7 @@ export function CourseOutcomeDetailClient({ id }: Props) {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -87,6 +92,9 @@ export function CourseOutcomeDetailClient({ id }: Props) {
         }
       : undefined,
   })
+
+  const statement = useWatch({ control, name: "statement" }) ?? ""
+  const bloomLevelIds = useWatch({ control, name: "bloom_level_ids" }) ?? EMPTY_IDS
 
   const updateMutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -193,6 +201,19 @@ export function CourseOutcomeDetailClient({ id }: Props) {
                 {errors.statement && (
                   <p className="text-sm text-destructive">{errors.statement.message}</p>
                 )}
+                <RefineStatement
+                  curriculumId={data.curriculum_id}
+                  courseId={data.course_id}
+                  courseOutcomeId={data.id}
+                  statement={statement}
+                  bloomLevelIds={bloomLevelIds}
+                  onApply={(nextStatement, nextBloomLevelIds) => {
+                    setValue("statement", nextStatement, { shouldValidate: true, shouldDirty: true })
+                    if (nextBloomLevelIds.length > 0) {
+                      setValue("bloom_level_ids", nextBloomLevelIds, { shouldDirty: true })
+                    }
+                  }}
+                />
               </div>
 
               <div className="space-y-2">

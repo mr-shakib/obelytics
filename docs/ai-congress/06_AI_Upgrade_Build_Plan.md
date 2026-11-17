@@ -79,10 +79,48 @@ Still to design: survey instruments/responses; framework packs.
 
 ## AI gateway v1 (implemented — `backend/app/modules/ai/`)
 
-- One entry point for every model call (integrity and copilot). Providers: `local` (Ollama) and `hosted` (any OpenAI-compatible API; existing `DEEPSEEK_*` settings still work).
+- One entry point for every model call (integrity, copilot and outcome authoring). Providers: `local` (Ollama) and `hosted` (any OpenAI-compatible API; existing `DEEPSEEK_*` settings still work).
 - Redaction before any external call: emails, phone numbers, student-ID patterns, an optional institution regex, and names the caller knows (e.g. the signed-in user).
 - Usage log with cost estimate; **AI Settings** page (Configuration → AI Settings) to choose providers per feature and see usage.
 - Still to do: shared prompt-injection test suite (T25), per-call output storage for the copilot (copilot v2).
+
+## Outcome authoring (implemented — migration `0058_outcome_authoring`, `backend/app/modules/authoring/`)
+
+Helps teachers write course outcomes and map them to POs. Gateway feature `authoring` (default `hosted`: it reads course text only — description, syllabus, objectives, weekly topics, COs, POs — never student data).
+
+- **Write COs with AI** (course → Mappings): drafts 1–8 COs from the course text and the program's POs. Each draft can be edited, refined or dropped; nothing is saved until the teacher adds it through the normal CO endpoint.
+- **Write with AI / Refine with AI** (every CO statement box; "Write" in the Add CO dialogs drafts one new CO, optionally on a given focus): improves an AI draft or the teacher's own wording and shows what changed. The teacher picks "Use this" or "Keep mine".
+- **Quality checks in code** (`authoring/quality.py`), shown as warnings and never blocking: vague verbs (understand, know, learn…), statements that describe the course instead of the student, a verb that does not fit the tagged Bloom level, two outcomes in one, length, near-duplicates of other COs.
+- **Mapping rules in one place** (`obe/mapping_rules.py`), used by the mapping validator *and* the AI:
+  - K rule — a CO mapped to a PO must be mapped to at least one of the PO's required knowledge profiles (`obe.po_knowledge_profiles`, edited on the program page). POs with none are not checked.
+  - CEP rule — PO1–PO7 need a complex engineering problem on the CO.
+  - CEA rule — PO10 needs a complex engineering activity on the CO.
+- **Suggest with AI** (CO-PO matrix): the model proposes links with weight, justification, confidence and the K/CEP/CEA attributes that justify them. Code re-checks every link: links that break a rule are shown but cannot be applied; links in another Bloom domain than the PO get a warning. Applying re-checks the rules against the current data and adds the CO's K/CEP/CEA mappings together with the link, in one transaction.
+- **Traceable and measured**: every suggestion is stored in `obe.outcome_suggestions` (request, result, provider, model, prompt version, the teacher's decision: accepted / edited / partial / rejected) and written to the audit log. `scripts/authoring_eval.py` scores mapping suggestions against teachers' existing links (precision, recall, weight agreement, rule pass rate); keep its output in `private/`.
+- Prompts: `co-draft-v2`, `co-refine-v1`, `co-po-v2` (`authoring/prompts.py`); course text is fenced as data.
+- Tests: `backend/tests/integration/test_outcome_authoring.py`, `backend/tests/unit/test_outcome_quality.py`, `backend/tests/unit/test_mapping_rules.py`.
+- **Import outline** (course page header): reads a course outline (Word or text PDF, via the integrity document reader; only a SHA-256 is kept) into a preview of description, objectives, COs and weekly topics. Code flags CO wording not found word for word in the document and Bloom levels the outline does not state; existing COs are never overwritten. Prompt `outline-v1`; migration `0060_outline_import`.
+
+## Auditor fix — "Rewrite to fit the mapping" (implemented — migration `0059_question_rewrites`)
+
+- On an audited question, AI rewrites it so it really tests the mapped CO and Bloom level (changing the task, not just the verb), and the **auditor checks the rewrite without being told the target**. If it falls short, the writer gets the checker's reason and tries once more (`integrity/rewriting.py`, prompt `rewrite-v2`).
+- Advisory: the marksheet question is never changed — a kept rewrite is wording for the next paper. Every attempt and its judgment are stored in `integrity.question_rewrites`.
+- Tests: `backend/tests/integration/test_integrity_rewrite.py`.
+
+## Workforce readiness — job market ↔ outcomes (implemented — migration `0061_workforce_market`, `backend/app/modules/workforce/`)
+
+- **Workforce Readiness** page (Curriculum → Workforce Readiness): a program collects job postings; AI reads each posting's skills (`job-skills-v1`), then judges which of the curriculum's COs develop each in-demand skill (`skill-coverage-v1`).
+- Code does the rest: counts demand across postings, drops CO references that don't exist (a claimed "covered" with no real CO becomes a gap), derives POs from the CO-PO mapping, and scores **demand-weighted coverage** (covered 1, partial ½, gap 0, weighted by how many postings ask).
+- Each gap or partial skill has a suggested course and **Draft a CO** (today's CO writer, given the skill as focus); the teacher edits and adds it, then maps it with ✨ per CO.
+- Known limit: near-duplicate skill names across postings ("Python" / "Python scripting") are counted separately; a merge step is still to do. Postings hold no student data.
+- Tests: `backend/tests/integration/test_workforce.py`, `backend/tests/unit/test_workforce_analysis.py`.
+
+## Improvement agent (implemented — migration `0062_improvement_agent`, `backend/app/modules/improvement/`)
+
+- Card 4 on the Assessment Integrity page. A short agent loop (at most 6 steps, gateway feature `improvement`) over **fixed, read-only tools** scoped to the section the user may see: `outcome_attainment` (reported vs audit-supported), `question_stats` (average, share ≥ half, share zero, discrimination, declared vs AI Bloom), `lesson_plan`, `previous_plan`. Tools return class aggregates only — no student identities or individual marks reach the model. No model-written queries.
+- The first steps are fixed (CO overview; the course's previous plan if any), so every plan starts from the same facts and follows up on what was accepted last time.
+- The plan's evidence is **checked in code**: each citation must be a ref the cited tool actually returned; unsupported diagnoses are flagged. Teachers accept or reject each intervention; decisions feed the next plan. Prompt `improve-v1`.
+- Tests: `backend/tests/integration/test_improvement_agent.py`.
 
 ## Infrastructure
 

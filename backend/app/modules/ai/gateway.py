@@ -36,6 +36,8 @@ BackendFactory = Callable[[str], AIBackend | None]
 _DEFAULTS = {
     "integrity": lambda: settings.AI_INTEGRITY_PROVIDER,
     "copilot": lambda: settings.AI_COPILOT_PROVIDER,
+    "authoring": lambda: settings.AI_AUTHORING_PROVIDER,
+    "improvement": lambda: settings.AI_IMPROVEMENT_PROVIDER,
 }
 
 

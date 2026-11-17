@@ -33,6 +33,7 @@ import {
 } from "./api"
 import { JobProgress } from "./paper-panel"
 import { QuestionText } from "./question-text"
+import { RewritePanel } from "./rewrite-panel"
 
 const VERDICTS = {
   ALIGNED: {
@@ -135,6 +136,7 @@ export function AuditPanel({
               key={question.question_id}
               question={question}
               canManage={canManage}
+              overviewKey={key}
               busy={review.isPending}
               onAccept={(audit) => review.mutate({ auditId: audit.id, decision: "ACCEPT" })}
               onDisagree={() => setDisagreeWith(question)}
@@ -158,12 +160,14 @@ export function AuditPanel({
 function QuestionCard({
   question,
   canManage,
+  overviewKey,
   busy,
   onAccept,
   onDisagree,
 }: {
   question: AuditedQuestion
   canManage: boolean
+  overviewKey: readonly unknown[]
   busy: boolean
   onAccept: (audit: QuestionAudit) => void
   onDisagree: () => void
@@ -255,6 +259,8 @@ function QuestionCard({
           </p>
         </>
       )}
+
+      <RewritePanel question={question} canManage={canManage} invalidateKey={overviewKey} />
     </div>
   )
 }

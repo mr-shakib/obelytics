@@ -133,6 +133,8 @@ export const queryKeys = {
     list: (filters?: Record<string, unknown>) => ["program-outcomes", "list", filters] as const,
     detail: (id: string) => ["program-outcomes", id] as const,
     byVersion: (versionId: string) => ["program-outcomes", "version", versionId] as const,
+    knowledgeProfiles: (programId: string, poVersionId?: string | null) =>
+      ["program-outcomes", "knowledge-profiles", programId, poVersionId ?? null] as const,
   },
   poVersions: {
     all: ["po-versions"] as const,

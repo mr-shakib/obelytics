@@ -19,7 +19,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.modules.ai.gateway import AIGateway
+from app.modules.ai.gateway import AIGateway, BackendFactory
+from app.modules.ai.providers import AIError
 from app.modules.assessment.models import MarksheetMark, MarksheetQuestion, StudentEnrollment
 from app.modules.audit.writer import write_audit_log
 from app.modules.curriculum.models import (
@@ -42,6 +43,8 @@ from app.modules.integrity.auditing import (
     judge_alignment,
 )
 from app.modules.integrity.exceptions import (
+    IntegrityAIUnavailableError,
+    IntegrityModelError,
     JobAlreadyRunningError,
     NoQuestionTextError,
     OverrideReasonRequiredError,
@@ -49,7 +52,11 @@ from app.modules.integrity.exceptions import (
     PaperTooManyPagesError,
     PaperUnreadableError,
     QuestionAuditNotFoundError,
+    QuestionNotFoundError,
     QuestionNotInSectionError,
+    QuestionRewriteNotFoundError,
+    QuestionTextMissingError,
+    RewriteTargetMissingError,
     SectionAccessDeniedError,
     SectionOfferingNotFoundError,
     UnsupportedPaperTypeError,
@@ -60,9 +67,11 @@ from app.modules.integrity.models import (
     IntegrityJob,
     QuestionAudit,
     QuestionPaper,
+    QuestionRewrite,
 )
 from app.modules.integrity.prompts import AUDIT_PROMPT_VERSION
 from app.modules.integrity.reading import read_paper
+from app.modules.integrity.rewriting import BLOOM, REWRITE_PROMPT_VERSION, Target, rewrite_question
 from app.modules.integrity.schemas import (
     AuditableSection,
     AuditedQuestion,
@@ -79,7 +88,10 @@ from app.modules.integrity.schemas import (
     IntegritySummary,
     QuestionAuditResponse,
     QuestionPaperResponse,
+    QuestionRewriteRequest,
+    QuestionRewriteResponse,
     QuestionTextItem,
+    RewriteAttempt,
 )
 from app.modules.obe.models import CourseOutcome
 from app.modules.ref_data.models import BloomDomain, BloomLevel
@@ -227,8 +239,22 @@ class IntegrityService:
             )).scalars().all()
             blooms = {b.id: BloomLevelRef(id=b.id, code=b.code, name=b.name) for b in rows}
 
+        kept: dict[UUID, QuestionRewrite] = {}
+        if questions:
+            rows = (await session.execute(
+                select(QuestionRewrite)
+                .where(
+                    QuestionRewrite.question_id.in_([q.id for q in questions]),
+                    QuestionRewrite.decision == "KEPT",
+                )
+                .order_by(QuestionRewrite.created_at.desc())
+            )).scalars().all()
+            for rewrite in rows:
+                kept.setdefault(rewrite.question_id, rewrite)
+
         co_ids = {q.course_outcome_id for q in questions}
         co_ids |= {a.ai_course_outcome_id for a in audits.values()}
+        co_ids |= {r.target_course_outcome_id for r in kept.values()}
         co_ids.discard(None)
         outcomes: dict[UUID, CourseOutcomeRef] = {}
         if co_ids:
@@ -269,6 +295,9 @@ class IntegrityService:
                     override_reason=audit.override_reason,
                     reviewed_at=audit.reviewed_at,
                     created_at=audit.created_at,
+                ),
+                kept_rewrite=(
+                    rewrite_response(kept[question.id], outcomes) if question.id in kept else None
                 ),
             ))
 
@@ -639,6 +668,205 @@ class IntegrityService:
         )
         await self._session.commit()
         return offering, question.exam_type
+
+
+    # ── Rewriting a question to fit its mapping ──────────────────────────────
+
+    async def rewrite(
+        self,
+        question_id: UUID,
+        body: QuestionRewriteRequest,
+        user: User,
+        manifest: PermissionManifestResponse,
+        backend_factory: BackendFactory,
+    ) -> QuestionRewriteResponse:
+        """Rewrite a question to test its CO and Bloom level, verified by the auditor. Saves no marks."""
+        session = self._session
+        question = await session.get(MarksheetQuestion, question_id)
+        if question is None:
+            raise QuestionNotFoundError()
+        offering = await self.get_offering(question.section_offering_id, user, manifest)
+        if not (question.question_text or "").strip():
+            raise QuestionTextMissingError()
+
+        course = await session.get(Course, offering.course_id)
+        outcomes = (await session.execute(
+            select(CourseOutcome)
+            .where(
+                CourseOutcome.course_id == offering.course_id,
+                CourseOutcome.curriculum_id == offering.curriculum_id,
+            )
+            .order_by(CourseOutcome.code)
+        )).scalars().all()
+        by_id = {co.id: co for co in outcomes}
+        target_co = by_id.get(body.target_course_outcome_id or question.course_outcome_id)
+        if body.target_course_outcome_id and target_co is None:
+            raise RewriteTargetMissingError()
+        bloom_code = body.target_bloom_code or await self._cognitive_code(question.declared_bloom_level_id)
+        if target_co is None and bloom_code is None:
+            raise RewriteTargetMissingError()
+
+        audit = (await session.execute(select(QuestionAudit).where(
+            QuestionAudit.question_id == question.id, QuestionAudit.is_current.is_(True),
+        ))).scalar_one_or_none()
+        review = None
+        if audit is not None and audit.alignment != "ABSTAINED":
+            ai_bloom = await self._cognitive_code(audit.ai_bloom_level_id)
+            ai_co = by_id.get(audit.ai_course_outcome_id)
+            review = (
+                f"it demands {ai_bloom or 'an unclear level'} and exercises "
+                f"{ai_co.code if ai_co else 'no listed outcome'}. {audit.rationale or ''}"
+            ).strip()
+
+        gateway = await AIGateway.for_feature(
+            session, feature="integrity", organization_id=user.organization_id,
+            user_id=user.id, backend_factory=backend_factory,
+        )
+        if not gateway.available:
+            raise IntegrityAIUnavailableError(gateway.unavailable_reason())
+        original = question.question_text
+        label, marks = question.label, f"{float(question.max_marks):g}"
+        await session.commit()  # release the connection during the model calls
+
+        try:
+            result = await rewrite_question(
+                gateway,
+                course=f"{course.code} {course.title}",
+                outcomes="\n".join(f"{co.code}: {co.statement}" for co in outcomes),
+                co_codes=[co.code for co in outcomes],
+                co_ids={co_key(co.code): co.id for co in outcomes},
+                label=label,
+                marks=marks,
+                question=original,
+                target=Target(
+                    co_id=target_co.id if target_co else None,
+                    co_code=target_co.code if target_co else None,
+                    co_statement=target_co.statement if target_co else None,
+                    bloom_code=bloom_code,
+                ),
+                review=review,
+                instruction=body.instruction,
+            )
+        except AIError as exc:
+            gateway.record_usage(session)
+            await session.commit()
+            raise IntegrityModelError(str(exc)) from exc
+
+        rewrite = QuestionRewrite(
+            organization_id=user.organization_id,
+            question_id=question_id,
+            target_course_outcome_id=target_co.id if target_co else None,
+            target_bloom_code=bloom_code,
+            instruction=(body.instruction or "").strip() or None,
+            original_text=original,
+            rewritten_text=result.text,
+            changes=result.changes,
+            attempts=result.attempts,
+            verified_alignment=result.alignment,
+            verified_confidence=(
+                Decimal(str(result.confidence)) if result.confidence is not None else None
+            ),
+            model=result.model[:100],
+            prompt_version=REWRITE_PROMPT_VERSION,
+            created_by_user_id=user.id,
+        )
+        session.add(rewrite)
+        gateway.record_usage(session)
+        await session.flush()
+        write_audit_log(
+            session,
+            entity_type="marksheet_question",
+            entity_id=question_id,
+            action="INTEGRITY_QUESTION_REWRITTEN",
+            org_id=user.organization_id,
+            actor_user_id=user.id,
+            extra={
+                "rewrite_id": str(rewrite.id),
+                "target_co": target_co.code if target_co else None,
+                "target_bloom": bloom_code,
+                "verified_alignment": result.alignment,
+                "attempts": len(result.attempts),
+                "model": rewrite.model,
+                "prompt_version": REWRITE_PROMPT_VERSION,
+                "provider": gateway.provider,
+            },
+        )
+        await session.commit()
+        refs = {
+            co.id: CourseOutcomeRef(id=co.id, code=co.code, statement=co.statement) for co in outcomes
+        }
+        return rewrite_response(rewrite, refs)
+
+    async def decide_rewrite(
+        self, rewrite_id: UUID, decision: str, user: User, manifest: PermissionManifestResponse
+    ) -> QuestionRewriteResponse:
+        session = self._session
+        rewrite = (await session.execute(select(QuestionRewrite).where(
+            QuestionRewrite.id == rewrite_id, QuestionRewrite.organization_id == user.organization_id,
+        ))).scalar_one_or_none()
+        if rewrite is None:
+            raise QuestionRewriteNotFoundError()
+        question = await session.get(MarksheetQuestion, rewrite.question_id)
+        await self.get_offering(question.section_offering_id, user, manifest)
+        before = rewrite.decision
+        rewrite.decision = decision
+        rewrite.decided_at = _now()
+        write_audit_log(
+            session,
+            entity_type="question_rewrite",
+            entity_id=rewrite.id,
+            action="INTEGRITY_REWRITE_DECIDED",
+            org_id=user.organization_id,
+            actor_user_id=user.id,
+            before_status=before,
+            after_status=decision,
+        )
+        await session.commit()
+        target = await session.get(CourseOutcome, rewrite.target_course_outcome_id) if (
+            rewrite.target_course_outcome_id
+        ) else None
+        refs = (
+            {target.id: CourseOutcomeRef(id=target.id, code=target.code, statement=target.statement)}
+            if target else {}
+        )
+        return rewrite_response(rewrite, refs)
+
+    async def _cognitive_code(self, level_id: UUID | None) -> str | None:
+        """The level's code if it is a cognitive level the auditor judges (C1–C6)."""
+        if level_id is None:
+            return None
+        row = (await self._session.execute(
+            select(BloomLevel.code, BloomDomain.name)
+            .join(BloomDomain, BloomDomain.id == BloomLevel.bloom_domain_id)
+            .where(BloomLevel.id == level_id)
+        )).one_or_none()
+        if row is None or not row[1].strip().lower().startswith("cognitive"):
+            return None
+        code = row[0].strip().upper()
+        return code if code in BLOOM else None
+
+
+def rewrite_response(
+    rewrite: QuestionRewrite, outcomes: dict[UUID, CourseOutcomeRef]
+) -> QuestionRewriteResponse:
+    return QuestionRewriteResponse(
+        id=rewrite.id,
+        question_id=rewrite.question_id,
+        target_course_outcome=outcomes.get(rewrite.target_course_outcome_id),
+        target_bloom_code=rewrite.target_bloom_code,
+        original_text=rewrite.original_text,
+        rewritten_text=rewrite.rewritten_text,
+        changes=list(rewrite.changes or []),
+        verified_alignment=rewrite.verified_alignment,
+        verified_confidence=(
+            float(rewrite.verified_confidence) if rewrite.verified_confidence is not None else None
+        ),
+        attempts=[RewriteAttempt.model_validate(a) for a in rewrite.attempts or []],
+        model=rewrite.model,
+        prompt_version=rewrite.prompt_version,
+        decision=rewrite.decision,
+        created_at=rewrite.created_at,
+    )
 
 
 class IntegrityJobService:

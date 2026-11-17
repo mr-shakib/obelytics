@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_permission
+from app.modules.ai.gateway import BackendFactory, get_backend_factory
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
 from app.modules.integrity.exceptions import JobSubmissionError
@@ -19,7 +20,10 @@ from app.modules.integrity.schemas import (
     EvidenceAttainment,
     ExamType,
     IntegrityOverview,
+    QuestionRewriteRequest,
+    QuestionRewriteResponse,
     QuestionTextsUpdate,
+    RewriteDecisionRequest,
 )
 from app.modules.integrity.service import IntegrityService
 
@@ -149,3 +153,32 @@ async def review_question_audit(
     svc = IntegrityService(db)
     offering, exam_type = await svc.review(audit_id, body.decision, body.reason, current_user, manifest)
     return await svc.overview(offering, exam_type)
+
+
+@router.post("/questions/{question_id}/rewrite", response_model=QuestionRewriteResponse)
+async def rewrite_question(
+    question_id: UUID,
+    body: QuestionRewriteRequest,
+    manifest: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    backend_factory: Annotated[BackendFactory, Depends(get_backend_factory)],
+):
+    """Rewrite the question to really test its CO and Bloom level; the auditor checks the result.
+
+    Advisory: the marksheet question is not changed — the wording is for the next paper.
+    """
+    svc = IntegrityService(db)
+    return await svc.rewrite(question_id, body, current_user, manifest, backend_factory)
+
+
+@router.post("/rewrites/{rewrite_id}/decision", response_model=QuestionRewriteResponse)
+async def decide_question_rewrite(
+    rewrite_id: UUID,
+    body: RewriteDecisionRequest,
+    manifest: Annotated[PermissionManifestResponse, Depends(_manage)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    svc = IntegrityService(db)
+    return await svc.decide_rewrite(rewrite_id, body.decision, current_user, manifest)

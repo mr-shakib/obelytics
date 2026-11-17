@@ -17,7 +17,7 @@ class ProviderStatus(BaseModel):
 
 
 class FeatureSetting(BaseModel):
-    feature: Literal["integrity", "copilot"]
+    feature: Literal["integrity", "copilot", "authoring", "improvement"]
     # None: the organization has not chosen, so the server default applies.
     chosen: ProviderName | None
     default: ProviderName
@@ -33,6 +33,8 @@ class AISettingsUpdate(BaseModel):
     # Send null to go back to the server default. Omitted fields are left unchanged.
     integrity_provider: ProviderName | None = None
     copilot_provider: ProviderName | None = None
+    authoring_provider: ProviderName | None = None
+    improvement_provider: ProviderName | None = None
 
 
 class UsageRow(BaseModel):

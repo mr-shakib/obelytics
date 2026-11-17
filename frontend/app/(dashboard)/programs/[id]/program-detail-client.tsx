@@ -643,6 +643,132 @@ function PEOPOMappingCard({ programId, poVersionId }: { programId: string; poVer
   )
 }
 
+// ── PO-Knowledge Profile Card (the K rule) ───────────────────────────────────
+
+type KnowledgeProfileOption = { id: string; code: string; description: string; is_active: boolean }
+type POKnowledgeProfileLink = { knowledge_profile_id: string }
+
+function POKnowledgeProfileCard({ programId, poVersionId }: { programId: string; poVersionId?: string | null }) {
+  const qc = useQueryClient()
+
+  const { data: pos = [] } = useQuery({
+    queryKey: queryKeys.programOutcomes.list({
+      program_id: programId,
+      po_version_id: poVersionId || undefined,
+    }),
+    queryFn: () => fetchProgramOutcomes(programId, poVersionId),
+  })
+
+  const { data: knowledgeProfiles = [] } = useQuery({
+    queryKey: queryKeys.refData.knowledgeProfiles,
+    queryFn: async () => {
+      const { data } = await apiClient.GET("/ref-data/knowledge-profiles" as never)
+      return ((data as unknown) as KnowledgeProfileOption[]) ?? []
+    },
+  })
+  const activeProfiles = [...knowledgeProfiles].filter((k) => k.is_active).sort(byCode)
+  const sortedPos = [...pos].sort(byCode)
+  const mappingKey = queryKeys.programOutcomes.knowledgeProfiles(programId, poVersionId)
+
+  const { data: required = {} } = useQuery({
+    queryKey: [...mappingKey, sortedPos.map((po) => po.id).join(",")],
+    queryFn: async () => {
+      const result: Record<string, string[]> = {}
+      await Promise.all(
+        sortedPos.map(async (po) => {
+          const { data } = await apiClient.GET(`/program-outcomes/${po.id}/knowledge-profiles` as never)
+          result[po.id] = ((data as unknown) as POKnowledgeProfileLink[] ?? []).map((l) => l.knowledge_profile_id)
+        })
+      )
+      return result
+    },
+    enabled: sortedPos.length > 0,
+  })
+
+  const toggle = useMutation({
+    mutationFn: async ({ poId, kpId, on }: { poId: string; kpId: string; on: boolean }) => {
+      if (on) {
+        await apiClient.POST(`/program-outcomes/${poId}/knowledge-profiles` as never, {
+          body: { knowledge_profile_id: kpId },
+        } as never)
+      } else {
+        await apiClient.DELETE(`/program-outcomes/${poId}/knowledge-profiles/${kpId}` as never)
+      }
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: mappingKey }),
+    onError: () => toast.error("Failed to update the PO's knowledge profiles"),
+  })
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">PO → Required Knowledge Profiles</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Tick the knowledge profiles each PO requires. A CO mapped to a PO must be mapped to at least one of
+          them (the K rule); the mapping check and AI mapping suggestions both follow it. A PO with none ticked
+          is not checked.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {sortedPos.length === 0 || activeProfiles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {sortedPos.length === 0
+              ? "No Program Outcomes found. Create POs from the Program Outcomes page first."
+              : "No knowledge profiles defined. Add them under Complex Attributes first."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr>
+                  <th className="pb-2 pr-3 text-left font-medium text-muted-foreground">PO</th>
+                  {activeProfiles.map((kp) => (
+                    <th key={kp.id} className="pb-2 px-2 text-center font-mono font-medium" title={kp.description}>
+                      {kp.code}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedPos.map((po) => (
+                  <tr key={po.id} className="border-t">
+                    <td className="py-2 pr-3" title={po.statement}>
+                      <span className="font-mono font-medium">{po.code}</span>
+                    </td>
+                    {activeProfiles.map((kp) => {
+                      const checked = (required[po.id] ?? []).includes(kp.id)
+                      return (
+                        <td key={kp.id} className="py-2 px-2 text-center">
+                          <PermissionGate
+                            permission="po.update"
+                            fallback={
+                              <input type="checkbox" readOnly checked={checked}
+                                className="h-4 w-4 cursor-not-allowed accent-primary" />
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={toggle.isPending}
+                              onChange={() => toggle.mutate({ poId: po.id, kpId: kp.id, on: !checked })}
+                              className="h-4 w-4 cursor-pointer accent-primary"
+                              aria-label={`${po.code} requires ${kp.code}`}
+                            />
+                          </PermissionGate>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── PEO-Mission Mapping Card ──────────────────────────────────────────────────
 
 function PEOMissionMappingCard({ programId }: { programId: string }) {
@@ -1154,6 +1280,7 @@ export function ProgramDetailClient({ id }: Props) {
             onSelectedVersionChange={(versionId) => setSelectedPoVersionId(versionId)}
           />
           <PEOPOMappingCard programId={id} poVersionId={effectivePoVersionId} />
+          <POKnowledgeProfileCard programId={id} poVersionId={effectivePoVersionId} />
         </div>
       </div>
     </div>

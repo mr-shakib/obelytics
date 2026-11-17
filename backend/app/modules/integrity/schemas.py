@@ -88,6 +88,35 @@ class QuestionAuditResponse(BaseModel):
     created_at: datetime
 
 
+class RewriteAttempt(BaseModel):
+    text: str
+    changes: list[str] = Field(default_factory=list)
+    judged_bloom: str | None
+    judged_co: str | None
+    alignment: str
+    confidence: float | None
+    rationale: str | None
+    evidence: str | None = None
+
+
+class QuestionRewriteResponse(BaseModel):
+    id: UUID
+    question_id: UUID
+    target_course_outcome: CourseOutcomeRef | None
+    target_bloom_code: str | None
+    original_text: str
+    rewritten_text: str
+    changes: list[str]
+    # How the auditor, not told the target, judged the final wording.
+    verified_alignment: str
+    verified_confidence: float | None
+    attempts: list[RewriteAttempt]
+    model: str
+    prompt_version: str
+    decision: str | None
+    created_at: datetime
+
+
 class AuditedQuestion(BaseModel):
     question_id: UUID
     label: str
@@ -96,6 +125,19 @@ class AuditedQuestion(BaseModel):
     declared_bloom_level: BloomLevelRef | None
     declared_course_outcome: CourseOutcomeRef | None
     audit: QuestionAuditResponse | None
+    # The latest rewrite the teacher kept for the next paper, if any.
+    kept_rewrite: QuestionRewriteResponse | None = None
+
+
+class QuestionRewriteRequest(BaseModel):
+    # Default: the CO and Bloom level the question is mapped to.
+    target_course_outcome_id: UUID | None = None
+    target_bloom_code: Literal["C1", "C2", "C3", "C4", "C5", "C6"] | None = None
+    instruction: str | None = Field(default=None, max_length=500)
+
+
+class RewriteDecisionRequest(BaseModel):
+    decision: Literal["KEPT", "DISCARDED"]
 
 
 class IntegritySummary(BaseModel):

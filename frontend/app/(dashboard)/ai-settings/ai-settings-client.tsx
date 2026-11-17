@@ -26,6 +26,16 @@ const FEATURES: Record<Feature, { title: string; description: string }> = {
     title: "OBE Copilot",
     description: "Answers questions about your curriculum and outcomes in chat.",
   },
+  authoring: {
+    title: "Outcome writing, mapping and workforce analysis",
+    description:
+      "Drafts and refines course outcomes, reads course outlines, suggests CO-PO links within the K, CEP and CEA rules, and compares job postings with the curriculum. Course text and postings only — no student data.",
+  },
+  improvement: {
+    title: "Improvement agent",
+    description:
+      "Explains why course outcomes were not attained and proposes changes, using fixed tools over class totals (averages and shares). No individual student data.",
+  },
 }
 
 const PROVIDER_LABEL: Record<ProviderName, string> = {

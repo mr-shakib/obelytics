@@ -101,6 +101,9 @@ export async function apiFetch(
       toast.error("You don't have permission for this action")
     } else if (res.status === 400 || res.status === 409 || res.status === 422) {
       toast.error(detail ?? "Please check the information and try again.")
+    } else if ((res.status === 502 || res.status === 503) && detail) {
+      // A dependency the server relies on (e.g. an AI model) is unavailable: say which.
+      toast.error(detail)
     } else if (res.status >= 500) {
       toast.error("Something went wrong. Please try again.")
     }

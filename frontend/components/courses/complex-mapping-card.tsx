@@ -84,7 +84,7 @@ const KIND_CONFIG: Record<
   kp: {
     title: "CO-KP Mapping",
     description:
-      "Map course outcomes to Knowledge Profiles (KP). Click a cell to toggle the mapping on or off.",
+      "Map course outcomes to Knowledge Profiles (KP). A CO mapped to a PO needs at least one of the knowledge profiles that PO requires (set on the program page). Click a cell to toggle the mapping on or off.",
     optionsPath: "/ref-data/knowledge-profiles",
     optionsQueryKey: queryKeys.refData.knowledgeProfiles,
     mappingsPath: "/mappings/co-kp",

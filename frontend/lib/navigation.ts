@@ -1,4 +1,5 @@
 import {
+  Briefcase,
   LayoutDashboard,
   Building2,
   Building,
@@ -63,6 +64,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Academic Batches", href: "/batches", icon: Users2, permission: "batch.create", group: "Curriculum" },
   { label: "Module Leaders", href: "/module-leaders", icon: UserCog, permission: "faculty_assignment.create", group: "Curriculum" },
   { label: "Course Outcomes", href: "/course-outcomes", icon: ListChecks, permission: "co.read", group: "Curriculum" },
+  { label: "Workforce Readiness", href: "/workforce", icon: Briefcase, permission: ["po.update", "curriculum.update"], group: "Curriculum" },
 
   // OBE
 

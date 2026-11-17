@@ -17,6 +17,7 @@ from app.modules.accreditation.models import (  # noqa: F401
     AccreditationCycle,
     CriterionPOMapping,
 )
+from app.modules.ai.models import AICall, OrganizationAISettings  # noqa: F401
 from app.modules.approval.models import ReviewComment  # noqa: F401
 from app.modules.assessment.models import (  # noqa: F401
     Assessment,
@@ -32,10 +33,9 @@ from app.modules.attainment.models import (  # noqa: F401
     POAttainmentResult,
 )
 from app.modules.audit.models import AuditLog  # noqa: F401
+from app.modules.authoring.models import OutcomeSuggestion  # noqa: F401
 from app.modules.copilot.models import CopilotConversation, CopilotMessage  # noqa: F401
 from app.modules.cqi.models import COAttainmentGap, POAttainmentGap  # noqa: F401
-from app.modules.integrity.models import IntegrityJob, QuestionAudit, QuestionPaper  # noqa: F401
-from app.modules.ai.models import AICall, OrganizationAISettings  # noqa: F401
 from app.modules.curriculum.models import (  # noqa: F401
     AcademicTerm,
     Batch,
@@ -57,6 +57,13 @@ from app.modules.iam.models import (  # noqa: F401
     RolePermission,
     User,
     UserRoleAssignment,
+)
+from app.modules.improvement.models import ImprovementPlan  # noqa: F401
+from app.modules.integrity.models import (  # noqa: F401
+    IntegrityJob,
+    QuestionAudit,
+    QuestionPaper,
+    QuestionRewrite,
 )
 from app.modules.notification.models import Notification  # noqa: F401
 from app.modules.obe.models import (  # noqa: F401
@@ -87,6 +94,7 @@ from app.modules.ref_data.models import (  # noqa: F401
     KnowledgeProfile,
     MappingWeightLabel,
 )
+from app.modules.workforce.models import MarketAnalysis, MarketPosting  # noqa: F401
 
 # ── Import all models here so Alembic autogenerate can detect them ──
 from app.shared.events.outbox import OutboxEvent  # noqa: F401

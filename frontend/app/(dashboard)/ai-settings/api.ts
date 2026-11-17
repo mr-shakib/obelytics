@@ -1,7 +1,7 @@
 import { apiFetch, PUBLIC_API_URL } from "@/lib/api/client"
 
 export type ProviderName = "local" | "hosted" | "off"
-export type Feature = "integrity" | "copilot"
+export type Feature = "integrity" | "copilot" | "authoring" | "improvement"
 
 export type FeatureSetting = {
   feature: Feature

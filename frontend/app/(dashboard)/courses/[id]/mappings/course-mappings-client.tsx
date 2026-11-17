@@ -5,6 +5,7 @@ import { CoPoMappingCard } from "@/components/courses/co-po-mapping-card"
 import { ComplexMappingCard } from "@/components/courses/complex-mapping-card"
 import { CoMappingsSummaryCard } from "@/components/courses/co-mappings-summary-card"
 import { AddCourseOutcomeDialog } from "@/components/courses/add-course-outcome-dialog"
+import { WriteOutcomesDialog } from "@/components/courses/write-outcomes-dialog"
 import { apiClient } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
 import { useResolveCourseLocation } from "@/hooks/use-course-location"
@@ -56,7 +57,12 @@ export function CourseMappingsClient({ id }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <WriteOutcomesDialog
+          curriculumId={curriculumId}
+          courseId={id}
+          existingCodes={courseOutcomes.map((co) => co.code)}
+        />
         <AddCourseOutcomeDialog
           curriculumId={curriculumId}
           courseId={id}

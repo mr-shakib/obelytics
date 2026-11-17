@@ -90,3 +90,39 @@ class OverrideReasonRequiredError(HTTPException):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Give a reason when you disagree with the AI judgment",
         )
+
+
+class QuestionNotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+
+class RewriteTargetMissingError(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=422,
+            detail="Map the question to a CO or a cognitive Bloom level (C1–C6) first, "
+                   "or choose what the rewrite should target",
+        )
+
+
+class QuestionTextMissingError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=422, detail="The question has no wording to rewrite yet")
+
+
+class QuestionRewriteNotFoundError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Rewrite not found")
+
+
+class IntegrityAIUnavailableError(HTTPException):
+    def __init__(self, reason: str):
+        super().__init__(status_code=503, detail=f"The auditor is not available: {reason}.")
+
+
+class IntegrityModelError(HTTPException):
+    def __init__(self, reason: str):
+        super().__init__(
+            status_code=502, detail=f"The AI model could not rewrite the question: {reason}. Please try again."
+        )

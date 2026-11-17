@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2, Plus } from "lucide-react"
@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { z } from "zod"
 import { BloomLevelCheckboxGroup } from "@/components/shared/bloom-level-checkbox-group"
 import { PermissionGate } from "@/components/shared/permission-gate"
+import { RefineStatement } from "@/components/courses/refine-statement"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -40,6 +41,8 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
+const EMPTY_IDS: string[] = []
+
 interface Props {
   curriculumId: string
   courseId: string
@@ -60,6 +63,9 @@ export function AddCourseOutcomeDialog({ curriculumId, courseId, nextOutcomeNumb
       form.reset({ code: suggestedCode, statement: "", bloom_level_ids: [] })
     }
   }, [form, open, suggestedCode])
+
+  const statement = useWatch({ control: form.control, name: "statement" }) ?? ""
+  const bloomLevelIds = useWatch({ control: form.control, name: "bloom_level_ids" }) ?? EMPTY_IDS
 
   const { data: bloomLevels = [] } = useQuery({
     queryKey: queryKeys.refData.bloomLevels,
@@ -107,7 +113,7 @@ export function AddCourseOutcomeDialog({ curriculumId, courseId, nextOutcomeNumb
       </PermissionGate>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Add Course Outcome</DialogTitle>
           </DialogHeader>
@@ -137,6 +143,19 @@ export function AddCourseOutcomeDialog({ curriculumId, courseId, nextOutcomeNumb
                   {form.formState.errors.statement.message}
                 </p>
               )}
+              <RefineStatement
+                allowWrite
+                curriculumId={curriculumId}
+                courseId={courseId}
+                statement={statement}
+                bloomLevelIds={bloomLevelIds}
+                onApply={(nextStatement, nextBloomLevelIds) => {
+                  form.setValue("statement", nextStatement, { shouldValidate: true, shouldDirty: true })
+                  if (nextBloomLevelIds.length > 0) {
+                    form.setValue("bloom_level_ids", nextBloomLevelIds, { shouldDirty: true })
+                  }
+                }}
+              />
             </div>
 
             <div className="space-y-2">

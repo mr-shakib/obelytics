@@ -22,6 +22,7 @@ import {
 } from "./api"
 import { AuditPanel } from "./audit-panel"
 import { EvidencePanel } from "./evidence-panel"
+import { ImprovementPanel } from "./improvement-panel"
 import { PaperPanel } from "./paper-panel"
 
 const EXAMS: { value: ExamType; label: string }[] = [
@@ -107,6 +108,7 @@ export function IntegrityClient() {
           <PaperPanel overview={overview} sectionId={sectionId} examType={examType} canManage={canManage} />
           <AuditPanel overview={overview} sectionId={sectionId} examType={examType} canManage={canManage} />
           <EvidencePanel sectionId={sectionId} />
+          <ImprovementPanel sectionId={sectionId} canManage={canManage} />
         </>
       )}
     </div>

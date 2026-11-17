@@ -236,3 +236,59 @@ class IntegrityJob(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class QuestionRewrite(Base):
+    """
+    An AI rewrite of a question so it really tests the intended CO and Bloom level,
+    checked by the auditor (which is not told the target). Advisory: it never changes
+    the marksheet question — it is wording for the next paper or the question bank.
+    """
+
+    __tablename__ = "question_rewrites"
+    __table_args__ = (
+        CheckConstraint(
+            "verified_alignment IN ('ALIGNED','PARTIAL','MISALIGNED','ABSTAINED')",
+            name="chk_integrity_question_rewrite_alignment",
+        ),
+        CheckConstraint(
+            "decision IS NULL OR decision IN ('KEPT','DISCARDED')",
+            name="chk_integrity_question_rewrite_decision",
+        ),
+        {"schema": "integrity"},
+    )
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    organization_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("org.organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    question_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("assessment.marksheet_questions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_course_outcome_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("obe.course_outcomes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    target_bloom_code = Column(String(10), nullable=True)
+    instruction = Column(Text, nullable=True)
+    original_text = Column(Text, nullable=False)
+    rewritten_text = Column(Text, nullable=False)
+    changes = Column(JSONB, nullable=True)
+    # Every try and how the auditor judged it.
+    attempts = Column(JSONB, nullable=False)
+    verified_alignment = Column(String(20), nullable=False)
+    verified_confidence = Column(Numeric(4, 3), nullable=True)
+    model = Column(String(100), nullable=False)
+    prompt_version = Column(String(50), nullable=False)
+    decision = Column(String(10), nullable=True)
+    # Plain UUID — no FK constraint (cross-schema IAM)
+    created_by_user_id = Column(PGUUID(as_uuid=True), nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))

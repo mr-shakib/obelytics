@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useForm, Controller } from "react-hook-form"
+import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -20,6 +20,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { RefineStatement } from "@/components/courses/refine-statement"
+import { WriteOutcomesDialog } from "@/components/courses/write-outcomes-dialog"
 import {
   Dialog,
   DialogContent,
@@ -64,6 +66,8 @@ type COFormValues = z.infer<typeof coSchema>
 
 // ── Add dialog ────────────────────────────────────────────────────────────────
 
+const EMPTY_IDS: string[] = []
+
 function CODialog({
   open,
   onOpenChange,
@@ -72,6 +76,8 @@ function CODialog({
   suggestedCode,
   onSubmit,
   isPending,
+  curriculumId,
+  courseId,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -80,14 +86,19 @@ function CODialog({
   suggestedCode: string
   onSubmit: (values: COFormValues) => void
   isPending: boolean
+  curriculumId?: string
+  courseId?: string
 }) {
   const {
     register,
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<COFormValues>({ resolver: zodResolver(coSchema) })
+  const statement = useWatch({ control, name: "statement" }) ?? ""
+  const bloomLevelIds = useWatch({ control, name: "bloom_level_ids" }) ?? EMPTY_IDS
 
   useEffect(() => {
     if (open) {
@@ -97,7 +108,7 @@ function CODialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Add Course Outcome</DialogTitle>
         </DialogHeader>
@@ -117,6 +128,19 @@ function CODialog({
               rows={4}
             />
             {errors.statement && <p className="text-sm text-destructive">{errors.statement.message}</p>}
+            <RefineStatement
+              allowWrite
+              curriculumId={curriculumId}
+              courseId={courseId}
+              statement={statement}
+              bloomLevelIds={bloomLevelIds}
+              onApply={(nextStatement, nextBloomLevelIds) => {
+                setValue("statement", nextStatement, { shouldValidate: true, shouldDirty: true })
+                if (nextBloomLevelIds.length > 0) {
+                  setValue("bloom_level_ids", nextBloomLevelIds, { shouldDirty: true })
+                }
+              }}
+            />
           </div>
 
           <div className="space-y-2">
@@ -347,12 +371,19 @@ export function CourseOutcomesClient() {
         description="Select a curriculum, semester and course to manage its learning outcomes."
         actions={
           courseId && (
-            <PermissionGate permission="co.create">
-              <Button onClick={openAdd}>
-                <Plus className="h-4 w-4" />
-                Add CO
-              </Button>
-            </PermissionGate>
+            <div className="flex flex-wrap gap-2">
+              <WriteOutcomesDialog
+                curriculumId={curriculumId}
+                courseId={courseId}
+                existingCodes={cos.map((co) => co.code)}
+              />
+              <PermissionGate permission="co.create">
+                <Button onClick={openAdd}>
+                  <Plus className="h-4 w-4" />
+                  Add CO
+                </Button>
+              </PermissionGate>
+            </div>
           )
         }
       />
@@ -456,6 +487,8 @@ export function CourseOutcomesClient() {
         suggestedCode={suggestedCode}
         onSubmit={(v) => addMutation.mutate(v)}
         isPending={addMutation.isPending}
+        curriculumId={curriculumId || undefined}
+        courseId={courseId || undefined}
       />
     </div>
   )
