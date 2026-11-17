@@ -125,15 +125,21 @@ class PORepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def find_by_code(self, code: str, org_id: UUID) -> ProgramOutcome | None:
+    async def find_by_code(self, code: str, org_id: UUID, program_id: UUID | None) -> ProgramOutcome | None:
+        """An active PO with this code in the same program (codes repeat across programs;
+        the database enforces uniqueness per organization and program, migration 0044)."""
+        same_program = (
+            ProgramOutcome.program_id.is_(None) if program_id is None else ProgramOutcome.program_id == program_id
+        )
         result = await self._session.execute(
             select(ProgramOutcome).where(
                 and_(
                     ProgramOutcome.code == code,
                     ProgramOutcome.organization_id == org_id,
                     ProgramOutcome.status == "ACTIVE",
+                    same_program,
                 )
-            )
+            ).limit(1)
         )
         return result.scalar_one_or_none()
 

@@ -591,3 +591,14 @@ async def test_list_co_by_curriculum_course(client: AsyncClient, auth_headers):
     assert resp.status_code == 200
     cos = resp.json()
     assert len(cos) >= 2
+
+
+async def test_po_codes_repeat_across_programs(client: AsyncClient, auth_headers):
+    """Every program has its own PO1; only a second PO1 in the same program conflicts."""
+    first = await _setup_curriculum(client, auth_headers)
+    second = await _setup_curriculum(client, auth_headers)
+    for ids in (first, second):
+        resp = await client.post("/api/v1/program-outcomes", headers=auth_headers, json={
+            "program_id": ids["program_id"], "code": "PO1", "statement": "Engineering knowledge", "order_index": 1,
+        })
+        assert resp.status_code == 201, resp.text
