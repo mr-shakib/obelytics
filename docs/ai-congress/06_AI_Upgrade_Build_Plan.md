@@ -181,3 +181,18 @@ Helps teachers write course outcomes and map them to POs. Gateway feature `autho
   Honest evidence gaps are allowed and listed with "evidence still to collect".
 - **Page:** Reports → Accreditation Evidence. Upload documents, draft, click a citation to read its source, edit, accept or reject. Drafts keep their sources, model and prompt version; decisions go to the audit log.
 - Tests: `backend/tests/unit/test_evidence_writer.py`, `backend/tests/integration/test_evidence_writer.py`. A clearly labelled synthetic demo guide is in `frontend/public/samples/`.
+
+## MCP server (implemented — `backend/app/modules/mcp/`, no new dependency)
+
+- `POST /api/v1/mcp` speaks the Model Context Protocol (Streamable HTTP transport, JSON responses; JSON-RPC 2.0: `initialize`, `ping`, `tools/list`, `tools/call`). Any MCP client or agent can use Obelytics as a tool server.
+- **Seven fixed, read-only tools:**
+  - `list_curricula`, `list_sections`;
+  - `section_attainment` (official vs audit-supported);
+  - `paper_audit`;
+  - `skill_coverage`;
+  - `program_outcome_map`;
+  - `search_accreditation_documents`.
+- They follow the same rules as the in-app agents: each call runs as the signed-in user, under their permissions and organization; results are class-level; every call is written to the audit log (`MCP_TOOL_CALL`).
+- **Connect:** send the user's bearer token, e.g. `npx mcp-remote https://<host>/api/v1/mcp --header "Authorization: Bearer <token>"`.
+- **Known limit:** access tokens are short-lived; a long-lived, revocable agent token is not built yet.
+- Tests: `backend/tests/integration/test_mcp.py`.

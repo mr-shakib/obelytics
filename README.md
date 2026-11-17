@@ -101,6 +101,10 @@ flowchart LR
 
 Roles: Super Admin, Program Coordinator, Module Leader, Section Teacher and Student, with permission-aware access to every endpoint. The interface is available in English and Bangla (বাংলা).
 
+## Use it from an AI agent (MCP)
+
+Obelytics is also a [Model Context Protocol](https://modelcontextprotocol.io) server. `POST /api/v1/mcp` offers seven fixed, read-only tools (outcome attainment, paper audits, skill coverage, PO–CO maps, accreditation-manual search). Each tool runs with the caller's own permissions and returns class-level data only. Connect any MCP client with a bearer token, for example `npx mcp-remote https://obelytics.bitstreamhq.com/api/v1/mcp --header "Authorization: Bearer <token>"`.
+
 ## Run it locally
 
 ```bash
