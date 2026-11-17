@@ -222,6 +222,8 @@ class BootstrapUser(BaseModel):
     designation: str | None = None
     department: dict | None = None
     status: str
+    # Set on student accounts; the frontend sends them to the student portal.
+    linked_student_id: UUID | None = None
 
 
 class UserBootstrapResponse(BaseModel):

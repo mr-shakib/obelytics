@@ -20,6 +20,7 @@ interface BootstrapUser {
   designation?: string | null
   department?: { id: string; name: string } | null
   status?: string | null
+  linked_student_id?: string | null
 }
 
 interface BootstrapPayload {
@@ -46,6 +47,7 @@ export interface AuthPayload {
     designation?: string
     department: { id: string; name: string } | null
     status: string
+    linked_student_id: string | null
   }
   permissions: string[]
   scope: {
@@ -83,6 +85,7 @@ export function buildAuthPayload(accessToken: string, bootstrap: BootstrapPayloa
       designation: bootstrap.user.designation ?? undefined,
       department: bootstrap.user.department ?? null,
       status: bootstrap.user.status ?? "ACTIVE",
+      linked_student_id: bootstrap.user.linked_student_id ?? null,
     },
     permissions: bootstrap.permissions ?? [],
     scope: {

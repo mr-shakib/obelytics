@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.ai.gateway import AIGateway, BackendFactory
 from app.modules.ai.providers import AIError
+from app.modules.assessment.models import Student
 from app.modules.audit.writer import write_audit_log
 from app.modules.authoring.context import program_outcomes_for
 from app.modules.authoring.exceptions import (
@@ -22,14 +23,24 @@ from app.modules.authoring.exceptions import (
     NothingToMapError,
 )
 from app.modules.curriculum.exceptions import CurriculumNotFoundError
-from app.modules.curriculum.models import Course, Curriculum
+from app.modules.curriculum.models import Batch, Course, Curriculum
 from app.modules.iam.models import User
 from app.modules.obe.mapping_rules import natural_key
 from app.modules.obe.models import COPOMappingEntry, COPOMappingSet, CourseOutcome, ProgramOutcome
 from app.modules.org.models import Program
-from app.modules.workforce import analysis
+from app.modules.workforce import analysis, importing
 from app.modules.workforce.models import MarketAnalysis, MarketPosting
-from app.modules.workforce.schemas import AnalysisResponse, PostingCreate
+from app.modules.workforce.schemas import (
+    AnalysisResponse,
+    ImportProblem,
+    ImportResult,
+    PostingCreate,
+    PostingResponse,
+    SkillEvidence,
+    StudentSkill,
+    StudentSkillsResponse,
+    StudentSkillsSummary,
+)
 
 FEATURE = "authoring"
 
@@ -112,6 +123,112 @@ class WorkforceService:
             raise PostingNotFoundError()
         await self.db.delete(posting)
         await self.db.commit()
+
+    # ── Importing real postings ───────────────────────────────────────────────
+    # Imported postings are saved without reading their skills; the next analysis
+    # reads every unread posting, so an import never makes one model call per row.
+
+    def _imported(self, program_id: UUID, item: importing.ImportedPosting) -> MarketPosting:
+        posting = MarketPosting(
+            organization_id=self.user.organization_id,
+            program_id=program_id,
+            title=item.title,
+            employer=item.employer,
+            source=item.source,
+            text=item.text,
+            created_by_user_id=self.user.id,
+        )
+        self.db.add(posting)
+        return posting
+
+    async def import_urls(self, program_id: UUID, urls: list[str]) -> ImportResult:
+        await self._program(program_id)
+        unique = list(dict.fromkeys(u.strip() for u in urls if u.strip()))[: importing.MAX_URLS]
+        existing = set((await self.db.execute(
+            select(MarketPosting.source).where(and_(
+                MarketPosting.program_id == program_id, MarketPosting.source.in_(unique),
+            ))
+        )).scalars().all())
+        added: list[MarketPosting] = []
+        errors: list[ImportProblem] = []
+        for url in unique:
+            if url in existing:
+                errors.append(ImportProblem(source=url, error="Already imported."))
+                continue
+            try:
+                item = await importing.posting_from_url(url)
+            except importing.ImportFailedError as exc:
+                errors.append(ImportProblem(source=url, error=str(exc)))
+                continue
+            added.append(self._imported(program_id, item))
+        await self._finish_import(program_id, added, "urls")
+        return ImportResult(added=[PostingResponse.model_validate(p) for p in added], errors=errors)
+
+    async def import_csv(self, program_id: UUID, data: bytes) -> ImportResult:
+        await self._program(program_id)
+        try:
+            items, skipped = importing.read_csv(data)
+        except importing.ImportFailedError as exc:
+            return ImportResult(added=[], errors=[ImportProblem(source="file", error=str(exc))])
+        added = [self._imported(program_id, item) for item in items]
+        await self._finish_import(program_id, added, "csv")
+        return ImportResult(
+            added=[PostingResponse.model_validate(p) for p in added],
+            errors=[ImportProblem(source="file", error=message) for message in skipped],
+        )
+
+    async def _finish_import(self, program_id: UUID, added: list[MarketPosting], kind: str) -> None:
+        await self.db.flush()
+        if added:
+            write_audit_log(
+                self.db,
+                entity_type="program",
+                entity_id=program_id,
+                action="workforce.postings.import",
+                org_id=self.user.organization_id,
+                actor_user_id=self.user.id,
+                extra={"kind": kind, "count": len(added)},
+            )
+        await self.db.commit()
+        for posting in added:
+            await self.db.refresh(posting)
+
+    # ── A student's verified skills ──────────────────────────────────────────
+
+    async def student_skills(self, student_id: UUID, top_n: int = 10) -> StudentSkillsResponse:
+        """The student's own published CO results set against the program's latest
+        market analysis. Pure computation: no model sees the student's data."""
+        from app.modules.assessment.service import MarksheetService
+
+        empty = StudentSkillsResponse(
+            analysis_date=None, posting_count=0, skills=[],
+            summary=StudentSkillsSummary(verified=0, developing=0, not_yet=0, top_n=0, top_verified=0),
+        )
+        student = (await self.db.execute(
+            select(Student).where(and_(
+                Student.id == student_id, Student.organization_id == self.user.organization_id,
+            ))
+        )).scalar_one_or_none()
+        if student is None:
+            return empty
+        curriculum_id = None
+        if student.batch_id:
+            curriculum_id = (await self.db.execute(
+                select(Batch.curriculum_id).where(Batch.id == student.batch_id)
+            )).scalar_one_or_none()
+        query = select(MarketAnalysis).where(MarketAnalysis.organization_id == self.user.organization_id)
+        if curriculum_id:
+            query = query.where(MarketAnalysis.curriculum_id == curriculum_id)
+        elif student.program_id:
+            query = query.where(MarketAnalysis.program_id == student.program_id)
+        else:
+            return empty
+        row = (await self.db.execute(query.order_by(MarketAnalysis.created_at.desc()).limit(1))).scalar_one_or_none()
+        if row is None:
+            return empty
+
+        results = await MarksheetService(self.db).get_results_for_student(student.id, self.user.organization_id)
+        return build_student_skills(row.result.get("skills", []), results, row.posting_count, row.created_at, top_n)
 
     async def _read_skills(self, gateway: AIGateway, posting: MarketPosting) -> None:
         completion = await gateway.complete_json(
@@ -240,6 +357,53 @@ class WorkforceService:
         ]
         outcomes.sort(key=lambda o: (natural_key(o.course_code), natural_key(o.co_code)))
         return outcomes
+
+
+def build_student_skills(
+    skills: list[dict], results: list[dict], posting_count: int, analysed_at, top_n: int = 10,
+) -> StudentSkillsResponse:
+    """Match each demanded skill's covering COs with the student's own CO results."""
+    mine: dict[tuple[str, str], tuple[dict, dict]] = {}
+    for course in results:
+        for co in course.get("co_results") or []:
+            # A course taken twice keeps the better result.
+            key = (course["course_code"], co["co_code"])
+            if key not in mine or co["attainment_percentage"] > mine[key][1]["attainment_percentage"]:
+                mine[key] = (course, co)
+    out: list[StudentSkill] = []
+    for skill in skills:
+        evidence = []
+        for ref in skill.get("outcomes") or []:
+            found = mine.get((ref.get("course_code"), ref.get("co_code")))
+            if not found:
+                continue
+            course, co = found
+            evidence.append(SkillEvidence(
+                course_code=course["course_code"], course_title=course.get("course_title", ""),
+                co_code=co["co_code"], statement=co.get("co_statement") or ref.get("statement", ""),
+                attainment_pct=round(float(co["attainment_percentage"]), 1),
+                attained=bool(co.get("is_threshold_met")),
+            ))
+        status = (
+            "verified" if any(e.attained for e in evidence)
+            else "developing" if evidence else "not_yet"
+        )
+        out.append(StudentSkill(
+            skill=skill["skill"], category=skill.get("category", "technical"),
+            postings=skill.get("postings", 0), required=skill.get("required", 0),
+            status=status, evidence=evidence, program_outcomes=skill.get("program_outcomes", []),
+        ))
+    out.sort(key=lambda s: -s.postings)
+    top = out[:top_n]
+    return StudentSkillsResponse(
+        analysis_date=analysed_at, posting_count=posting_count, skills=out,
+        summary=StudentSkillsSummary(
+            verified=sum(s.status == "verified" for s in out),
+            developing=sum(s.status == "developing" for s in out),
+            not_yet=sum(s.status == "not_yet" for s in out),
+            top_n=len(top), top_verified=sum(s.status == "verified" for s in top),
+        ),
+    )
 
 
 def _response(row: MarketAnalysis) -> AnalysisResponse:

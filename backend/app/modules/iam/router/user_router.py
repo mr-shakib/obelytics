@@ -94,6 +94,7 @@ async def get_my_bootstrap(
             designation=getattr(current_user, "designation", None),
             department=None,
             status=current_user.status,
+            linked_student_id=current_user.linked_student_id,
         ),
         permissions=manifest.permissions,
         scope=BootstrapScope(programs=programs, is_global=manifest.is_super_admin),

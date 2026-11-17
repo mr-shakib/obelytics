@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -9,11 +9,15 @@ from app.core.dependencies import get_current_user, require_any_permission, requ
 from app.modules.ai.gateway import BackendFactory, get_backend_factory
 from app.modules.iam.models import User
 from app.modules.iam.schemas import PermissionManifestResponse
+from app.modules.workforce.importing import MAX_CSV_BYTES
 from app.modules.workforce.schemas import (
     AnalysisRequest,
     AnalysisResponse,
+    ImportResult,
+    ImportUrlsRequest,
     PostingCreate,
     PostingResponse,
+    StudentSkillsResponse,
 )
 from app.modules.workforce.service import WorkforceService
 
@@ -71,3 +75,37 @@ async def latest_market_analysis(
     program_id: UUID, curriculum_id: UUID, _: Annotated[Manifest, Depends(_read)], service: Service
 ):
     return await service.latest(program_id, curriculum_id)
+
+
+@router.post("/programs/{program_id}/postings/import-urls", response_model=ImportResult)
+async def import_job_postings_from_links(
+    program_id: UUID,
+    body: ImportUrlsRequest,
+    _: Annotated[Manifest, Depends(_manage)],
+    service: Service,
+):
+    """Fetch public job pages and save them as postings. Skills are read at the next analysis."""
+    return await service.import_urls(program_id, body.urls)
+
+
+@router.post("/programs/{program_id}/postings/import-csv", response_model=ImportResult)
+async def import_job_postings_from_csv(
+    program_id: UUID,
+    _: Annotated[Manifest, Depends(_manage)],
+    service: Service,
+    file: Annotated[UploadFile, File(description="CSV with title, employer, description and url columns")],
+):
+    """Save each row of a CSV export as a posting. Skills are read at the next analysis."""
+    return await service.import_csv(program_id, await file.read(MAX_CSV_BYTES + 1))
+
+
+@router.get("/students/me/skills", response_model=StudentSkillsResponse)
+async def my_verified_skills(
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: Service,
+):
+    """The signed-in student's results set against the skills employers ask for.
+    Computed in code from the student's own published results; no model is called."""
+    if current_user.linked_student_id is None:
+        return await service.student_skills(UUID(int=0))
+    return await service.student_skills(current_user.linked_student_id)

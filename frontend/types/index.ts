@@ -12,6 +12,8 @@ export interface UserProfile {
   designation?: string
   department: { id: string; name: string } | null
   status?: string
+  /** Set on student accounts (they use the student portal). */
+  linked_student_id?: string | null
 }
 
 export interface PermissionManifest {

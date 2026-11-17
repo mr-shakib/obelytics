@@ -96,3 +96,67 @@ async def test_analysis_needs_postings_and_teachers_cannot_run_it(
     resp = await client.post(f"{BASE}/programs/{curriculum.program_id}/postings", headers=teacher_auth_headers,
                              json={"title": "Engineer", "text": "x" * 50})
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_real_postings_are_imported_from_csv_and_links(
+    client: AsyncClient, auth_headers: dict, teacher_auth_headers: dict, db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from app.modules.workforce import importing
+
+    s = await _scenario(db_session)
+    curriculum = await db_session.get(Curriculum, uuid.UUID(s["curriculum_id"]))
+    program_id = curriculum.program_id
+    use_fake_ai(FakeBackend())
+
+    csv_body = (
+        "title,employer,description,url\n"
+        "Data Analyst,Example Ltd,Clean data with SQL and Python and build dashboards for managers.,https://e.x/9\n"
+        "Bad row,,short,\n"
+    ).encode()
+    resp = await client.post(f"{BASE}/programs/{program_id}/postings/import-csv", headers=auth_headers,
+                             files={"file": ("postings.csv", csv_body, "text/csv")})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [p["title"] for p in body["added"]] == ["Data Analyst"]
+    assert body["added"][0]["source"] == "https://e.x/9" and body["added"][0]["skills"] is None
+    assert len(body["errors"]) == 1
+
+    async def fake_fetch(url, client=None):
+        if "broken" in url:
+            raise importing.ImportFailedError("The page could not be downloaded.")
+        return importing.ImportedPosting(title="Site Reliability Engineer", employer="Example Ltd",
+                                         text="Run Kubernetes clusters, write Terraform, and handle on-call.",
+                                         source=url)
+
+    monkeypatch.setattr(importing, "posting_from_url", fake_fetch)
+    resp = await client.post(f"{BASE}/programs/{program_id}/postings/import-urls", headers=auth_headers,
+                             json={"urls": ["https://jobs.example.com/sre", "https://jobs.example.com/broken",
+                                            "https://jobs.example.com/sre"]})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [p["title"] for p in body["added"]] == ["Site Reliability Engineer"]
+    assert [e["source"] for e in body["errors"]] == ["https://jobs.example.com/broken"]
+    # the same link again is reported, not duplicated
+    again = await client.post(f"{BASE}/programs/{program_id}/postings/import-urls", headers=auth_headers,
+                              json={"urls": ["https://jobs.example.com/sre"]})
+    assert again.json()["added"] == [] and again.json()["errors"][0]["error"] == "Already imported."
+
+    log = (await db_session.execute(
+        select(AuditLog).where(AuditLog.action == "workforce.postings.import")
+    )).scalars().all()
+    assert len(log) == 2
+
+    resp = await client.post(f"{BASE}/programs/{program_id}/postings/import-urls", headers=teacher_auth_headers,
+                             json={"urls": ["https://jobs.example.com/x"]})
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_skills_view_is_empty_for_an_account_without_a_student_record(
+    client: AsyncClient, auth_headers: dict
+):
+    resp = await client.get(f"{BASE}/students/me/skills", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["skills"] == [] and resp.json()["analysis_date"] is None

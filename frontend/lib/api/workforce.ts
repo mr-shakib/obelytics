@@ -29,6 +29,8 @@ export type OutcomeRef = {
 
 export type SkillCoverage = {
   skill: string
+  /** Other spellings from the postings merged into this skill. */
+  aliases?: string[]
   category: string
   postings: number
   required: number
@@ -61,6 +63,35 @@ export type MarketAnalysis = {
   created_at: string
 }
 
+export type ImportResult = {
+  added: JobPosting[]
+  errors: { source: string; error: string }[]
+}
+
+export type StudentSkill = {
+  skill: string
+  category: string
+  postings: number
+  required: number
+  status: "verified" | "developing" | "not_yet"
+  evidence: {
+    course_code: string
+    course_title: string
+    co_code: string
+    statement: string
+    attainment_pct: number
+    attained: boolean
+  }[]
+  program_outcomes: string[]
+}
+
+export type StudentSkills = {
+  analysis_date: string | null
+  posting_count: number
+  skills: StudentSkill[]
+  summary: { verified: number; developing: number; not_yet: number; top_n: number; top_verified: number }
+}
+
 const API = `${PUBLIC_API_URL}/api/v1/workforce`
 const AI_TIMEOUT_MS = 240_000
 
@@ -89,4 +120,16 @@ export const workforceApi = {
     call<MarketAnalysis>(`/programs/${programId}/analysis`, json("POST", { curriculum_id: curriculumId })),
   latest: (programId: string, curriculumId: string) =>
     call<MarketAnalysis | null>(`/programs/${programId}/analysis?curriculum_id=${curriculumId}`),
+  importUrls: (programId: string, urls: string[]) =>
+    call<ImportResult>(`/programs/${programId}/postings/import-urls`, json("POST", { urls }, 180_000)),
+  importCsv: (programId: string, file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return call<ImportResult>(`/programs/${programId}/postings/import-csv`, {
+      method: "POST",
+      body: form,
+      timeoutMs: 60_000,
+    })
+  },
+  mySkills: () => call<StudentSkills>(`/students/me/skills`),
 }

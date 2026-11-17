@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 SKILLS_PROMPT_VERSION = "job-skills-v1"
-COVERAGE_PROMPT_VERSION = "skill-coverage-v1"
+COVERAGE_PROMPT_VERSION = "skill-coverage-v2"
 MAX_SKILLS_PER_POSTING = 15
 MAX_SKILLS_ANALYSED = 30
 MAX_POSTING_CHARS = 8000
@@ -95,6 +95,78 @@ def skill_key(name: str) -> str:
     return _SPACES.sub(" ", (name or "").strip().strip(".,;:").lower())
 
 
+# Near-duplicate skill names from different postings ("JS" / "JavaScript", "Strong
+# communication" / "Communication") would otherwise be counted as separate skills.
+_ALIASES = {
+    "js": "javascript", "ecmascript": "javascript",
+    "ts": "typescript",
+    "py": "python", "python3": "python",
+    "ml": "machine learning",
+    "ai": "artificial intelligence",
+    "dl": "deep learning",
+    "nlp": "natural language processing",
+    "k8s": "kubernetes",
+    "postgres": "postgresql",
+    "mssql": "sql server", "ms sql server": "sql server", "microsoft sql server": "sql server",
+    "oop": "object-oriented programming", "object oriented programming": "object-oriented programming",
+    "oops": "object-oriented programming",
+    "dsa": "data structures and algorithms",
+    "rest": "rest apis", "rest api": "rest apis", "restful api": "rest apis", "restful apis": "rest apis",
+    "nodejs": "node.js", "node": "node.js", "node js": "node.js",
+    "reactjs": "react", "react.js": "react",
+    "vuejs": "vue", "vue.js": "vue",
+    "nextjs": "next.js",
+    "git/github": "git", "github": "git", "version control (git)": "git",
+    "ci/cd pipelines": "ci/cd", "cicd": "ci/cd",
+    "aws cloud": "aws", "amazon web services": "aws",
+    "team work": "teamwork", "team player": "teamwork", "collaboration": "teamwork",
+    "problem-solving": "problem solving",
+    "written and verbal communication": "communication", "verbal communication": "communication",
+    "english communication": "communication",
+    "unit testing": "testing", "software testing": "testing",
+}
+_LEADING = (
+    "working knowledge of ", "knowledge of ", "experience with ", "experience in ", "proficiency in ",
+    "proficiency with ", "familiarity with ", "understanding of ", "hands-on ", "basic ", "strong ",
+    "good ", "excellent ", "solid ", "advanced ", "effective ",
+)
+# A trailing word like this folds into the head skill when the head is also asked for
+# ("Python scripting" → "Python"), never on its own ("competitive programming" stays).
+_GENERIC_TAIL = {
+    "programming", "scripting", "skills", "skill", "basics", "fundamentals", "knowledge",
+    "proficiency", "language", "concepts", "principles", "experience",
+}
+
+
+def canonical_key(name: str) -> str:
+    key = skill_key(name).replace(" & ", " and ")
+    stripped = True
+    while stripped:
+        stripped = False
+        for prefix in _LEADING:
+            if key.startswith(prefix) and len(key) > len(prefix):
+                key, stripped = key[len(prefix):], True
+    return _ALIASES.get(key, key)
+
+
+def _fold(key: str, keys: set[str]) -> str:
+    """Where a skill key folds to, given every key seen across the postings."""
+    for _ in range(3):
+        words = key.split()
+        target = None
+        if len(words) > 1 and words[-1] in _GENERIC_TAIL:
+            head = " ".join(words[:-1])
+            head = _ALIASES.get(head, head)
+            if head in keys:
+                target = head
+        if target is None and key.endswith("s") and len(key) > 3 and key[:-1] in keys:
+            target = key[:-1]
+        if target is None:
+            return key
+        key = target
+    return key
+
+
 def clean_skills(raw) -> list[dict]:
     """The model's skills for one posting: named, de-duplicated, capped."""
     skills: list[dict] = []
@@ -124,35 +196,53 @@ class SkillDemand:
     postings: int
     required: int
     titles: list[str] = field(default_factory=list)
+    # Other spellings merged into this skill ("JS" for JavaScript).
+    aliases: list[str] = field(default_factory=list)
+
+
+def _display_name(spellings: Counter) -> str:
+    # The most common spelling; on a tie, the capitalised one, then the shorter one.
+    return max(spellings.items(), key=lambda kv: (kv[1], kv[0][:1].isupper(), -len(kv[0])))[0]
 
 
 def aggregate(postings: list[tuple[str, list[dict]]]) -> list[SkillDemand]:
-    """(posting title, skills) → skills by how many postings ask for them, most first."""
+    """(posting title, skills) → skills by how many postings ask for them, most first.
+
+    Near-duplicate names are merged first, and a posting counts once per merged skill."""
+    seen_keys = {
+        canonical_key(skill.get("name", "")) for _, skills in postings for skill in skills or []
+    } - {""}
+    final = {key: _fold(key, seen_keys) for key in seen_keys}
     names: dict[str, Counter] = defaultdict(Counter)
     categories: dict[str, Counter] = defaultdict(Counter)
     count: Counter = Counter()
     required: Counter = Counter()
     titles: dict[str, list[str]] = defaultdict(list)
     for title, skills in postings:
+        counted: set[str] = set()
         for skill in skills or []:
-            key = skill_key(skill.get("name", ""))
+            key = final.get(canonical_key(skill.get("name", "")))
             if not key:
                 continue
             names[key][skill["name"]] += 1
+            if key in counted:
+                continue
+            counted.add(key)
             categories[key][skill.get("category", "technical")] += 1
             count[key] += 1
             required[key] += 1 if skill.get("required", True) else 0
             if len(titles[key]) < 5:
                 titles[key].append(title)
-    demands = [
-        SkillDemand(
-            # The most common spelling; on a tie, the capitalised one.
-            key=key, name=max(names[key].items(), key=lambda kv: (kv[1], kv[0][:1].isupper()))[0],
-            category=categories[key].most_common(1)[0][0],
-            postings=count[key], required=required[key], titles=titles[key],
-        )
-        for key in count
-    ]
+    demands = []
+    for key in count:
+        name = _display_name(names[key])
+        aliases = sorted(
+            {n for n in names[key] if skill_key(n) != skill_key(name)}, key=str.lower,
+        )[:5]
+        demands.append(SkillDemand(
+            key=key, name=name, category=categories[key].most_common(1)[0][0],
+            postings=count[key], required=required[key], titles=titles[key], aliases=aliases,
+        ))
     demands.sort(key=lambda d: (-d.postings, -d.required, d.name.lower()))
     return demands[:MAX_SKILLS_ANALYSED]
 
@@ -197,7 +287,8 @@ class CourseOutcomeRow:
 def coverage_prompt(demands: list[SkillDemand], posting_count: int, outcomes: list[CourseOutcomeRow]) -> str:
     skills = "\n".join(
         f"- {d.name} ({d.postings} of {posting_count}"
-        f"{', required' if d.required == d.postings else ''}; {d.category})"
+        f"{', required' if d.required == d.postings else ''}; {d.category}"
+        f"{'; also written ' + ', '.join(d.aliases) if d.aliases else ''})"
         for d in demands
     )
     lines = "\n".join(f"{o.ref} ({o.course_title}): {o.statement.strip()}" for o in outcomes)
@@ -218,11 +309,13 @@ def build_result(
     """Check the model's judgments and add up coverage. courses: code → {id, code, title}."""
     by_ref = {o.ref: o for o in outcomes}
     by_key = {d.key: d for d in demands}
+    by_name = {skill_key(d.name): d for d in demands}
     judged: dict[str, dict] = {}
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
             continue
-        demand = by_key.get(skill_key(str(item.get("skill") or "")))
+        named = str(item.get("skill") or "")
+        demand = by_name.get(skill_key(named)) or by_key.get(canonical_key(named))
         if demand is None or demand.key in judged:
             continue
         refs = []
@@ -250,6 +343,7 @@ def build_result(
         refs = j["outcomes"] if j else []
         skills.append({
             "skill": d.name,
+            "aliases": d.aliases,
             "category": d.category,
             "postings": d.postings,
             "required": d.required,

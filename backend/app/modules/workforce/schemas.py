@@ -58,6 +58,8 @@ class OutcomeRef(BaseModel):
 
 class SkillCoverage(BaseModel):
     skill: str
+    # Other spellings from the postings merged into this skill.
+    aliases: list[str] = []
     category: str
     # How many postings ask for it, and how many of those require it.
     postings: int
@@ -99,3 +101,57 @@ class AnalysisResponse(BaseModel):
     model: str
     prompt_version: str
     created_at: datetime
+
+
+# ── Importing real postings ──────────────────────────────────────────────────
+
+class ImportUrlsRequest(BaseModel):
+    urls: list[str] = Field(min_length=1, max_length=20)
+
+
+class ImportProblem(BaseModel):
+    source: str
+    error: str
+
+
+class ImportResult(BaseModel):
+    added: list[PostingResponse]
+    errors: list[ImportProblem]
+
+
+# ── A student's verified skills (no AI: their own results against the analysis) ──
+
+class SkillEvidence(BaseModel):
+    course_code: str
+    course_title: str
+    co_code: str
+    statement: str
+    attainment_pct: float
+    attained: bool
+
+
+class StudentSkill(BaseModel):
+    skill: str
+    category: str
+    postings: int
+    required: int
+    # verified: the student attained a CO that develops it; developing: they took it
+    # but did not attain it; not_yet: no completed course of theirs develops it.
+    status: Literal["verified", "developing", "not_yet"]
+    evidence: list[SkillEvidence]
+    program_outcomes: list[str]
+
+
+class StudentSkillsSummary(BaseModel):
+    verified: int
+    developing: int
+    not_yet: int
+    top_n: int
+    top_verified: int
+
+
+class StudentSkillsResponse(BaseModel):
+    analysis_date: datetime | None
+    posting_count: int
+    skills: list[StudentSkill]
+    summary: StudentSkillsSummary
