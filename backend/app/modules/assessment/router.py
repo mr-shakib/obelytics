@@ -874,7 +874,9 @@ async def save_end_report_draft(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = CourseEndReportService(db)
-    return await svc.save_draft(section_offering_id, body, current_user.organization_id, current_user.id)
+    await svc.save_draft(section_offering_id, body, current_user.organization_id, current_user.id)
+    # The response carries course/section/term details, not just the report row.
+    return await svc.get_response(section_offering_id, current_user.organization_id)
 
 
 @router.post("/end-reports/{section_offering_id}/submit", response_model=CourseEndReportResponse)
@@ -886,7 +888,8 @@ async def submit_end_report(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     svc = CourseEndReportService(db)
-    return await svc.submit(section_offering_id, body, current_user.organization_id, current_user.id)
+    await svc.submit(section_offering_id, body, current_user.organization_id, current_user.id)
+    return await svc.get_response(section_offering_id, current_user.organization_id)
 
 
 @router.get("/end-reports/{section_offering_id}/pdf")

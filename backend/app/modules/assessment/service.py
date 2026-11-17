@@ -123,6 +123,13 @@ class StudentService:
         existing = await self._repo.find_by_student_id_number(body.student_id_number, org_id)
         if existing:
             raise StudentIdConflictError()
+        batch_found = await self._session.scalar(
+            select(Batch.id).where(Batch.id == body.batch_id, Batch.organization_id == org_id)
+        )
+        if batch_found is None:
+            # Otherwise the insert fails on the foreign key and the client sees a 500.
+            from app.modules.curriculum.exceptions import BatchNotFoundError
+            raise BatchNotFoundError()
         student = Student(
             organization_id=org_id,
             student_id_number=body.student_id_number,
