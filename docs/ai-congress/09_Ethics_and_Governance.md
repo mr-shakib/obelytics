@@ -25,6 +25,7 @@ This is Obelytics' ethics pack: the principles every AI feature follows, where d
 | Integrity audit and question rewrite (`integrity`) | Question wording, the course's outcome statements | No |
 | Outcome writing, CO–PO suggestions, outline import (`authoring`) | Course text, outcomes, program outcomes, the BAETE knowledge-profile rules | No |
 | Workforce analysis (`authoring`) | Job-posting text, the curriculum's course outcomes | No |
+| Accreditation evidence writer (`authoring`) | Program records gathered by code (PO and CO mappings, class-level attainment, audit summaries, improvement plans, the market analysis) and passages of documents the institution uploaded | No: class totals only |
 | Improvement agent (`improvement`) | Class-level figures returned by four fixed, read-only tools | No: class totals only, never one student |
 | OBE Copilot (`copilot`) | The question asked and curriculum context the user's role allows | Possible if a user types it; the gateway redacts known patterns first |
 | Student "My Skills" view | Nothing: computed in code | Never reaches a model |
@@ -83,7 +84,7 @@ flowchart LR
 
 Off-the-shelf models with versioned prompts; nothing is trained or fine-tuned on institutional data.
 
-**Prompts (current versions).** `extract-v4`, `extract-text-v1` (reading); `audit-v3` (judging); `rewrite-v2`; `co-draft-v2`, `co-refine-v1`, `co-po-v2`, `outline-v1` (authoring); `job-skills-v1`, `skill-coverage-v2` (workforce); `improve-v1` (agent); `copilot-v1`. All teacher- and document-supplied text is fenced as data.
+**Prompts (current versions).** `extract-v4`, `extract-text-v1` (reading); `audit-v3` (judging); `rewrite-v2`; `co-draft-v2`, `co-refine-v1`, `co-po-v2`, `outline-v1` (authoring); `job-skills-v1`, `skill-coverage-v2` (workforce); `improve-v1` (agent); `evidence-v1` (accreditation evidence writer); `copilot-v1`. All teacher- and document-supplied text is fenced as data.
 
 **How judgments are made.** Three independent judgments per question; confidence is how often they agree times the stated confidence; below 0.5 the auditor abstains ("not sure").
 

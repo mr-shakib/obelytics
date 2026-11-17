@@ -165,3 +165,19 @@ Helps teachers write course outcomes and map them to POs. Gateway feature `autho
 ## Bias check (implemented)
 
 - `scripts/integrity_gold_set.py strata` reports the auditor's accuracy per group of questions: exam, course, reference Bloom level, and wording style (math, code, scenario, figure, length). Results and limits are in `09` §6.
+
+## Accreditation evidence writer (implemented — migration `0063_evidence_writer`, `backend/app/modules/evidence/`)
+
+- **Retrieval:**
+  - Reference documents (an accreditor's manual, report templates; PDF, Word or text) are split into passages under their headings and indexed with PostgreSQL full-text search (`accreditation.reference_passages.tsv`, GIN).
+  - Program evidence is gathered in code by walking the outcome graph: POs → mapped COs → sections with marks → reported and audit-supported CO attainment → paper audits → improvement plans, plus the latest market analysis (`evidence/records.py`).
+  - No model writes queries.
+- **Drafting:** the model writes one criterion section where every sentence cites the records `[E…]` and passages `[M…]` it was given; the JSON schema limits citations to those ids (`evidence-v1`, gateway feature `authoring`).
+- **Checking in code** (`evidence/writer.py`): a sentence is flagged when it
+  - cites a source it was not given;
+  - states a fact without a program record;
+  - contains a number not found in its cited sources.
+
+  Honest evidence gaps are allowed and listed with "evidence still to collect".
+- **Page:** Reports → Accreditation Evidence. Upload documents, draft, click a citation to read its source, edit, accept or reject. Drafts keep their sources, model and prompt version; decisions go to the audit log.
+- Tests: `backend/tests/unit/test_evidence_writer.py`, `backend/tests/integration/test_evidence_writer.py`. A clearly labelled synthetic demo guide is in `frontend/public/samples/`.

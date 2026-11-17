@@ -30,7 +30,8 @@ Obelytics runs the whole cycle in one platform, and AI works at every stage. **T
 | **Assess and verify** | Question-wise marksheets, approval workflow (teacher → module leader → coordinator) | **Integrity auditor.** Reads an uploaded paper (phone photo, scanned PDF or Word file) and judges what each question really tests without seeing the teacher's tags. Flags mismatches with the quoted question, a reason and a confidence. Can rewrite a weak question, then re-check the rewrite blind |
 | **Measure** | CO and PO attainment, course-end reports, a student portal | **Evidence-weighted attainment.** Shows the official figure next to the figure the exam evidence supports; it never overwrites the official one |
 | **Improve** | Automatic detection of attainment gaps | **Improvement agent.** Fixed, read-only tools find which questions and teaching weeks caused a gap; every fact it cites is checked in code |
-| **Workforce** | Job postings per program | Reads the skills employers ask for, scores how well the curriculum covers them (weighted by demand), and drafts a CO for each gap |
+| **Workforce** | Job postings per program, imported from links or CSV | Reads the skills employers ask for, merges near-duplicates, scores how well the curriculum covers them (weighted by demand), and drafts a CO for each gap. Students see which in-demand skills their own results verify |
+| **Accredit** | Accreditation cycles and criteria mapped to POs | **Evidence writer.** Drafts report sections from the program's records and the accreditor's manual (full-text retrieval). Every sentence cites its sources; code flags any citation or number it can't find |
 | **Ask** | — | Role-aware OBE Copilot over the program's own data |
 
 <p align="center"><img src="docs/images/integrity-auditor.jpg" alt="Integrity auditor: the teacher's mapping next to the AI's judgment, with quoted evidence, reason and confidence" width="900"></p>
@@ -98,7 +99,7 @@ flowchart LR
 | AI | Own gateway over Ollama (self-hosted, e.g. Qwen) and any OpenAI-compatible API (e.g. DeepSeek); versioned prompts; gold-set, robustness and mapping evaluation scripts |
 | Deploy | Docker Compose behind nginx with TLS; migrations run as a one-shot service |
 
-Roles: Super Admin, Program Coordinator, Module Leader, Section Teacher and Student, with permission-aware access to every endpoint.
+Roles: Super Admin, Program Coordinator, Module Leader, Section Teacher and Student, with permission-aware access to every endpoint. The interface is available in English and Bangla (বাংলা).
 
 ## Run it locally
 
