@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Briefcase, Loader2, Plus, Sparkles, Trash2 } from "lucide-react"
+import { Briefcase, ExternalLink, FileUp, Link2, Loader2, Plus, Sparkles, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/shared/page-header"
@@ -26,23 +26,31 @@ import { Textarea } from "@/components/ui/textarea"
 import { useHasAnyPermission } from "@/hooks/use-permission"
 import { apiClient } from "@/lib/api/client"
 import { authoringApi, type DraftResponse } from "@/lib/api/authoring"
-import { type MarketAnalysis, type SkillCoverage, workforceApi } from "@/lib/api/workforce"
+import { type ImportResult, type MarketAnalysis, type SkillCoverage, workforceApi } from "@/lib/api/workforce"
+import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 type Curriculum = { id: string; name: string; program_id: string; status: string }
 
-const COVERAGE = {
-  covered: { label: "Covered", className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300" },
-  partial: { label: "Partly covered", className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300" },
-  gap: { label: "Gap", className: "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" },
-  unjudged: { label: "Not judged", className: "border-border bg-muted text-muted-foreground" },
+const COVERAGE_CLASS = {
+  covered: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+  partial: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+  gap: "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
+  unjudged: "border-border bg-muted text-muted-foreground",
 } as const
 
+function isLink(source: string | null): source is string {
+  return !!source && /^https?:\/\//i.test(source)
+}
+
 export function WorkforceClient() {
+  const { t } = useI18n()
+  const tw = t.workforce
   const qc = useQueryClient()
   const canManage = useHasAnyPermission(["po.update", "curriculum.update"])
   const [curriculumId, setCurriculumId] = useState("")
   const [adding, setAdding] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [draftFor, setDraftFor] = useState<SkillCoverage | null>(null)
 
   const { data: curricula = [] } = useQuery({
@@ -83,16 +91,13 @@ export function WorkforceClient() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Workforce Readiness"
-        description="Do the program's outcomes develop what employers ask for? Collect job postings, let AI read their skills, and check them against every course outcome in the curriculum."
-      />
+      <PageHeader title={tw.title} description={tw.description} />
 
       <div className="max-w-md space-y-1.5">
-        <Label>Curriculum</Label>
+        <Label>{tw.curriculum}</Label>
         <Select value={curriculum?.id ?? ""} onValueChange={(v) => v && setCurriculumId(v)}>
           <SelectTrigger>
-            <SelectValue placeholder="Choose a curriculum">{curriculum?.name}</SelectValue>
+            <SelectValue placeholder={tw.chooseCurriculum}>{curriculum?.name}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {curricula.map((c) => (
@@ -106,13 +111,17 @@ export function WorkforceClient() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <Card>
             <CardHeader>
-              <CardTitle>Job postings ({postings.length})</CardTitle>
-              <CardDescription>Shared by the program&apos;s curricula. Paste them from employers or job boards.</CardDescription>
+              <CardTitle>{tw.postings(postings.length)}</CardTitle>
+              <CardDescription>{tw.postingsDescription}</CardDescription>
               {canManage && (
-                <CardAction>
+                <CardAction className="flex gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => setImporting(true)}>
+                    <FileUp />
+                    {tw.import}
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
                     <Plus />
-                    Add
+                    {tw.add}
                   </Button>
                 </CardAction>
               )}
@@ -121,20 +130,31 @@ export function WorkforceClient() {
               {postingsLoading ? (
                 <div className="h-20 animate-pulse rounded bg-muted" />
               ) : postings.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No postings yet.</p>
+                <p className="text-sm text-muted-foreground">{tw.noPostings}</p>
               ) : (
                 postings.map((p) => (
                   <div key={p.id} className="space-y-1.5 rounded-md border p-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium">{p.title}</p>
                         {p.employer && <p className="text-xs text-muted-foreground">{p.employer}</p>}
+                        {isLink(p.source) && (
+                          <a
+                            href={p.source}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex max-w-full items-center gap-1 truncate text-xs text-primary hover:underline"
+                          >
+                            <ExternalLink className="size-3 shrink-0" />
+                            <span className="truncate">{new URL(p.source).hostname}</span>
+                          </a>
+                        )}
                       </div>
                       {canManage && (
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          aria-label={`Remove ${p.title}`}
+                          aria-label={tw.remove(p.title)}
                           disabled={remove.isPending}
                           onClick={() => remove.mutate(p.id)}
                         >
@@ -151,7 +171,7 @@ export function WorkforceClient() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">Skills not read yet — the next analysis reads them.</p>
+                      <p className="text-xs text-muted-foreground">{tw.skillsNotRead}</p>
                     )}
                   </div>
                 ))
@@ -175,6 +195,12 @@ export function WorkforceClient() {
         programId={programId}
         onClose={() => setAdding(false)}
         onAdded={() => qc.invalidateQueries({ queryKey: postingsKey })}
+      />
+      <ImportDialog
+        open={importing}
+        programId={programId}
+        onClose={() => setImporting(false)}
+        onImported={() => qc.invalidateQueries({ queryKey: postingsKey })}
       />
       <DraftForGapDialog
         skill={draftFor}
@@ -200,36 +226,33 @@ function AnalysisCard({
   onRun: () => void
   onDraft: (skill: SkillCoverage) => void
 }) {
+  const { t, dateTime } = useI18n()
+  const tw = t.workforce
   const maxDemand = Math.max(1, ...(analysis?.program_outcomes.map((p) => p.demand) ?? [1]))
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Market demand vs course outcomes</CardTitle>
-        <CardDescription>
-          AI judges which COs develop each skill; code checks every reference and weights coverage by how many
-          postings ask for the skill. Advisory — nothing is changed.
-        </CardDescription>
+        <CardTitle>{tw.analysisTitle}</CardTitle>
+        <CardDescription>{tw.analysisDescription}</CardDescription>
         {canManage && (
           <CardAction>
             <Button size="sm" disabled={running || !canRun} onClick={onRun}>
               {running ? <Loader2 className="animate-spin" /> : <Sparkles />}
-              {running ? "Analysing…" : analysis ? "Analyse again" : "Analyse"}
+              {running ? tw.analysing : analysis ? tw.analyseAgain : tw.analyse}
             </Button>
           </CardAction>
         )}
       </CardHeader>
       <CardContent className="space-y-5">
         {!analysis ? (
-          <p className="text-sm text-muted-foreground">
-            {canRun ? "Run the analysis to compare the postings with the curriculum." : "Add job postings first."}
-          </p>
+          <p className="text-sm text-muted-foreground">{canRun ? tw.runFirst : tw.addFirst}</p>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Demand covered" value={analysis.summary.coverage_pct !== null ? `${analysis.summary.coverage_pct}%` : "—"} strong />
-              <Stat label="Covered" value={analysis.summary.covered} />
-              <Stat label="Partly covered" value={analysis.summary.partial} />
-              <Stat label="Gaps" value={analysis.summary.gap} />
+              <Stat label={tw.demandCovered} value={analysis.summary.coverage_pct !== null ? `${analysis.summary.coverage_pct}%` : "—"} strong />
+              <Stat label={tw.covered} value={analysis.summary.covered} />
+              <Stat label={tw.partlyCovered} value={analysis.summary.partial} />
+              <Stat label={tw.gaps} value={analysis.summary.gap} />
             </div>
 
             <div className="divide-y rounded-lg border">
@@ -238,15 +261,18 @@ function AnalysisCard({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{s.skill}</span>
-                      <Badge variant="outline" className={COVERAGE[s.coverage].className}>{COVERAGE[s.coverage].label}</Badge>
+                      <Badge variant="outline" className={COVERAGE_CLASS[s.coverage]}>{tw.coverage[s.coverage]}</Badge>
                       <span className="text-xs text-muted-foreground">
-                        {s.postings} of {analysis.posting_count} postings{s.required === s.postings ? ", required" : ""}
+                        {tw.ofPostings(s.postings, analysis.posting_count, s.required === s.postings)}
                       </span>
+                      {!!s.aliases?.length && (
+                        <span className="text-xs text-muted-foreground">· {tw.alsoCalled(s.aliases.join(", "))}</span>
+                      )}
                     </div>
                     {canManage && (s.coverage === "gap" || s.coverage === "partial") && s.suggested_course && (
                       <Button size="xs" variant="outline" onClick={() => onDraft(s)}>
                         <Sparkles />
-                        Draft a CO in {s.suggested_course.code}
+                        {tw.draftIn(s.suggested_course.code)}
                       </Button>
                     )}
                   </div>
@@ -276,13 +302,11 @@ function AnalysisCard({
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-medium">Which POs carry the skills employers want</p>
-              <p className="text-xs text-muted-foreground">
-                Postings asking for skills developed by COs mapped to each PO (through the CO-PO mapping).
-              </p>
+              <p className="text-sm font-medium">{tw.whichPos}</p>
+              <p className="text-xs text-muted-foreground">{tw.whichPosNote}</p>
               <div className="space-y-1">
                 {analysis.program_outcomes.map((po) => (
-                  <div key={po.code} className="flex items-center gap-2 text-xs" title={po.skills.join(", ") || "No demanded skill"}>
+                  <div key={po.code} className="flex items-center gap-2 text-xs" title={po.skills.join(", ") || tw.noDemandedSkill}>
                     <span className="w-12 font-mono">{po.code}</span>
                     <div className="h-2 flex-1 rounded-full bg-muted">
                       <div className="h-2 rounded-full bg-violet-500" style={{ width: `${(po.demand / maxDemand) * 100}%` }} />
@@ -293,8 +317,7 @@ function AnalysisCard({
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {analysis.posting_count} postings · {analysis.model} · {analysis.prompt_version} ·{" "}
-              {new Date(analysis.created_at).toLocaleString()}
+              {tw.footer(analysis.posting_count)} · {analysis.model} · {analysis.prompt_version} · {dateTime(analysis.created_at)}
             </p>
           </>
         )}
@@ -323,13 +346,15 @@ function AddPostingDialog({
   onClose: () => void
   onAdded: () => void
 }) {
+  const { t } = useI18n()
+  const tw = t.workforce
   const [title, setTitle] = useState("")
   const [employer, setEmployer] = useState("")
   const [text, setText] = useState("")
   const add = useMutation({
     mutationFn: () => workforceApi.addPosting(programId!, { title, employer: employer || undefined, text }),
     onSuccess: (posting) => {
-      toast.success(posting.skills ? `Read ${posting.skills.length} skills` : "Saved — skills will be read at the next analysis")
+      toast.success(posting.skills ? tw.readSkills(posting.skills.length) : tw.savedLater)
       onAdded()
       setTitle("")
       setEmployer("")
@@ -341,29 +366,130 @@ function AddPostingDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Add a job posting</DialogTitle>
-          <DialogDescription>Paste the full description. AI reads the skills it asks for.</DialogDescription>
+          <DialogTitle>{tw.addTitle}</DialogTitle>
+          <DialogDescription>{tw.addDescription}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="posting-title">Job title</Label>
+              <Label htmlFor="posting-title">{tw.jobTitle}</Label>
               <Input id="posting-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Junior Backend Engineer" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="posting-employer">Employer (optional)</Label>
+              <Label htmlFor="posting-employer">{tw.employer}</Label>
               <Input id="posting-employer" value={employer} onChange={(e) => setEmployer(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="posting-text">Description</Label>
+            <Label htmlFor="posting-text">{tw.descriptionLabel}</Label>
             <Textarea id="posting-text" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
           </div>
         </div>
         <DialogFooter showCloseButton>
           <Button disabled={title.trim().length < 2 || text.trim().length < 40 || add.isPending} onClick={() => add.mutate()}>
             {add.isPending && <Loader2 className="animate-spin" />}
-            Add and read skills
+            {tw.addAndRead}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Real postings in bulk: links to public job pages, or a CSV export. Skills are read at the next analysis. */
+function ImportDialog({
+  open,
+  programId,
+  onClose,
+  onImported,
+}: {
+  open: boolean
+  programId?: string
+  onClose: () => void
+  onImported: () => void
+}) {
+  const { t } = useI18n()
+  const tw = t.workforce
+  const [mode, setMode] = useState<"links" | "csv">("links")
+  const [links, setLinks] = useState("")
+  const [file, setFile] = useState<File | null>(null)
+  const [result, setResult] = useState<ImportResult | null>(null)
+
+  const urls = links.split(/\s+/).map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u))
+  const run = useMutation({
+    mutationFn: () => (mode === "links" ? workforceApi.importUrls(programId!, urls) : workforceApi.importCsv(programId!, file!)),
+    onSuccess: (data) => {
+      setResult(data)
+      if (data.added.length) {
+        toast.success(tw.imported(data.added.length, data.errors.length))
+        onImported()
+      }
+      if (!data.errors.length) close()
+    },
+  })
+
+  function close() {
+    setLinks("")
+    setFile(null)
+    setResult(null)
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && close()}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{tw.importTitle}</DialogTitle>
+          <DialogDescription>{tw.importDescription}</DialogDescription>
+        </DialogHeader>
+        <div className="inline-flex w-fit rounded-lg border p-0.5">
+          <Button size="sm" variant={mode === "links" ? "default" : "ghost"} onClick={() => setMode("links")}>
+            <Link2 />
+            {tw.fromLinks}
+          </Button>
+          <Button size="sm" variant={mode === "csv" ? "default" : "ghost"} onClick={() => setMode("csv")}>
+            <FileUp />
+            {tw.fromCsv}
+          </Button>
+        </div>
+        {mode === "links" ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="import-links">{tw.linksLabel}</Label>
+            <Textarea
+              id="import-links"
+              rows={6}
+              value={links}
+              placeholder={tw.linksPlaceholder}
+              onChange={(e) => setLinks(e.target.value)}
+              className="font-mono text-xs"
+            />
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="import-csv">{tw.csvLabel}</Label>
+            <Input id="import-csv" type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </div>
+        )}
+        {run.isError && <p className="text-sm text-destructive">{run.error.message}</p>}
+        {result && result.errors.length > 0 && (
+          <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50/60 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/20">
+            <p className="font-medium">{tw.importErrors}</p>
+            <ul className="space-y-0.5">
+              {result.errors.map((e, i) => (
+                <li key={i} className="break-all">
+                  <span className="text-muted-foreground">{e.source}</span> — {e.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <DialogFooter showCloseButton>
+          <Button
+            disabled={run.isPending || (mode === "links" ? urls.length === 0 : !file)}
+            onClick={() => run.mutate()}
+          >
+            {run.isPending && <Loader2 className="animate-spin" />}
+            {run.isPending ? tw.importing : tw.importButton}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -381,6 +507,8 @@ function DraftForGapDialog({
   curriculumId?: string
   onClose: () => void
 }) {
+  const { t } = useI18n()
+  const tw = t.workforce
   const qc = useQueryClient()
   const [draft, setDraft] = useState<DraftResponse | null>(null)
   const [statement, setStatement] = useState("")
@@ -420,7 +548,7 @@ function DraftForGapDialog({
     },
     onSuccess: (code) => {
       authoringApi.decide(draft!.suggestion_id, statement !== draft!.outcomes[0]?.statement ? "EDITED" : "ACCEPTED")
-      toast.success(`Added ${code} to ${course!.code}. Map it to POs on the course's Mappings page.`)
+      toast.success(tw.addedCo(code, course!.code))
       qc.invalidateQueries({ queryKey: ["course-outcomes"] })
       close()
     },
@@ -438,16 +566,16 @@ function DraftForGapDialog({
     <Dialog open={!!skill} onOpenChange={(next) => !next && close()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Close the gap: {skill?.skill}</DialogTitle>
+          <DialogTitle>{tw.gapTitle(skill?.skill ?? "")}</DialogTitle>
           <DialogDescription>
-            {course ? `AI drafts a course outcome for ${course.code} ${course.title}. ` : ""}
-            Read and edit it before adding it to the course.
+            {course ? tw.gapDescription(`${course.code} ${course.title}`) : ""}
+            {tw.gapEdit}
           </DialogDescription>
         </DialogHeader>
         {!draft ? (
           <Button disabled={write.isPending || !course} onClick={() => write.mutate()}>
             {write.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />}
-            {write.isPending ? "Writing…" : `Draft a CO for ${course?.code ?? "the course"}`}
+            {write.isPending ? tw.writing : tw.draftFor(course?.code ?? tw.theCourse)}
           </Button>
         ) : (
           <div className="space-y-2">
@@ -466,7 +594,7 @@ function DraftForGapDialog({
             <Button disabled={statement.trim().length < 10 || add.isPending} onClick={() => add.mutate()}>
               {add.isPending && <Loader2 className="animate-spin" />}
               <Briefcase />
-              Add to {course?.code}
+              {tw.addTo(course?.code ?? "")}
             </Button>
           )}
         </DialogFooter>

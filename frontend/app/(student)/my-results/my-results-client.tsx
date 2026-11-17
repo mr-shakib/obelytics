@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiClient } from "@/lib/api/client"
 import { CATEGORICAL_COLORS, STATUS_GOOD } from "@/lib/result-colors"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ function aggregatePOs(courses: CourseResult[], allPOs: ProgramOutcomeSummary[] =
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
 function POChartTooltip({ active, payload }: { active?: boolean; payload?: { payload: POAggregate }[] }) {
+  const { t } = useI18n()
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   return (
@@ -117,7 +119,7 @@ function POChartTooltip({ active, payload }: { active?: boolean; payload?: { pay
         <p className="text-muted-foreground mb-2 leading-snug">{d.po_statement}</p>
       )}
       <div className="border-t pt-1.5 space-y-1">
-        <p className="text-muted-foreground font-medium mb-1">Course Breakdown</p>
+        <p className="text-muted-foreground font-medium mb-1">{t.student.results.courseBreakdown}</p>
         {d.contributions.map((c) => (
           <div key={c.course_code} className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground truncate">{c.course_code}</span>
@@ -127,7 +129,7 @@ function POChartTooltip({ active, payload }: { active?: boolean; payload?: { pay
           </div>
         ))}
         <div className="border-t mt-1 pt-1 flex items-center justify-between font-semibold">
-          <span>Average</span>
+          <span>{t.student.results.average}</span>
           <span className={d.is_attained ? "text-green-600" : "text-red-500"}>{d.avg_pct.toFixed(1)}%</span>
         </div>
       </div>
@@ -148,6 +150,8 @@ function POContributionSection({
   selectedPo: string
   onSelectPo: (code: string) => void
 }) {
+  const { t } = useI18n()
+  const tr = t.student.results
   const pos = useMemo(() => aggregatePOs(courses, allPOs), [courses, allPOs])
   const effectivePo = selectedPo || pos[0]?.po_code || ""
   const active = pos.find((p) => p.po_code === effectivePo)
@@ -168,17 +172,17 @@ function POContributionSection({
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2 flex-wrap">
           <div>
-            <CardTitle className="text-lg">Which Courses Earned You This PO</CardTitle>
+            <CardTitle className="text-lg">{tr.whichCourses}</CardTitle>
             <CardDescription className="mt-0.5">
               {(active?.contributions.length ?? 0) > 1
-                ? `${effectivePo} was attained across ${active?.contributions.length} course${active?.contributions.length === 1 ? "" : "s"} — each slice is that course's share`
-                : `${effectivePo} attainment for this PO`}
+                ? tr.acrossCourses(effectivePo, active?.contributions.length ?? 0)
+                : tr.poAttainment(effectivePo)}
             </CardDescription>
           </div>
           <div className="w-28">
             <Select value={effectivePo} onValueChange={(v) => v != null && onSelectPo(v as string)}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select PO" />
+                <SelectValue placeholder={tr.selectPo} />
               </SelectTrigger>
               <SelectContent>
                 {pos.map((p) => (
@@ -191,7 +195,7 @@ function POContributionSection({
       </CardHeader>
       <CardContent>
         {pieData.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No attainment data yet for {effectivePo}.</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">{tr.noData(effectivePo)}</p>
         ) : (
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -231,6 +235,8 @@ function POSummarySection({
   selectedPo: string
   onSelectPo: (code: string) => void
 }) {
+  const { t } = useI18n()
+  const tr = t.student.results
   const pos = aggregatePOs(courses, allPOs)
   if (pos.length === 0) return null
 
@@ -248,16 +254,16 @@ function POSummarySection({
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2 flex-wrap">
           <div>
-            <CardTitle className="text-lg">Program Outcome Attainment</CardTitle>
+            <CardTitle className="text-lg">{tr.poTitle}</CardTitle>
             <CardDescription className="mt-0.5">
-              Average PO attainment across all your courses — hover a bar for the course breakdown, or click it to see the split below
+              {tr.poDescription}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant={attainedCount === pos.length ? "default" : "secondary"}>
-              {attainedCount}/{pos.length} POs attained
+              {tr.posAttained(attainedCount, pos.length)}
             </Badge>
-            <Badge variant="outline" className="text-xs">Threshold: {threshold}%</Badge>
+            <Badge variant="outline" className="text-xs">{tr.threshold(threshold)}</Badge>
           </div>
         </div>
       </CardHeader>
@@ -306,10 +312,10 @@ function POSummarySection({
         {/* Legend */}
         <div className="flex items-center gap-4 text-xs text-muted-foreground justify-end">
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Attained
+            <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> {t.common.attained}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-muted border border-border inline-block" /> Not attained
+            <span className="w-3 h-3 rounded-sm bg-muted border border-border inline-block" /> {t.common.notAttained}
           </span>
         </div>
 
@@ -317,7 +323,7 @@ function POSummarySection({
         {allCourseCodes.length > 1 && (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              Attainment by Course
+              {tr.byCourse}
             </p>
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-xs">
@@ -327,8 +333,8 @@ function POSummarySection({
                     {allCourseCodes.map((code) => (
                       <th key={code} className="text-center px-3 py-2 font-semibold">{code}</th>
                     ))}
-                    <th className="text-center px-3 py-2 font-semibold border-l">Avg</th>
-                    <th className="text-center px-3 py-2 font-semibold">Status</th>
+                    <th className="text-center px-3 py-2 font-semibold border-l">{tr.colAvg}</th>
+                    <th className="text-center px-3 py-2 font-semibold">{tr.colStatus}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -356,7 +362,7 @@ function POSummarySection({
                         </td>
                         <td className="text-center px-3 py-1.5">
                           <Badge variant={po.is_attained ? "default" : "destructive"} className="text-[10px] px-1.5 py-0">
-                            {po.is_attained ? "Attained" : "Not Attained"}
+                            {po.is_attained ? t.common.attained : t.common.notAttained}
                           </Badge>
                         </td>
                       </tr>
@@ -395,6 +401,7 @@ function POSummarySection({
 // ── Per-course card ───────────────────────────────────────────────────────────
 
 function CourseCard({ course }: { course: CourseResult }) {
+  const { t } = useI18n()
   const sortedCOs = [...(course.co_results ?? [])].sort((a, b) =>
     a.co_code.localeCompare(b.co_code, undefined, { numeric: true })
   )
@@ -419,7 +426,7 @@ function CourseCard({ course }: { course: CourseResult }) {
         {sortedCOs.length > 0 && (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Course Outcome Attainment
+              {t.student.results.coTitle}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {sortedCOs.map((co) => (
@@ -454,7 +461,7 @@ function CourseCard({ course }: { course: CourseResult }) {
         {sortedPOs.length > 0 && (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Program Outcome Attainment
+              {t.student.results.poTitle}
             </p>
             <div className="space-y-2">
               {sortedPOs.map((po) => (
@@ -485,6 +492,8 @@ function CourseCard({ course }: { course: CourseResult }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function MyResultsClient() {
+  const { t } = useI18n()
+  const tr = t.student.results
   const [selectedPo, setSelectedPo] = useState("")
   const [downloading, setDownloading] = useState(false)
   const { data, isLoading } = useQuery({
@@ -503,7 +512,7 @@ export function MyResultsClient() {
         { parseAs: "blob" } as never
       )
       if (error || !blob) {
-        toast.error("Failed to generate the report")
+        toast.error(tr.downloadFailed)
         return
       }
       const url = URL.createObjectURL(blob as Blob)
@@ -515,7 +524,7 @@ export function MyResultsClient() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch {
-      toast.error("Failed to generate the report")
+      toast.error(tr.downloadFailed)
     } finally {
       setDownloading(false)
     }
@@ -533,16 +542,16 @@ export function MyResultsClient() {
   const allPOs = data?.program_outcomes ?? []
 
   if (!courses.length) {
-    return <p className="text-muted-foreground text-sm">No published results available yet.</p>
+    return <p className="text-muted-foreground text-sm">{tr.none}</p>
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-bold">My Results</h1>
+        <h1 className="text-2xl font-bold">{tr.title}</h1>
         <Button variant="outline" size="sm" onClick={downloadReport} disabled={downloading}>
           {downloading ? <Loader2 className="animate-spin" /> : <Download />}
-          Download Official Report
+          {tr.download}
         </Button>
       </div>
 
@@ -553,7 +562,7 @@ export function MyResultsClient() {
       {/* Per-course breakdown */}
       <div className="space-y-4">
         <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide">
-          Course-wise Breakdown
+          {tr.courseWise}
         </h2>
         {courses.map((course) => (
           <CourseCard key={course.course_code} course={course} />

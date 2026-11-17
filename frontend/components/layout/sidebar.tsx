@@ -15,6 +15,7 @@ import { useAppStore } from "@/lib/stores/app-store"
 import { useAuthStore } from "@/lib/stores/auth-store"
 import { usePermissions } from "@/hooks/use-permission"
 import { prefetchRoute } from "@/lib/prefetch"
+import { useI18n } from "@/lib/i18n"
 import {
   NAV_GROUPS,
   NAV_GROUP_META,
@@ -39,6 +40,7 @@ function NavItemLink({
   onNavigate?: () => void
   className?: string
 }) {
+  const { t } = useI18n()
   return (
     <Link
       href={item.href}
@@ -62,7 +64,7 @@ function NavItemLink({
             : "text-sidebar-foreground/38 group-hover:text-sidebar-primary/70"
         )}
       />
-      <span className="truncate">{item.label}</span>
+      <span className="truncate">{t.nav.items[item.href] ?? item.label}</span>
     </Link>
   )
 }
@@ -85,7 +87,9 @@ function GroupSection({
   qc: QueryClient
 }) {
   const [flyoutOpen, setFlyoutOpen] = useState(false)
+  const { t } = useI18n()
   const meta = NAV_GROUP_META[group]
+  const groupLabel = t.nav.groups[group] ?? meta.label
   const Icon = meta.icon
   const containsActive = items.some((item) => isNavItemActive(item, pathname))
 
@@ -143,7 +147,7 @@ function GroupSection({
           />
           {!collapsed && (
             <>
-              <span className="flex-1 truncate text-left">{meta.label}</span>
+              <span className="flex-1 truncate text-left">{groupLabel}</span>
               <ChevronDown
                 className={cn(
                   "size-3.5 shrink-0 text-sidebar-foreground/30 transition-transform duration-200",
@@ -161,7 +165,7 @@ function GroupSection({
           className="w-56 gap-0 p-1.5"
         >
           <p className="mb-1 px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
-            {meta.label}
+            {groupLabel}
           </p>
           <div className="space-y-0.5">
             {items.map((item) => (

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { apiClient } from "@/lib/api/client"
-import { formatDate } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
 interface Enrollment {
   id: string
@@ -22,6 +22,8 @@ interface Enrollment {
 }
 
 export function MyCoursesClient() {
+  const { t } = useI18n()
+  const tc = t.student.courses
   const { data, isLoading } = useQuery({
     queryKey: ["student", "courses"],
     queryFn: async () => {
@@ -38,11 +40,11 @@ export function MyCoursesClient() {
     )
   }
 
-  if (!data?.length) return <p className="text-muted-foreground text-sm">No active enrollments.</p>
+  if (!data?.length) return <p className="text-muted-foreground text-sm">{tc.none}</p>
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">My Courses</h1>
+      <h1 className="text-2xl font-bold">{tc.title}</h1>
       {data.map((enrollment) => (
         <Card key={enrollment.id}>
           <CardHeader className="pb-3">
@@ -50,7 +52,7 @@ export function MyCoursesClient() {
               <div>
                 <CardTitle className="text-base">{enrollment.course_title}</CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {enrollment.course_code} · {enrollment.credits} credits · Section {enrollment.section}
+                  {tc.meta(enrollment.course_code, enrollment.credits, enrollment.section)}
                 </p>
               </div>
               <StatusBadge status={enrollment.status} />
@@ -63,7 +65,7 @@ export function MyCoursesClient() {
           {enrollment.assessments?.length > 0 && (
             <CardContent className="pt-0">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
-                <ClipboardList className="h-3 w-3" /> Assessments
+                <ClipboardList className="h-3 w-3" /> {tc.assessments}
               </p>
               <div className="flex flex-wrap gap-2">
                 {enrollment.assessments.map((a, i) => (

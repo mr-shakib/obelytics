@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { usePermission } from "@/hooks/use-permission"
+import { type Dictionary, useI18n } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 
@@ -25,16 +26,14 @@ import { EvidencePanel } from "./evidence-panel"
 import { ImprovementPanel } from "./improvement-panel"
 import { PaperPanel } from "./paper-panel"
 
-const EXAMS: { value: ExamType; label: string }[] = [
-  { value: "MID", label: "Mid term" },
-  { value: "FINAL", label: "Final" },
-]
+const EXAMS: ExamType[] = ["MID", "FINAL"]
 
 function sectionLabel(section: AuditableSection) {
   return `${section.course_code} ${section.course_title} · ${section.section_name} · ${section.term_name}`
 }
 
 export function IntegrityClient() {
+  const { t } = useI18n()
   const canManage = usePermission("integrity.manage")
   const [chosenSectionId, setChosenSectionId] = useState<string | null>(null)
   const [examType, setExamType] = useState<ExamType>("FINAL")
@@ -52,13 +51,13 @@ export function IntegrityClient() {
     // Reading and auditing run in the background; follow them until they finish.
     refetchInterval: (query) => (isJobActive(query.state.data?.job) ? 2000 : false),
   })
-  useJobNotifications(overview?.job, sectionId)
+  useJobNotifications(overview?.job, sectionId, t)
 
   return (
     <div className="max-w-6xl space-y-6">
       <PageHeader
-        title="Assessment Integrity"
-        description="Checks whether each exam question really tests the Bloom level and course outcome it is mapped to. The AI only advises: marks and attainment never change."
+        title={t.integrity.title}
+        description={t.integrity.description}
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -67,7 +66,7 @@ export function IntegrityClient() {
           onValueChange={(value) => { if (value != null) setChosenSectionId(value as string) }}
         >
           <SelectTrigger className="w-full sm:w-[36rem]" disabled={sections.length === 0}>
-            <SelectValue placeholder={sectionsLoading ? "Loading sections…" : "Choose a section"}>
+            <SelectValue placeholder={sectionsLoading ? t.integrity.loadingSections : t.integrity.chooseSection}>
               {sectionId ? sectionLabel(sections.find((s) => s.id === sectionId) ?? sections[0]) : undefined}
             </SelectValue>
           </SelectTrigger>
@@ -80,12 +79,12 @@ export function IntegrityClient() {
         <div className="inline-flex rounded-lg border p-0.5">
           {EXAMS.map((exam) => (
             <Button
-              key={exam.value}
+              key={exam}
               size="sm"
-              variant={examType === exam.value ? "default" : "ghost"}
-              onClick={() => setExamType(exam.value)}
+              variant={examType === exam ? "default" : "ghost"}
+              onClick={() => setExamType(exam)}
             >
-              {exam.label}
+              {t.integrity.exams[exam]}
             </Button>
           ))}
         </div>
@@ -94,7 +93,7 @@ export function IntegrityClient() {
       {!sectionsLoading && sections.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No sections to audit. Sections you teach or lead appear here.
+            {t.integrity.noSections}
           </CardContent>
         </Card>
       ) : overviewLoading || !overview || !sectionId ? (
@@ -115,17 +114,16 @@ export function IntegrityClient() {
   )
 }
 
-function jobDoneMessage(job: IntegrityJob) {
+function jobDoneMessage(job: IntegrityJob, t: Dictionary) {
   const result = job.result ?? {}
   if (job.kind === "READ_PAPER") {
-    const flagged = result.flagged ? ` ${result.flagged} need a closer look.` : ""
-    return `Read ${result.questions ?? 0} questions from the paper.${flagged} Check them below.`
+    return t.integrity.readDone(Number(result.questions ?? 0), Number(result.flagged ?? 0))
   }
-  return `Audited ${result.audited ?? 0} questions.`
+  return t.integrity.auditDone(Number(result.audited ?? 0))
 }
 
 /** Toast when a job this page watched running finishes, and refresh what it changed. */
-function useJobNotifications(job: IntegrityJob | null | undefined, sectionId: string | null) {
+function useJobNotifications(job: IntegrityJob | null | undefined, sectionId: string | null, t: Dictionary) {
   const qc = useQueryClient()
   const watching = useRef(new Set<string>())
   useEffect(() => {
@@ -136,20 +134,21 @@ function useJobNotifications(job: IntegrityJob | null | undefined, sectionId: st
     }
     if (!watching.current.delete(job.id)) return
     if (sectionId) qc.invalidateQueries({ queryKey: queryKeys.integrity.evidence(sectionId) })
-    if (job.status === "DONE") toast.success(jobDoneMessage(job))
-    else toast.error(job.error ?? "The AI could not finish.")
-  }, [job, qc, sectionId])
+    if (job.status === "DONE") toast.success(jobDoneMessage(job, t))
+    else toast.error(job.error ?? t.integrity.jobFailed)
+  }, [job, qc, sectionId, t])
 }
 
 function Summary({ overview }: { overview: IntegrityOverview }) {
+  const { t } = useI18n()
   const s = overview.summary
   const tiles = [
-    { label: "Questions audited", value: `${s.audited} / ${s.questions}`, tone: "" },
-    { label: "Match the mapping", value: s.aligned, tone: "text-emerald-600 dark:text-emerald-400" },
-    { label: "Different Bloom level", value: s.partial, tone: "text-amber-600 dark:text-amber-400" },
-    { label: "Test a different CO", value: s.misaligned, tone: "text-red-600 dark:text-red-400" },
-    { label: "AI not sure", value: s.abstained, tone: "text-muted-foreground" },
-    { label: "Awaiting your review", value: s.pending_review, tone: "" },
+    { label: t.integrity.tiles.audited, value: `${s.audited} / ${s.questions}`, tone: "" },
+    { label: t.integrity.tiles.aligned, value: s.aligned, tone: "text-emerald-600 dark:text-emerald-400" },
+    { label: t.integrity.tiles.partial, value: s.partial, tone: "text-amber-600 dark:text-amber-400" },
+    { label: t.integrity.tiles.misaligned, value: s.misaligned, tone: "text-red-600 dark:text-red-400" },
+    { label: t.integrity.tiles.abstained, value: s.abstained, tone: "text-muted-foreground" },
+    { label: t.integrity.tiles.pending, value: s.pending_review, tone: "" },
   ]
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

@@ -7,8 +7,11 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiClient } from "@/lib/api/client"
 import { formatDate } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
 export function MyCurriculumClient() {
+  const { t } = useI18n()
+  const tc = t.student.curriculum
   const { data, isLoading } = useQuery({
     queryKey: ["student", "curriculum"],
     queryFn: async () => {
@@ -32,7 +35,7 @@ export function MyCurriculumClient() {
     )
   }
 
-  if (!data) return <p className="text-muted-foreground text-sm">No curriculum data found.</p>
+  if (!data) return <p className="text-muted-foreground text-sm">{tc.none}</p>
 
   // Group courses by term
   const byTerm = data.courses.reduce<Record<number, typeof data.courses>>((acc, c) => {
@@ -45,7 +48,7 @@ export function MyCurriculumClient() {
       <div>
         <h1 className="text-2xl font-bold">{data.program_name}</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {data.curriculum_name} v{data.version} · Effective from {formatDate(data.effective_from)}
+          {tc.effective(data.curriculum_name, data.version, formatDate(data.effective_from))}
         </p>
       </div>
 
@@ -55,7 +58,7 @@ export function MyCurriculumClient() {
           <div key={term}>
             <h2 className="font-semibold text-base mb-3 flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-primary" />
-              Term {term}
+              {tc.term(term)}
             </h2>
             <div className="grid gap-2 sm:grid-cols-2">
               {courses.map((c) => (
@@ -63,7 +66,7 @@ export function MyCurriculumClient() {
                   <CardContent className="p-4 flex items-start justify-between">
                     <div>
                       <p className="font-medium text-sm">{c.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{c.code} · {c.credits} credits</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{c.code} · {tc.credits(c.credits)}</p>
                     </div>
                     <Badge variant="secondary" className="text-xs">{c.type}</Badge>
                   </CardContent>

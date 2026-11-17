@@ -15,23 +15,26 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { useAuthStore } from "@/lib/stores/auth-store"
 import { apiClient } from "@/lib/api/client"
+import { type Dictionary, useI18n } from "@/lib/i18n"
 
-const passwordSchema = z.object({
-  current_password: z.string().min(1, "Required"),
-  new_password: z.string().min(8, "Minimum 8 characters"),
+const passwordSchema = (t: Dictionary) => z.object({
+  current_password: z.string().min(1, t.student.profile.required),
+  new_password: z.string().min(8, t.student.profile.min8),
   confirm_password: z.string(),
 }).refine((d) => d.new_password === d.confirm_password, {
-  message: "Passwords do not match",
+  message: t.student.profile.mismatch,
   path: ["confirm_password"],
 })
-type PasswordForm = z.infer<typeof passwordSchema>
+type PasswordForm = z.infer<ReturnType<typeof passwordSchema>>
 
 export function MyProfileClient() {
   const { user } = useAuthStore()
+  const { t } = useI18n()
+  const tp = t.student.profile
   const [pwError, setPwError] = useState<string | null>(null)
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<PasswordForm>({
-    resolver: zodResolver(passwordSchema),
+    resolver: zodResolver(passwordSchema(t)),
   })
 
   const initials = user
@@ -44,16 +47,16 @@ export function MyProfileClient() {
       await apiClient.POST("/auth/change-password" as never, {
         body: { current_password: values.current_password, new_password: values.new_password },
       } as never)
-      toast.success("Password changed successfully")
+      toast.success(tp.changed)
       reset()
     } catch {
-      setPwError("Failed to change password. Check your current password.")
+      setPwError(tp.failed)
     }
   }
 
   return (
     <div className="space-y-6 max-w-lg">
-      <h1 className="text-2xl font-bold">My Profile</h1>
+      <h1 className="text-2xl font-bold">{tp.title}</h1>
 
       {/* Identity card */}
       <Card>
@@ -75,28 +78,28 @@ export function MyProfileClient() {
 
       {/* Change password */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Change Password</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{tp.changePassword}</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onPasswordChange)} className="space-y-4">
             {pwError && <p className="text-sm text-destructive">{pwError}</p>}
             <div className="space-y-2">
-              <Label htmlFor="current_password">Current Password</Label>
+              <Label htmlFor="current_password">{tp.current}</Label>
               <PasswordInput id="current_password" autoComplete="current-password" {...register("current_password")} />
               {errors.current_password && <p className="text-xs text-destructive">{errors.current_password.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new_password">New Password</Label>
+              <Label htmlFor="new_password">{tp.new}</Label>
               <PasswordInput id="new_password" autoComplete="new-password" {...register("new_password")} />
               {errors.new_password && <p className="text-xs text-destructive">{errors.new_password.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirm_password">Confirm New Password</Label>
+              <Label htmlFor="confirm_password">{tp.confirm}</Label>
               <PasswordInput id="confirm_password" autoComplete="new-password" {...register("confirm_password")} />
               {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
             </div>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Update Password
+              {tp.update}
             </Button>
           </form>
         </CardContent>

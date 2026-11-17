@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, Check, FileUp, Loader2, Save } from "lucide-react"
+import { AlertTriangle, Check, Download, FileUp, Loader2, Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -11,6 +11,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { useI18n } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 
 import {
@@ -32,14 +33,12 @@ type PanelProps = {
   canManage: boolean
 }
 
-const METHOD_LABEL: Record<NonNullable<QuestionPaper["extraction_method"]>, string> = {
-  VISION: "read from page images",
-  TEXT_LAYER: "read from the PDF's own text",
-  DOCX: "read from the Word document",
-  MIXED: "read from the PDF's text and page images",
-}
+type ExtractionMethod = NonNullable<QuestionPaper["extraction_method"]>
+
+export const SAMPLE_PAPER_URL = "/samples/sample-paper-numerical-methods-final.docx"
 
 export function JobProgress({ job, title, unit }: { job: IntegrityJob; title: string; unit: string }) {
+  const { t } = useI18n()
   const total = job.progress_total ?? 0
   const done = Math.min(job.progress_done, total)
   const percent = total > 0 ? Math.round((done / total) * 100) : 0
@@ -50,11 +49,11 @@ export function JobProgress({ job, title, unit }: { job: IntegrityJob; title: st
       <AlertDescription className="w-full space-y-2">
         <p>
           {job.status === "QUEUED"
-            ? "Waiting to start…"
+            ? t.integrity.job.waiting
             : total > 0
-              ? `${unit} ${Math.min(done + 1, total)} of ${total}`
-              : "Working…"}
-          {" · You can leave this page; it carries on in the background."}
+              ? t.integrity.job.progress(unit, Math.min(done + 1, total), total)
+              : t.integrity.job.working}
+          {t.integrity.job.background}
         </p>
         <div
           className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
@@ -71,6 +70,8 @@ export function JobProgress({ job, title, unit }: { job: IntegrityJob; title: st
 }
 
 export function PaperPanel({ overview, sectionId, examType, canManage }: PanelProps) {
+  const { t, dateTime } = useI18n()
+  const tp = t.integrity.paper
   const qc = useQueryClient()
   const fileInput = useRef<HTMLInputElement>(null)
   const paper = overview.paper
@@ -89,10 +90,19 @@ export function PaperPanel({ overview, sectionId, examType, canManage }: PanelPr
   return (
     <Card>
       <CardHeader>
-        <CardTitle>1. Question paper</CardTitle>
+        <CardTitle>{tp.title}</CardTitle>
         <CardDescription>
-          Upload the paper as a PDF, a Word document or a photo. The AI reads the questions, and you check
-          the wording before it is saved. The file itself is not stored.
+          {tp.description}
+          {canManage && (
+            <a
+              href={SAMPLE_PAPER_URL}
+              download
+              className="mt-1.5 flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <Download className="size-3" />
+              {tp.sample}
+            </a>
+          )}
         </CardDescription>
         {canManage && (
           <CardAction>
@@ -114,7 +124,7 @@ export function PaperPanel({ overview, sectionId, examType, canManage }: PanelPr
               onClick={() => fileInput.current?.click()}
             >
               {upload.isPending ? <Loader2 className="animate-spin" /> : <FileUp />}
-              {paper ? "Replace paper" : "Upload paper"}
+              {paper ? tp.replace : tp.upload}
             </Button>
           </CardAction>
         )}
@@ -123,41 +133,38 @@ export function PaperPanel({ overview, sectionId, examType, canManage }: PanelPr
         {upload.isPending && (
           <Alert>
             <Loader2 className="animate-spin" />
-            <AlertTitle>Uploading…</AlertTitle>
+            <AlertTitle>{tp.uploading}</AlertTitle>
           </Alert>
         )}
         {reading && job && (
           <JobProgress
             job={job}
-            title="Reading the paper…"
-            unit={paper?.extraction_method === "DOCX" ? "Part" : "Page"}
+            title={tp.reading}
+            unit={paper?.extraction_method === "DOCX" ? tp.unitPart : tp.unitPage}
           />
         )}
         {upload.isError && (
           <Alert variant="destructive">
-            <AlertTitle>The paper could not be uploaded</AlertTitle>
+            <AlertTitle>{tp.uploadFailed}</AlertTitle>
             <AlertDescription>{upload.error.message}</AlertDescription>
           </Alert>
         )}
         {!paper ? (
           !upload.isPending && !reading && (
-            <p className="text-sm text-muted-foreground">No paper has been uploaded for this exam yet.</p>
+            <p className="text-sm text-muted-foreground">{tp.none}</p>
           )
         ) : reading ? null : readFailed ? (
           <Alert variant="destructive">
-            <AlertTitle>The last upload could not be read</AlertTitle>
+            <AlertTitle>{tp.readFailed}</AlertTitle>
             <AlertDescription>{paper.extraction_error ?? job?.error}</AlertDescription>
           </Alert>
         ) : paper.extraction_status === "EXTRACTED" ? (
           <>
             <p className="text-xs text-muted-foreground">
               {paper.original_filename} ·{" "}
-              {paper.page_count == null
-                ? "Word document"
-                : `${paper.page_count} page${paper.page_count === 1 ? "" : "s"}`}
-              {paper.extraction_method && ` · ${METHOD_LABEL[paper.extraction_method]}`} · by{" "}
-              {paper.extraction_model} ({paper.extraction_prompt_version}) ·{" "}
-              {new Date(paper.updated_at).toLocaleString()}
+              {paper.page_count == null ? tp.wordDocument : tp.pages(paper.page_count)}
+              {paper.extraction_method && ` · ${tp.methods[paper.extraction_method as ExtractionMethod]}`} · {tp.by}{" "}
+              {paper.extraction_model} ({paper.extraction_prompt_version}) · {dateTime(paper.updated_at)}
             </p>
             <ExtractedReview
               key={paper.updated_at}
@@ -176,6 +183,8 @@ export function PaperPanel({ overview, sectionId, examType, canManage }: PanelPr
 type Row = ExtractedQuestion & { target: string }
 
 function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProps) {
+  const { t } = useI18n()
+  const tp = t.integrity.paper
   const qc = useQueryClient()
   const [rows, setRows] = useState<Row[]>(() =>
     (overview.paper?.questions ?? []).map((q) => ({ ...q, target: q.matched_question_id ?? SKIP })),
@@ -201,7 +210,7 @@ function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProp
       qc.setQueryData(queryKeys.integrity.overview(sectionId, examType), data)
       // Changed wording retires the old audit, which changes the evidence view.
       qc.invalidateQueries({ queryKey: queryKeys.integrity.evidence(sectionId) })
-      toast.success("Question wording saved. You can run the audit now.")
+      toast.success(tp.savedToast)
     },
   })
 
@@ -209,26 +218,23 @@ function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProp
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...change } : row)))
 
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">The AI found no questions on this paper.</p>
+    return <p className="text-sm text-muted-foreground">{tp.noQuestions}</p>
   }
 
   return (
     <div className="space-y-3">
       {marksheet.length === 0 && (
         <Alert>
-          <AlertDescription>
-            This exam has no marksheet questions yet. Set them up in the course assessment first, then
-            match the paper&apos;s questions to them here.
-          </AlertDescription>
+          <AlertDescription>{tp.noMarksheet}</AlertDescription>
         </Alert>
       )}
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-24">On paper</TableHead>
-              <TableHead>Question as read by the AI</TableHead>
-              <TableHead className="w-44">Marksheet question</TableHead>
+              <TableHead className="w-24">{tp.colOnPaper}</TableHead>
+              <TableHead>{tp.colAsRead}</TableHead>
+              <TableHead className="w-44">{tp.colMarksheet}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -239,13 +245,13 @@ function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProp
                   <TableCell className="whitespace-normal">
                     <p className="font-medium">{row.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {row.marks != null ? `${row.marks} marks` : "marks not read"}
+                      {row.marks != null ? t.common.marks(row.marks) : tp.marksNotRead}
                       {row.co ? ` · ${row.co}` : ""}
                     </p>
                   </TableCell>
                   <TableCell className="space-y-1.5 whitespace-normal">
                     {row.context && (
-                      <p className="line-clamp-2 text-xs text-muted-foreground">Scenario: {row.context}</p>
+                      <p className="line-clamp-2 text-xs text-muted-foreground">{tp.scenario} {row.context}</p>
                     )}
                     <Textarea
                       value={row.text}
@@ -253,7 +259,7 @@ function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProp
                       rows={Math.min(6, Math.max(2, Math.ceil(row.text.length / 90)))}
                       onChange={(event) => update(index, { text: event.target.value })}
                     />
-                    {row.figure && <p className="text-xs text-muted-foreground">Figure: {row.figure}</p>}
+                    {row.figure && <p className="text-xs text-muted-foreground">{tp.figure} {row.figure}</p>}
                     {row.warning && (
                       <p className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
                         <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -268,20 +274,20 @@ function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProp
                       onValueChange={(value) => { if (value != null) update(index, { target: value as string }) }}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue>{row.target === SKIP ? "Don't use" : labelOf.get(row.target)}</SelectValue>
+                        <SelectValue>{row.target === SKIP ? tp.dontUse : labelOf.get(row.target)}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={SKIP}>Don&apos;t use</SelectItem>
+                        <SelectItem value={SKIP}>{tp.dontUse}</SelectItem>
                         {marksheet.map((q) => (
                           <SelectItem key={q.question_id} value={q.question_id}>
-                            {q.label} ({q.max_marks} marks)
+                            {q.label} ({t.common.marks(q.max_marks)})
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     {saved && (
                       <p className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                        <Check className="size-3" /> Saved
+                        <Check className="size-3" /> {tp.saved}
                       </p>
                     )}
                   </TableCell>
@@ -294,15 +300,13 @@ function ExtractedReview({ overview, sectionId, examType, canManage }: PanelProp
       {canManage && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            Check each question against the paper and fix anything the AI misread.
-            {unmatched > 0 && ` ${unmatched} not matched to the marksheet.`}
-            {duplicate && (
-              <span className="text-destructive"> Two paper questions point at the same marksheet question.</span>
-            )}
+            {tp.checkHint}
+            {unmatched > 0 && tp.unmatched(unmatched)}
+            {duplicate && <span className="text-destructive">{tp.duplicate}</span>}
           </p>
           <Button size="sm" disabled={save.isPending || duplicate || targets.length === 0} onClick={() => save.mutate()}>
             {save.isPending ? <Loader2 className="animate-spin" /> : <Save />}
-            Save wording to marksheet
+            {tp.saveButton}
           </Button>
         </div>
       )}

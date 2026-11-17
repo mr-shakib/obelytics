@@ -13,15 +13,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
+import { LanguageToggle } from "@/components/shared/language-toggle"
+import { useI18n } from "@/lib/i18n"
 
-const STUDENT_NAV = [
-  { label: "My Curriculum", href: "/my-curriculum" },
-  { label: "My Courses", href: "/my-courses" },
-  { label: "My Results", href: "/my-results" },
-  { label: "My Profile", href: "/my-profile" },
-]
+const STUDENT_NAV = ["/my-curriculum", "/my-courses", "/my-results", "/my-skills", "/my-profile"]
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
   const { user, accessToken, isInitialized, isAuthenticated, clearAuth } = useAuthStore()
@@ -63,6 +61,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
           <span className="font-bold tracking-tight">Obelytics</span>
           <div className="flex-1" />
+          <LanguageToggle />
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Avatar className="h-7 w-7">
               <AvatarFallback className="text-xs">{initials}</AvatarFallback>
@@ -82,25 +81,25 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               </Badge>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={handleLogout}>
+          <Button variant="ghost" size="icon" onClick={handleLogout} aria-label={t.student.signOut} title={t.student.signOut}>
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Tab navigation */}
-        <div className="max-w-5xl mx-auto px-4 flex gap-1 border-t">
-          {STUDENT_NAV.map((item) => (
+        <div className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto border-t">
+          {STUDENT_NAV.map((href) => (
             <Link
-              key={item.href}
-              href={item.href}
+              key={href}
+              href={href}
               className={cn(
-                "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-                pathname === item.href
+                "shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                pathname === href
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              {item.label}
+              {t.student.nav[href]}
             </Link>
           ))}
         </div>

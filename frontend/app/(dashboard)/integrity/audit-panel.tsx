@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { useI18n } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 
@@ -37,22 +38,18 @@ import { RewritePanel } from "./rewrite-panel"
 
 const VERDICTS = {
   ALIGNED: {
-    label: "Matches the mapping",
     icon: CheckCircle2,
     className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
   },
   PARTIAL: {
-    label: "Different Bloom level",
     icon: AlertTriangle,
     className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
   },
   MISALIGNED: {
-    label: "Tests a different CO",
     icon: XCircle,
     className: "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
   },
   ABSTAINED: {
-    label: "AI not sure",
     icon: CircleHelp,
     className: "border-border bg-muted text-muted-foreground",
   },
@@ -71,6 +68,8 @@ export function AuditPanel({
   examType: ExamType
   canManage: boolean
 }) {
+  const { t } = useI18n()
+  const ta = t.integrity.audit
   const qc = useQueryClient()
   const key = queryKeys.integrity.overview(sectionId, examType)
   const [disagreeWith, setDisagreeWith] = useState<AuditedQuestion | null>(null)
@@ -96,11 +95,8 @@ export function AuditPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>2. AI audit</CardTitle>
-        <CardDescription>
-          The AI judges what each question really demands and which outcome it tests without seeing your
-          mapping, then compares the two. It never changes marks or attainment.
-        </CardDescription>
+        <CardTitle>{ta.title}</CardTitle>
+        <CardDescription>{ta.description}</CardDescription>
         {canManage && (
           <CardAction>
             <Button
@@ -109,27 +105,27 @@ export function AuditPanel({
               onClick={() => run.mutate()}
             >
               {run.isPending || auditing ? <Loader2 className="animate-spin" /> : <Sparkles />}
-              {summary.audited > 0 ? "Run again" : "Run audit"}
+              {summary.audited > 0 ? ta.runAgain : ta.run}
             </Button>
           </CardAction>
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {auditing && job && <JobProgress job={job} title="Judging the questions…" unit="Question" />}
+        {auditing && job && <JobProgress job={job} title={ta.judging} unit={ta.unitQuestion} />}
         {run.isError && (
           <Alert variant="destructive">
-            <AlertTitle>The audit could not start</AlertTitle>
+            <AlertTitle>{ta.couldNotStart}</AlertTitle>
             <AlertDescription>{run.error.message}</AlertDescription>
           </Alert>
         )}
         {auditFailed && !run.isError && (
           <Alert variant="destructive">
-            <AlertTitle>The last audit could not finish</AlertTitle>
-            <AlertDescription>{job.error} Earlier results, if any, are unchanged.</AlertDescription>
+            <AlertTitle>{ta.lastFailed}</AlertTitle>
+            <AlertDescription>{job.error}{ta.earlierUnchanged}</AlertDescription>
           </Alert>
         )}
         {overview.questions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">This exam has no marksheet questions yet.</p>
+          <p className="text-sm text-muted-foreground">{ta.noQuestions}</p>
         ) : (
           overview.questions.map((question) => (
             <QuestionCard
@@ -172,6 +168,8 @@ function QuestionCard({
   onAccept: (audit: QuestionAudit) => void
   onDisagree: () => void
 }) {
+  const { t, dateTime } = useI18n()
+  const ta = t.integrity.audit
   const audit = question.audit
   const verdict = audit ? VERDICTS[audit.alignment] : null
   const judged = audit !== null && audit.alignment !== "ABSTAINED"
@@ -187,18 +185,18 @@ function QuestionCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold">{question.label}</span>
-          <span className="text-xs text-muted-foreground">{question.max_marks} marks</span>
+          <span className="text-xs text-muted-foreground">{t.common.marks(question.max_marks)}</span>
           {verdict && (
             <Badge variant="outline" className={verdict.className}>
               <verdict.icon />
-              {verdict.label}
+              {ta.verdicts[audit?.alignment ?? "ABSTAINED"]}
             </Badge>
           )}
           {judged && audit.confidence !== null && (
             <span className="text-xs text-muted-foreground">
-              {Math.round(audit.confidence * 100)}% confident
+              {t.common.confident(Math.round(audit.confidence * 100))}
               {audit.samples != null && audit.samples > 1 && audit.agreement != null &&
-                ` · ${Math.round(audit.agreement * audit.samples)} of ${audit.samples} independent judgments agree`}
+                ta.judgmentsAgree(Math.round(audit.agreement * audit.samples), audit.samples)}
             </span>
           )}
         </div>
@@ -216,21 +214,19 @@ function QuestionCard({
       {question.question_text ? (
         <QuestionText text={question.question_text} />
       ) : (
-        <p className="text-sm text-muted-foreground">
-          No wording yet. Upload the paper above, check it, and save it to the marksheet.
-        </p>
+        <p className="text-sm text-muted-foreground">{ta.noWording}</p>
       )}
 
       {audit && (
         <>
           <div className="grid gap-3 sm:grid-cols-2">
             <Judgment
-              title="Mapped by the teacher"
+              title={ta.mappedByTeacher}
               bloom={question.declared_bloom_level}
               outcome={question.declared_course_outcome}
             />
             <Judgment
-              title="Judged by the AI"
+              title={ta.judgedByAi}
               bloom={audit.ai_bloom_level}
               outcome={audit.ai_course_outcome}
               bloomDiffers={bloomDiffers}
@@ -244,18 +240,18 @@ function QuestionCard({
           )}
           {audit.rationale && (
             <p className="text-sm">
-              <span className="font-medium">Why: </span>
+              <span className="font-medium">{ta.why}</span>
               {audit.rationale}
             </p>
           )}
           {audit.review_status === "OVERRIDDEN" && audit.override_reason && (
             <p className="rounded-md bg-muted px-3 py-2 text-sm">
-              <span className="font-medium">Teacher disagreed: </span>
+              <span className="font-medium">{ta.teacherDisagreed}</span>
               {audit.override_reason}
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            {audit.model} · {audit.prompt_version} · {new Date(audit.created_at).toLocaleString()}
+            {audit.model} · {audit.prompt_version} · {dateTime(audit.created_at)}
           </p>
         </>
       )}
@@ -313,29 +309,31 @@ function ReviewControls({
   onAccept: () => void
   onDisagree: () => void
 }) {
+  const { t } = useI18n()
+  const ta = t.integrity.audit
   if (audit.review_status === "PENDING") {
     return canManage ? (
       <div className="flex gap-2">
         <Button size="sm" variant="outline" disabled={busy} onClick={onAccept}>
           <Check />
-          Agree
+          {ta.agree}
         </Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={onDisagree}>
           <X />
-          Disagree
+          {ta.disagree}
         </Button>
       </div>
     ) : (
-      <Badge variant="secondary">Awaiting review</Badge>
+      <Badge variant="secondary">{ta.awaitingReview}</Badge>
     )
   }
   const accepted = audit.review_status === "ACCEPTED"
   return (
     <div className="flex items-center gap-2">
-      <Badge variant="secondary">{accepted ? "You agreed" : "You disagreed"}</Badge>
+      <Badge variant="secondary">{accepted ? ta.youAgreed : ta.youDisagreed}</Badge>
       {canManage && (
         <Button size="xs" variant="ghost" disabled={busy} onClick={accepted ? onDisagree : onAccept}>
-          {accepted ? "Disagree instead" : "Agree instead"}
+          {accepted ? ta.disagreeInstead : ta.agreeInstead}
         </Button>
       )}
     </div>
@@ -354,26 +352,26 @@ function DisagreeDialog({
   onSubmit: (reason: string) => void
 }) {
   const [reason, setReason] = useState("")
+  const { t } = useI18n()
+  const ta = t.integrity.audit
   return (
     <Dialog open={question !== null} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Disagree with the AI on {question?.label}</DialogTitle>
-          <DialogDescription>
-            Say why the question does test what you mapped. Your reason is kept with the audit record.
-          </DialogDescription>
+          <DialogTitle>{ta.disagreeTitle(question?.label ?? "")}</DialogTitle>
+          <DialogDescription>{ta.disagreeDescription}</DialogDescription>
         </DialogHeader>
         <Textarea
           value={reason}
           rows={4}
-          placeholder="For example: students must derive the normal equations themselves, not follow a taught routine."
+          placeholder={ta.disagreePlaceholder}
           onChange={(event) => setReason(event.target.value)}
         />
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t.common.cancel}</Button>
           <Button disabled={pending || !reason.trim()} onClick={() => onSubmit(reason.trim())}>
             {pending && <Loader2 className="animate-spin" />}
-            Save
+            {t.common.save}
           </Button>
         </DialogFooter>
       </DialogContent>

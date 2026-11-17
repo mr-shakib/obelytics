@@ -36,10 +36,13 @@ import {
   getVisibleNavItems,
   isNavItemActive,
 } from "@/lib/navigation"
+import { useI18n } from "@/lib/i18n"
+import { LanguageToggle } from "@/components/shared/language-toggle"
 
 // The full navigation lives in the sidebar; the header shows a breadcrumb of
 // the current location for orientation.
 function LocationBreadcrumb() {
+  const { t } = useI18n()
   const pathname = usePathname()
   const permissions = usePermissions()
   const visibleItems = getVisibleNavItems(permissions)
@@ -53,14 +56,15 @@ function LocationBreadcrumb() {
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
       <Icon className="size-[14px] shrink-0 text-muted-foreground" />
-      <span className="shrink-0 text-muted-foreground">{meta.label}</span>
+      <span className="shrink-0 text-muted-foreground">{t.nav.groups[activeGroup] ?? meta.label}</span>
       <span className="shrink-0 text-muted-foreground/50">/</span>
-      <span className="truncate font-medium text-foreground">{activeItem.label}</span>
+      <span className="truncate font-medium text-foreground">{t.nav.items[activeItem.href] ?? activeItem.label}</span>
     </div>
   )
 }
 
 export function Header() {
+  const { t } = useI18n()
   const router = useRouter()
   const { user, manifest, accessToken, clearAuth } = useAuthStore()
   const { activeProgramId, setActiveProgram } = useAppStore()
@@ -112,7 +116,7 @@ export function Header() {
           onValueChange={(v) => setActiveProgram((v as string | null) || null)}
         >
           <SelectTrigger className="w-48 h-8 text-sm">
-            <SelectValue placeholder="Select program…">
+            <SelectValue placeholder={t.header.selectProgram}>
               {(value: string) => {
                 const p = programs.find((p) => p.id === value)
                 return p ? `${p.acronym} — ${p.name}` : value
@@ -130,6 +134,8 @@ export function Header() {
       )}
 
       <div className="flex-1" />
+
+      <LanguageToggle className="hidden sm:inline-flex" />
 
       {/* Notification bell — nativeButton={false} because Link renders <a>, not <button> */}
       <div className="relative">
@@ -165,12 +171,12 @@ export function Header() {
           <DropdownMenuSeparator />
           <DropdownMenuItem render={<Link href="/profile" />}>
             <User className="mr-2 h-4 w-4" />
-            Profile
+            {t.header.profile}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout} variant="destructive">
             <LogOut className="mr-2 h-4 w-4" />
-            Sign out
+            {t.header.signOut}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

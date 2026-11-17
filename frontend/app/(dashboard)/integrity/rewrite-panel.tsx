@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { type Dictionary, useI18n } from "@/lib/i18n"
 
 import { type AuditedQuestion, integrityApi, type QuestionRewrite } from "./api"
 import { QuestionText } from "./question-text"
@@ -26,6 +27,8 @@ export function RewritePanel({
   canManage: boolean
   invalidateKey: readonly unknown[]
 }) {
+  const { t } = useI18n()
+  const tr = t.integrity.rewrite
   const qc = useQueryClient()
   const [instruction, setInstruction] = useState("")
   const [result, setResult] = useState<QuestionRewrite | null>(null)
@@ -39,7 +42,7 @@ export function RewritePanel({
       integrityApi.decideRewrite(id, decision),
     onSuccess: (data) => {
       setResult(null)
-      if (data.decision === "KEPT") toast.success(`Rewrite of ${question.label} kept for the next paper`)
+      if (data.decision === "KEPT") toast.success(tr.keptToast(question.label))
       qc.invalidateQueries({ queryKey: invalidateKey })
     },
   })
@@ -64,12 +67,12 @@ export function RewritePanel({
             onClick={() => rewrite.mutate()}
           >
             {rewrite.isPending ? <Loader2 className="animate-spin" /> : <Wand2 />}
-            {rewrite.isPending ? "Rewriting and checking…" : "Rewrite to fit the mapping"}
+            {rewrite.isPending ? tr.rewriting : tr.button}
           </Button>
           <Input
             value={instruction}
             onChange={(event) => setInstruction(event.target.value)}
-            placeholder="Optional: e.g. keep it a 5-mark question, use a real-world scenario"
+            placeholder={tr.placeholder}
             maxLength={500}
             className="h-7 text-xs"
             disabled={rewrite.isPending}
@@ -82,7 +85,7 @@ export function RewritePanel({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-medium text-violet-800 dark:text-violet-300">
               <Wand2 className="h-3.5 w-3.5" />
-              Rewritten to test {targetLabel(result)}
+              {tr.rewrittenTo(targetLabel(result, t))}
             </span>
             <Verification rewrite={result} />
           </div>
@@ -101,7 +104,7 @@ export function RewritePanel({
               onClick={() => decide.mutate({ id: result.id, decision: "KEPT" })}
             >
               <BookmarkCheck />
-              Keep for the next paper
+              {tr.keep}
             </Button>
             <Button
               type="button"
@@ -109,11 +112,11 @@ export function RewritePanel({
               variant="outline"
               onClick={() => {
                 navigator.clipboard?.writeText(result.rewritten_text)
-                toast.success("Copied")
+                toast.success(tr.copied)
               }}
             >
               <Copy />
-              Copy
+              {tr.copy}
             </Button>
             <Button
               type="button"
@@ -126,7 +129,7 @@ export function RewritePanel({
               }}
             >
               {rewrite.isPending ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-              Try again
+              {tr.tryAgain}
             </Button>
             <Button
               type="button"
@@ -136,11 +139,11 @@ export function RewritePanel({
               onClick={() => decide.mutate({ id: result.id, decision: "DISCARDED" })}
             >
               <X />
-              Discard
+              {tr.discard}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            The exam&apos;s wording and marks are not changed. {result.model} · {result.prompt_version}
+            {tr.notChanged} {result.model} · {result.prompt_version}
           </p>
         </div>
       )}
@@ -148,11 +151,14 @@ export function RewritePanel({
   )
 }
 
-function targetLabel(rewrite: QuestionRewrite) {
-  return [rewrite.target_course_outcome?.code, rewrite.target_bloom_code].filter(Boolean).join(" at ") || "its mapping"
+function targetLabel(rewrite: QuestionRewrite, t: Dictionary) {
+  const tr = t.integrity.rewrite
+  return [rewrite.target_course_outcome?.code, rewrite.target_bloom_code].filter(Boolean).join(tr.at) || tr.itsMapping
 }
 
 function Verification({ rewrite }: { rewrite: QuestionRewrite }) {
+  const { t } = useI18n()
+  const tr = t.integrity.rewrite
   const final = rewrite.attempts[rewrite.attempts.length - 1]
   const judged = [final?.judged_co, final?.judged_bloom].filter(Boolean).join(" · ")
   const confidence = rewrite.verified_confidence !== null ? ` (${Math.round(rewrite.verified_confidence * 100)}%)` : ""
@@ -160,31 +166,30 @@ function Verification({ rewrite }: { rewrite: QuestionRewrite }) {
     return (
       <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
         <CheckCircle2 />
-        Auditor confirms {judged}{confidence}
+        {tr.confirms(judged)}{confidence}
       </Badge>
     )
   }
   return (
     <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
       <ShieldAlert />
-      Not verified: auditor judged {judged || "it unclear"}{confidence}
+      {tr.notVerified(judged || tr.unclear)}{confidence}
     </Badge>
   )
 }
 
 function Checks({ rewrite }: { rewrite: QuestionRewrite }) {
+  const { t } = useI18n()
+  const tr = t.integrity.rewrite
   const final = rewrite.attempts[rewrite.attempts.length - 1]
   return (
     <div className="space-y-1 text-xs text-muted-foreground">
       {rewrite.attempts.length > 1 && (
-        <p>
-          Took {rewrite.attempts.length} tries: the first was judged{" "}
-          {rewrite.attempts[0].judged_bloom ?? "unclear"}, so the AI tried again with the auditor&apos;s reason.
-        </p>
+        <p>{tr.tookTries(rewrite.attempts.length, rewrite.attempts[0].judged_bloom ?? tr.unclearShort)}</p>
       )}
       {final?.rationale && (
         <p>
-          <span className="font-medium">Auditor: </span>
+          <span className="font-medium">{tr.auditor}</span>
           {final.rationale}
         </p>
       )}
@@ -193,11 +198,11 @@ function Checks({ rewrite }: { rewrite: QuestionRewrite }) {
 }
 
 function KeptRewrite({ rewrite }: { rewrite: QuestionRewrite }) {
+  const { t } = useI18n()
   return (
     <details className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
       <summary className="cursor-pointer text-xs font-medium">
-        Kept rewrite for the next paper — {targetLabel(rewrite)},{" "}
-        {rewrite.verified_alignment === "ALIGNED" ? "confirmed by the auditor" : "not verified"}
+        {t.integrity.rewrite.keptSummary(targetLabel(rewrite, t), rewrite.verified_alignment === "ALIGNED")}
       </summary>
       <div className="mt-2">
         <QuestionText text={rewrite.rewritten_text} />
