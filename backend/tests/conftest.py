@@ -63,6 +63,11 @@ from app.modules.curriculum.models import (  # noqa: F401
     Section,
     SectionOffering,
 )
+from app.modules.evidence.models import (  # noqa: F401
+    EvidenceDraft,
+    ReferenceDocument,
+    ReferencePassage,
+)
 from app.modules.iam.models import (  # noqa: F401
     PasswordCredential,
     Permission,

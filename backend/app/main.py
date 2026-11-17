@@ -20,6 +20,7 @@ from app.modules.authoring.router import router as authoring_router
 from app.modules.copilot.router import router as copilot_router
 from app.modules.cqi.router import router as cqi_router
 from app.modules.curriculum.router import router as curriculum_router
+from app.modules.evidence.router import router as evidence_router
 from app.modules.iam.router.admin_router import router as admin_router
 from app.modules.iam.router.auth_router import router as auth_router
 from app.modules.iam.router.role_router import router as role_router
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(authoring_router, prefix=settings.API_V1_PREFIX)
     app.include_router(workforce_router, prefix=settings.API_V1_PREFIX)
     app.include_router(improvement_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(evidence_router, prefix=settings.API_V1_PREFIX)
 
     # Phase 8 — Audit + Notifications
     app.include_router(audit_router, prefix=settings.API_V1_PREFIX)
