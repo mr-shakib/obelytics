@@ -1,5 +1,14 @@
 # Deployed Page Load Delay Report
 
+> **Status 2026-11-17: resolved.** This report describes the earlier Vercel + Railway deployment. Production now runs on one VPS behind nginx (`DEPLOY_VPS.md`). Login, refresh and session use one same-origin bootstrap call (`/api/auth/*` → `/api/v1/users/me/bootstrap`), and `(dashboard)/loading.tsx` and `(student)/loading.tsx` exist.
+>
+> Measured on https://obelytics.bitstreamhq.com with a headless browser from the development machine:
+> - login form visible: 0.66 s;
+> - sign-in to the first page: 0.60 s;
+> - full loads of the integrity, workforce, evidence and courses pages, to their real content: 0.91–0.97 s;
+> - in-app navigation to a page's content: 0.24 s.
+
+
 ## Summary
 
 The deployed app is slower mainly because page rendering is blocked by production network round trips that do not exist, or are nearly invisible, on local development.
