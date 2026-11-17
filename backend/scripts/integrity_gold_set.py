@@ -60,6 +60,8 @@ from app.modules.integrity.evaluation import (
     fleiss_kappa,
     majority,
     precision_recall,
+    question_style,
+    strata_report,
     weighted_kappa,
     within_one_level,
 )
@@ -427,6 +429,53 @@ def cmd_score(args) -> None:
     (out / f"score_{args.split}{suffix}.json").write_text(json.dumps(report, indent=2))
 
 
+# ── strata (bias check) ───────────────────────────────────────────────────────
+
+def cmd_strata(args) -> None:
+    """Accuracy per group of questions: exam, course, reference Bloom level, wording style."""
+    out = Path(args.out)
+    items = {i["item_id"]: i for i in _items(_load_extracted(out))}
+    reference = _read_reference(args.reference)
+    ai_path = _ai_file(out, args.provider)
+    ai = json.loads(ai_path.read_text())
+    rows = []
+    for item_id, item in items.items():
+        gold = (reference.get(item_id) or {}).get("bloom")
+        if item_id not in ai or not gold:
+            continue
+        answer = ai[item_id]
+        shown = not answer["abstain"] and answer["confidence"] >= settings.INTEGRITY_MIN_CONFIDENCE
+        rows.append({
+            "groups": {
+                "exam": item["exam"],
+                "course": item["course"],
+                "reference_bloom": "lower-order (C1–C2)" if gold in ("C1", "C2") else "higher-order (C3–C6)",
+                **question_style(item["text"], item["context"], item["figure"]),
+            },
+            "ai": answer["bloom"] if shown else None,
+            "gold": gold,
+        })
+    report = {
+        "gold": "REFERENCE LABELS FROM A STRONGER MODEL — not faculty; development signal only",
+        "provider": args.provider,
+        "model": next((v["model"] for v in ai.values() if v.get("model")), None),
+        "prompt_version": AUDIT_PROMPT_VERSION,
+        "items": len(rows),
+        "not_measurable_yet": "department and theory-vs-lab: every gold-set question is from a CSE theory course",
+        "strata": strata_report(rows),
+    }
+    for dim, lines in report["strata"].items():
+        print(f"\n{dim}")
+        for line in lines:
+            flag = "  (too few to read)" if line["too_small"] else ""
+            print(f"  {line['value'][:38]:38} n={line['n']:3}  exact {_fmt(line['bloom_exact']):>6}  "
+                  f"±1 {_fmt(line['bloom_within_one']):>6}  abstain {_fmt(line['abstain_rate']):>6}  "
+                  f"gap {_fmt(line['mean_level_gap']):>6}{flag}")
+    target = out / f"strata_{AUDIT_PROMPT_VERSION}_{args.provider}.json"
+    target.write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    print(f"\n  → {target}")
+
+
 def _ai_metrics(ai, ids, items, gold_bloom, gold_co, gold_misaligned, min_confidence) -> dict:
     judged = [i for i in ids if i in ai and not ai[i]["abstain"] and gold_bloom[i]
               and ai[i]["confidence"] >= min_confidence]
@@ -474,6 +523,10 @@ def main() -> None:
     score.add_argument("--out", required=True)
     score.add_argument("--split", default="dev", choices=["dev", "test", "all"])
     score.add_argument("--reference", help="Reference labels JSON, used when faculty labels are missing")
+    strata = sub.add_parser("strata", help="Bias check: accuracy per group of questions")
+    strata.add_argument("--out", required=True)
+    strata.add_argument("--reference", required=True)
+    strata.add_argument("--provider", default="hosted", choices=["local", "hosted"])
     args = parser.parse_args()
 
     if args.command == "read":
@@ -482,6 +535,8 @@ def main() -> None:
         cmd_sheets(args)
     elif args.command == "audit":
         asyncio.run(cmd_audit(args))
+    elif args.command == "strata":
+        cmd_strata(args)
     else:
         cmd_score(args)
 

@@ -470,8 +470,16 @@ def _val(element: ET.Element | None, default: str) -> str:
 
 # ── Labels ────────────────────────────────────────────────────────────────────
 
+# Bangla-medium papers number questions ১, ২, … and sub-parts (ক), (খ), … in the
+# order of the Bangla alphabet.
+_BANGLA_LABELS = str.maketrans(
+    "০১২৩৪৫৬৭৮৯কখগঘঙচছজঝঞ",
+    "0123456789abcdefghij",
+)
+
+
 def normalize_label(label: str) -> str:
-    """'Q1(a)', '1 (a)', '1.a' and 'q1a' all become '1a'."""
+    """'Q1(a)', '1 (a)', '1.a', 'q1a' and 'প্রশ্ন ১(ক)' all become '1a'."""
     label = label.strip().lower()
-    label = re.sub(r"^(question|ques|qn|q)\s*\.?\s*", "", label)
-    return re.sub(r"[^0-9a-z]", "", label)
+    label = re.sub(r"^(question|ques|qn|q|প্রশ্ন)\s*\.?\s*(নং|no\.?)?\s*", "", label)
+    return re.sub(r"[^0-9a-z]", "", label.translate(_BANGLA_LABELS))

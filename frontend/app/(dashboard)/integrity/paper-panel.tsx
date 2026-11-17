@@ -36,6 +36,7 @@ type PanelProps = {
 type ExtractionMethod = NonNullable<QuestionPaper["extraction_method"]>
 
 export const SAMPLE_PAPER_URL = "/samples/sample-paper-numerical-methods-final.docx"
+export const SAMPLE_PAPER_BANGLA_URL = "/samples/sample-paper-numerical-methods-final-bangla.docx"
 
 export function JobProgress({ job, title, unit }: { job: IntegrityJob; title: string; unit: string }) {
   const { t } = useI18n()
@@ -94,14 +95,16 @@ export function PaperPanel({ overview, sectionId, examType, canManage }: PanelPr
         <CardDescription>
           {tp.description}
           {canManage && (
-            <a
-              href={SAMPLE_PAPER_URL}
-              download
-              className="mt-1.5 flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
-            >
-              <Download className="size-3" />
-              {tp.sample}
-            </a>
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium">
+              <a href={SAMPLE_PAPER_URL} download className="flex items-center gap-1 text-primary hover:underline">
+                <Download className="size-3" />
+                {tp.sample}
+              </a>
+              <span className="text-muted-foreground">·</span>
+              <a href={SAMPLE_PAPER_BANGLA_URL} download lang="bn" className="text-primary hover:underline">
+                {tp.sampleBangla}
+              </a>
+            </span>
           )}
         </CardDescription>
         {canManage && (

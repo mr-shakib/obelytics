@@ -5,6 +5,7 @@ Bloom levels are ordinal (C1 < … < C6), so agreement uses quadratic-weighted
 Cohen's kappa: a C3-vs-C4 disagreement costs less than C1-vs-C6. Fleiss' kappa
 measures agreement among several raters on nominal labels (e.g. which CO).
 """
+import re
 from collections import Counter
 from collections.abc import Hashable, Sequence
 
@@ -87,3 +88,51 @@ def precision_recall(predicted: Sequence[bool], actual: Sequence[bool]) -> tuple
     precision = tp / (tp + fp) if tp + fp else None
     recall = tp / (tp + fn) if tp + fn else None
     return precision, recall
+
+
+# ── Bias check: the same measures per group of questions ─────────────────────
+
+_MATH = re.compile(r"\$[^$]+\$|\\\(|\\frac|\\int|\\sum|[=≤≥∫∑√]\s*\d")
+_CODE = re.compile(r"```|#include|\bprintf\b|\bint\s+main\b|\bpublic\s+class\b|\bdef\s+\w+\(|;\s*$", re.M)
+
+
+def question_style(text: str, context: str | None, figure: str | None) -> dict[str, str]:
+    """Code-detectable traits of a question's wording, used to group questions."""
+    return {
+        "math": "yes" if _MATH.search(text or "") else "no",
+        "code": "yes" if _CODE.search(text or "") else "no",
+        "scenario": "yes" if context else "no",
+        "figure": "yes" if figure else "no",
+        "length": "short (<120 chars)" if len(text or "") < 120 else "long",
+    }
+
+
+def strata_report(rows: Sequence[dict], min_n: int = 8) -> dict[str, list[dict]]:
+    """
+    rows: {"groups": {dimension: value}, "ai": "C3" | None (None = abstained), "gold": "C2"}.
+    For every dimension and value: how many, exact and within-one agreement, how often the
+    AI abstained, and the mean signed level gap (AI − gold; above 0 = rates higher).
+    Groups smaller than min_n are reported but flagged as too small to read.
+    """
+    order = {code: n for n, code in enumerate(BLOOM_ORDER)}
+    dimensions = sorted({d for r in rows for d in r["groups"]})
+    report: dict[str, list[dict]] = {}
+    for dim in dimensions:
+        values = sorted({r["groups"][dim] for r in rows if dim in r["groups"]})
+        lines = []
+        for value in values:
+            group = [r for r in rows if r["groups"].get(dim) == value and r["gold"] in order]
+            judged = [r for r in group if r["ai"] in order]
+            gaps = [order[r["ai"]] - order[r["gold"]] for r in judged]
+            lines.append({
+                "value": value,
+                "n": len(group),
+                "judged": len(judged),
+                "abstain_rate": (len(group) - len(judged)) / len(group) if group else None,
+                "bloom_exact": exact_agreement([r["ai"] for r in judged], [r["gold"] for r in judged]),
+                "bloom_within_one": within_one_level([r["ai"] for r in judged], [r["gold"] for r in judged]),
+                "mean_level_gap": sum(gaps) / len(gaps) if gaps else None,
+                "too_small": len(group) < min_n,
+            })
+        report[dim] = lines
+    return report

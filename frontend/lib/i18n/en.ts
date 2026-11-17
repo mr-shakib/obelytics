@@ -174,6 +174,7 @@ export const en = {
       description:
         "Upload the paper as a PDF, a Word document or a photo. The AI reads the questions, and you check the wording before it is saved. The file itself is not stored.",
       sample: "No paper at hand? Download a sample paper",
+      sampleBangla: "Bangla-medium version",
       replace: "Replace paper",
       upload: "Upload paper",
       uploading: "Uploading…",

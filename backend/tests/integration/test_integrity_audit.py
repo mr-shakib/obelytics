@@ -162,7 +162,11 @@ def test_judge_alignment_respects_model_abstaining():
                            ai_co_id="a", declared_co_id="a") == "ABSTAINED"
 
 
-@pytest.mark.parametrize("label", ["Q1(a)", "1 (a)", "1.a", "q1a", "Question 1a", "1(A)"])
+@pytest.mark.parametrize("label", [
+    "Q1(a)", "1 (a)", "1.a", "q1a", "Question 1a", "1(A)",
+    # Bangla-medium papers: Bangla numerals and sub-part letters
+    "১(ক)", "প্রশ্ন ১(ক)", "১। (ক)", "প্রশ্ন নং ১ক",
+])
 def test_normalize_label(label):
     assert normalize_label(label) == "1a"
 
