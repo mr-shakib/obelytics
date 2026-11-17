@@ -94,7 +94,7 @@ flowchart LR
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui, TanStack Query, Zustand |
-| Backend | FastAPI (Python 3.12), SQLAlchemy async, Alembic, ~330 endpoints across 19 domain modules |
+| Backend | FastAPI (Python 3.12), SQLAlchemy async, Alembic, ~340 endpoints across 20 domain modules |
 | Data | PostgreSQL 16 (17 schemas, every record scoped to an organization), Redis + arq for background AI jobs, MinIO |
 | AI | Own gateway over Ollama (self-hosted, e.g. Qwen) and any OpenAI-compatible API (e.g. DeepSeek); versioned prompts; gold-set, robustness and mapping evaluation scripts |
 | Deploy | Docker Compose behind nginx with TLS; migrations run as a one-shot service |
