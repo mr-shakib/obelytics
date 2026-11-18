@@ -4,10 +4,10 @@
 
 OBE (Outcome-Based Education) accreditation management platform. Two sub-projects:
 
-- `backend/` — FastAPI (Python 3.12), SQLAlchemy async (asyncpg), Alembic, PostgreSQL 16, Redis, MinIO
+- `backend/` — FastAPI (Python 3.12), SQLAlchemy async (asyncpg), Alembic, PostgreSQL 16, Redis; Cloudinary for file storage (logos)
 - `frontend/` — Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn (base-nova style), openapi-fetch, zustand, react-query
 
-Infrastructure (Postgres, Redis, MinIO) runs via Docker Compose in `backend/`.
+Infrastructure (Postgres, Redis) runs via Docker Compose in `backend/`.
 
 ## Quick start
 
@@ -58,7 +58,7 @@ Full setup guide: `SETUP.md`
 ```
 backend/app/
 ├── core/           # config, database, security, redis, storage, middleware
-├── modules/        # domain modules (iam, org, curriculum, obe, assessment, attainment, approval, audit, notification, reporting, accreditation, ref_data, cqi, copilot, integrity, ai, authoring, workforce, improvement, evidence)
+├── modules/        # domain modules (iam, org, curriculum, obe, assessment, attainment, approval, audit, notification, reporting, accreditation, ref_data, cqi, copilot, integrity, ai, authoring, workforce, improvement, evidence, mcp, live_docs)
 ├── shared/         # shared infra (events/outbox)
 └── workers/        # arq background worker (reports, integrity reading/audits)
 ```
@@ -96,7 +96,7 @@ frontend/
 
 ## Testing
 
-- The full suite passes (464 tests, 2026-11-17); keep it green.
+- The full suite passes (470 tests, 2026-11-18); keep it green.
 - Tests use a **separate `obelytics_test` database** (auto-created from main DB name + `_test` suffix)
 - Docker must be running for tests
 - pytest-asyncio with `asyncio_mode = "auto"` and session-scoped event loop

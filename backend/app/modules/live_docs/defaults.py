@@ -42,7 +42,7 @@ ARCHITECTURE = """flowchart TB
     direction LR
     P[("PostgreSQL 16<br/>17 schemas")]
     R[("Redis<br/>job queue")]
-    F[("MinIO<br/>object storage")]
+    F[("Cloudinary<br/>logos and images")]
   end
   S --> D
   R --> K["arq worker<br/>paper reading · audits"]
@@ -334,10 +334,10 @@ From an exam paper to a teacher's decision. The other AI features follow the sam
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui, TanStack Query, Zustand, openapi-fetch, Recharts, KaTeX, Mermaid |
-| Backend | Python 3.12, FastAPI, Pydantic, SQLAlchemy (async, asyncpg), Alembic |
+| Backend | Python 3.13, FastAPI, Pydantic, SQLAlchemy (async, asyncpg), Alembic |
 | Database | PostgreSQL 16, one schema per domain, with full-text search |
 | Jobs and cache | Redis and an arq background worker |
-| Files | MinIO (S3-compatible). Uploaded exam papers are not stored |
+| Files | Cloudinary for organization and department logos. Uploaded exam papers and outlines are not stored |
 | AI | Own AI gateway; DeepSeek (deepseek-v4-flash) through an OpenAI-compatible API; Qwen 3.5 4B self-hosted through Ollama; pypdfium2 and Pillow to read papers |
 | Agents | MCP server (Streamable HTTP) with seven read-only tools |
 | Infrastructure | Docker Compose on a VPS behind nginx, with Let's Encrypt TLS |
