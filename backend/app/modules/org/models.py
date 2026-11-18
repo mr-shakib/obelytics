@@ -25,6 +25,8 @@ class Organization(Base):
     contact_phone = Column(String(50), nullable=True)
     email_validation_regex = Column(String(500), nullable=True)
     status = Column(String(20), nullable=False, server_default="ACTIVE")
+    # A demo organization holds synthetic data only; public usage figures report it separately.
+    is_demo = Column(sa.Boolean, nullable=False, server_default=sa.text("false"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
     updated_at = Column(
         DateTime(timezone=True),

@@ -29,6 +29,7 @@ import {
   Wrench,
   Bot,
   ScanSearch,
+  Presentation,
   Cpu,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -93,6 +94,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "System Settings", href: "/system-settings", icon: Wrench, permission: "system.organization.configure", group: "System" },
   { label: "Reference Data", href: "/ref-data", icon: Database, permission: "config.manage", group: "System" },
   { label: "Audit Log", href: "/audit", icon: ScrollText, permission: "system.audit.read", group: "System" },
+  // Public /docs page editor — Super Admins only (system.roles.create is a Super Admin permission)
+  { label: "Docs Page", href: "/docs-admin", icon: Presentation, permission: "system.roles.create", group: "System" },
 ]
 
 export const NAV_GROUPS = ["Core", "Configuration", "Curriculum", "OBE", "Assessment", "Reports", "Copilot", "System"] as const

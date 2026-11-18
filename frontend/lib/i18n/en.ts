@@ -30,6 +30,7 @@ const nav = {
     "/system-settings": "System Settings",
     "/ref-data": "Reference Data",
     "/audit": "Audit Log",
+    "/docs-admin": "Docs Page",
     "/evidence": "Accreditation Evidence",
   } as Record<string, string>,
   groups: {

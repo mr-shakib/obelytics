@@ -41,6 +41,7 @@ export const bn: Dictionary = {
       "/system-settings": "সিস্টেম সেটিংস",
       "/ref-data": "রেফারেন্স ডেটা",
       "/audit": "অডিট লগ",
+      "/docs-admin": "ডকস পেজ",
       "/evidence": "অ্যাক্রেডিটেশন প্রমাণ",
     },
     groups: {

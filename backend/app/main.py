@@ -27,6 +27,7 @@ from app.modules.iam.router.role_router import router as role_router
 from app.modules.iam.router.user_router import router as user_router
 from app.modules.improvement.router import router as improvement_router
 from app.modules.integrity.router import router as integrity_router
+from app.modules.live_docs.router import router as live_docs_router
 from app.modules.mcp.router import router as mcp_router
 from app.modules.notification.router import router as notification_router
 from app.modules.obe.router import router as obe_router
@@ -121,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(improvement_router, prefix=settings.API_V1_PREFIX)
     app.include_router(evidence_router, prefix=settings.API_V1_PREFIX)
     app.include_router(mcp_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(live_docs_router, prefix=settings.API_V1_PREFIX)
 
     # Phase 8 — Audit + Notifications
     app.include_router(audit_router, prefix=settings.API_V1_PREFIX)

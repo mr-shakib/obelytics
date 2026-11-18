@@ -2,8 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const AUTH_ROUTES = ["/login", "/forgot-password", "/reset-password"]
 const STUDENT_ROUTES = ["/my-curriculum", "/my-courses", "/my-results", "/my-skills", "/my-profile"]
-const PUBLIC_PATHS = ["/_next", "/favicon.ico", "/api/auth/"]
-const PUBLIC_ROUTES = ["/", "/result"]
+const PUBLIC_PATHS = ["/_next", "/favicon.ico", "/api/auth/", "/brand/"]
+// /docs decides its own visibility (admin switch + schedule), so it is never behind login.
+const PUBLIC_ROUTES = ["/", "/result", "/docs"]
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl

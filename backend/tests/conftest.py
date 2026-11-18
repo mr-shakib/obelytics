@@ -84,6 +84,12 @@ from app.modules.integrity.models import (  # noqa: F401
     QuestionPaper,
     QuestionRewrite,
 )
+from app.modules.live_docs.models import (  # noqa: F401
+    DocsSection,
+    DocsSectionVersion,
+    DocsSettings,
+    DocsTeamMember,
+)
 from app.modules.notification.models import Notification  # noqa: F401
 from app.modules.obe.models import (  # noqa: F401
     COCAMapping,

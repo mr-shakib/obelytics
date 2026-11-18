@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Public /docs page (pitch deck + technical docs + live system view).
+    # Editors are Super Admins; when this comma-separated list is set, only Super Admins
+    # whose email is on it may edit or publish the page.
+    DOCS_EDITOR_EMAILS: str = ""
+    # Time zone for the default publishing window (June 10 00:00 → June 14 23:59).
+    DOCS_TIMEZONE: str = "Asia/Dhaka"
+
     # Database
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
