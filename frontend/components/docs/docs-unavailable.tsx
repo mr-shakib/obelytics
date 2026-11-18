@@ -2,11 +2,6 @@ import { CalendarClock, Lock } from "lucide-react"
 
 import type { Visibility } from "@/lib/docs/types"
 
-function when(iso: string | null) {
-  if (!iso) return null
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })
-}
-
 /** Shown instead of the page while it is switched off or outside its schedule. */
 export function DocsUnavailable({ visibility }: { visibility: Visibility | null }) {
   const scheduled = visibility?.state === "not_started"
@@ -23,13 +18,7 @@ export function DocsUnavailable({ visibility }: { visibility: Visibility | null 
           {scheduled ? "Not available yet" : visibility ? "Not available" : "Temporarily unavailable"}
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {scheduled && visibility?.starts_at
-            ? `This page opens on ${when(visibility.starts_at)}.`
-            : visibility?.state === "ended" && visibility.ends_at
-              ? `This showcase closed on ${when(visibility.ends_at)}.`
-              : visibility
-                ? "The documentation page is switched off right now."
-                : "The documentation could not be loaded. Please try again in a moment."}
+          {visibility?.message ?? "The documentation could not be loaded. Please try again in a moment."}
         </p>
       </div>
     </main>

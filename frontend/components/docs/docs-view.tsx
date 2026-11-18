@@ -1,6 +1,5 @@
 "use client"
 
-import { format } from "date-fns"
 import { ExternalLink, FileDown, Link2, Menu, Printer, Search, Share2 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -25,6 +24,13 @@ import { plainText } from "./markdown"
 import { SectionBody, youtubeEmbed } from "./section-body"
 
 const GITHUB = "https://github.com/mr-shakib/obelytics"
+
+// One fixed zone and locale, so the server-rendered HTML and the browser agree (no hydration mismatch).
+const ZONE = "Asia/Dhaka"
+const DAY = new Intl.DateTimeFormat("en-GB", { timeZone: ZONE, day: "numeric", month: "short", year: "numeric" })
+const DAY_TIME = new Intl.DateTimeFormat("en-GB", {
+  timeZone: ZONE, day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+})
 
 function grouped(sections: DocsSection[]) {
   return GROUP_ORDER.map((group) => ({ group, sections: sections.filter((s) => s.group === group) })).filter(
@@ -272,7 +278,7 @@ export function DocsView({ docs, mode }: { docs: PublicDocs; mode: DocsMode }) {
                     <SectionBody section={s} docs={docs} mode={mode} />
                     {s.published_at && (
                       <p className="mt-5 text-xs text-muted-foreground">
-                        Version {s.version} · published {format(new Date(s.published_at), "d MMM yyyy")}
+                        Version {s.version} · published {DAY.format(new Date(s.published_at))}
                       </p>
                     )}
                   </section>
@@ -283,7 +289,7 @@ export function DocsView({ docs, mode }: { docs: PublicDocs; mode: DocsMode }) {
             <footer className="mt-12 border-t pt-6 text-sm text-muted-foreground">
               <p>
                 Every figure marked live is read from this deployment when the page loads, and refreshes every 30 seconds.
-                {lastPublished ? ` Content last published ${format(new Date(lastPublished), "d MMM yyyy, HH:mm")}.` : ""}
+                {lastPublished ? ` Content last published ${DAY_TIME.format(new Date(lastPublished))} (Dhaka time).` : ""}
               </p>
               <p className="mt-1">
                 © {new Date().getFullYear()} {docs.product} ·{" "}
